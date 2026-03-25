@@ -1,0 +1,101 @@
+-- =============================================================================
+-- ADAMANT-MODPACK-FRAMEWORK
+-- =============================================================================
+-- Reusable modpack orchestration library: discovery, hash, HUD, and UI.
+--
+-- Usage (from a coordinator mod's main.lua):
+--
+--   local Framework = rom.mods['adamant-Modpack_Framework']
+--   Framework.init({
+--       packId      = "h2-modpack",
+--       windowTitle = "Speedrun Modpack",
+--       config      = config,    -- coordinator's Chalk config
+--       def         = def,       -- { NUM_PROFILES, defaultProfiles }
+--       modutil     = modutil,
+--   })
+--
+-- Framework.init can be called on every hot reload. GUI callbacks are registered
+-- once per packId; subsequent calls update subsystem instances in place.
+
+local mods = rom.mods
+mods['SGG_Modding-ENVY'].auto()
+
+---@diagnostic disable: lowercase-global
+Framework = {}
+
+import 'ui_theme.lua'
+import 'discovery.lua'
+import 'hash.lua'
+import 'hud.lua'
+import 'ui.lua'
+
+-- =============================================================================
+-- REGISTRATION STATE (module-level; survives hot reloads)
+-- =============================================================================
+
+local _registered = {}  -- packId -> true  (GUI registration guard)
+local _packs      = {}  -- packId -> { ui, hud, _index }
+local _packList   = {}  -- ordered list of packIds for HUD Y-offset stacking
+
+-- =============================================================================
+-- FRAMEWORK.INIT
+-- =============================================================================
+
+--- Initialize (or reinitialize) a modpack coordinator.
+--- Safe to call on every hot reload — GUI callbacks are registered only once per packId.
+---
+--- @param params table
+---   params.packId      string  — discovery filter + HUD component name scoping
+---   params.windowTitle string  — ImGui window title
+---   params.config      table   — coordinator's Chalk config (ModEnabled, DebugMode, Profiles)
+---   params.def         table   — { NUM_PROFILES, defaultProfiles }
+---   params.modutil     table   — ModUtil mod reference (for hud Path.Wrap hook)
+---
+--- @return table pack  — { discovery, hash, hud, ui, _index }
+function Framework.init(params)
+    local lib = rom.mods['adamant-Modpack_Lib']
+
+    -- Make game globals available to all subsystem closures (SetupRunData, etc.)
+    import_as_fallback(rom.game)
+
+    -- Self-register for HUD stacking; preserve index across hot reloads
+    local packIndex = _packs[params.packId] and _packs[params.packId]._index or nil
+    if not packIndex then
+        table.insert(_packList, params.packId)
+        packIndex = #_packList
+    end
+
+    -- Create fresh subsystems each call (correct dependency order matters)
+    local discovery = Framework.createDiscovery(params.packId, params.config, lib)
+    local hash      = Framework.createHash(discovery, params.config, lib, params.packId)
+    local theme     = Framework.createTheme()
+
+    -- Discovery must run before createHud so GetConfigHash has modules to read
+    discovery.run()
+
+    local hud       = Framework.createHud(params.packId, packIndex, hash, theme, params.config, params.modutil)
+    local ui        = Framework.createUI(discovery, hash, hud, theme, params.def, params.config, lib, params.packId, params.windowTitle)
+
+    -- Store instances — overwrites on reload; GUI callbacks use late binding
+    _packs[params.packId] = { discovery = discovery, hash = hash, hud = hud, ui = ui, _index = packIndex }
+
+    -- Register GUI once per packId (guard against hot reload double-registration)
+    if not _registered[params.packId] then
+        _registered[params.packId] = true
+        local packId = params.packId
+        rom.gui.add_imgui(function()
+            _packs[packId].ui.renderWindow()   -- late binding: picks up new instance after reload
+        end)
+        rom.gui.add_to_menu_bar(function()
+            _packs[packId].ui.addMenuBar()
+        end)
+    end
+
+    if params.config.ModEnabled then
+        hud.setModMarker(true)
+    end
+
+    return _packs[params.packId]
+end
+
+public = Framework

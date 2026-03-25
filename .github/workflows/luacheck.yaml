@@ -1,0 +1,24 @@
+name: Lua Linter (Luacheck)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Setup Lua
+        uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.2"
+      - name: Setup Luarocks
+        uses: leafo/gh-actions-luarocks@v4
+      - name: Install Luacheck
+        run: luarocks install luacheck
+      - name: Run Luacheck
+        run: luacheck src/

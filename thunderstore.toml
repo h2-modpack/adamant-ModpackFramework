@@ -1,0 +1,39 @@
+[config]
+schemaVersion = "0.0.1"
+
+
+[package]
+namespace = "adamant"
+name = "Modpack_Framework"
+versionNumber = "1.0.0"
+description = "Reusable modpack framework: discovery, hash, HUD, and UI. Used by modpack coordinators."
+websiteUrl = "https://github.com/h2-modpack/adamant-modpack-Framework"
+containsNsfwContent = false
+
+[package.dependencies]
+Hell2Modding-Hell2Modding = "1.0.78"
+LuaENVY-ENVY = "1.2.0"
+SGG_Modding-ModUtil = "4.0.1"
+adamant-Modpack_Lib = "1.0.0"
+
+
+[build]
+icon = "./icon.png"
+readme = "./README.md"
+outdir = "./build"
+
+[[build.copy]]
+source = "./LICENSE"
+target = "./LICENSE"
+
+[[build.copy]]
+source = "./src"
+target = "./plugins"
+
+
+[publish]
+repository = "https://thunderstore.io"
+communities = [ "hades-ii", ]
+
+[publish.categories]
+hades-ii = [ "mods", ]
