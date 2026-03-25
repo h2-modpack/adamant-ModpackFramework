@@ -95,8 +95,8 @@ function Framework.createDiscovery(packId, config, lib)
                         for _, opt in ipairs(def.options) do
                             if type(opt.configKey) == "table" then
                                 lib.warn(packId, config.DebugMode, modName ..
-                                    ": option configKey is a table -- table-path keys are only valid in stateSchema (special modules). " ..
-                                    "Use a flat string key in def.options. Option skipped.")
+                                    ": option configKey is a table -- table-path keys are only valid in stateSchema " ..
+                                    "(special modules). Use a flat string key in def.options. Option skipped.")
                             else
                                 opt._pushId = def.id .. "_" .. tostring(opt.configKey)
                                 table.insert(validOptions, opt)
