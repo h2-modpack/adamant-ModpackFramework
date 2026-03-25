@@ -82,7 +82,7 @@ function Framework.createHash(discovery, config, lib, packId)
     local function HashChunk(str, seed, multiplier)
         local h = seed
         for i = 1, #str do
-            h = (h * multiplier + string.byte(str, i)) % 1073741824  -- 2^30
+            h = (h * multiplier + string.byte(str, i)) % 1073741824 -- 2^30
         end
         return h
     end
@@ -94,7 +94,7 @@ function Framework.createHash(discovery, config, lib, packId)
     end
 
     local function Fingerprint(str)
-        local h1 = HashChunk(str, 5381,  33)
+        local h1 = HashChunk(str, 5381, 33)
         local h2 = HashChunk(str, 52711, 37)
         return EncodeBase62Fixed(h1, 6) .. EncodeBase62Fixed(h2, 6)
     end
@@ -136,7 +136,7 @@ function Framework.createHash(discovery, config, lib, packId)
                 enabled = discovery.isModuleEnabled(m)
             end
             if enabled == nil then enabled = false end
-            local default = m.default == true  -- treat nil default as false
+            local default = m.default == true -- treat nil default as false
             if enabled ~= default then
                 kv[m.id] = enabled and "1" or "0"
             end
@@ -204,13 +204,16 @@ function Framework.createHash(discovery, config, lib, packId)
         local kv = Deserialize(hash)
 
         if kv["_v"] == nil then
-            lib.warn(packId, config.DebugMode, "ApplyConfigHash: unrecognized format (missing version key) — hash may be from an older format")
+            lib.warn(packId, config.DebugMode,
+                "ApplyConfigHash: unrecognized format (missing version key) — hash may be from an older format")
             return false
         end
 
         local version = tonumber(kv["_v"]) or 1
         if version > HASH_VERSION then
-            lib.warn(packId, config.DebugMode, "ApplyConfigHash: hash version " .. version .. " is newer than supported (" .. HASH_VERSION .. ") — some settings may not apply")
+            lib.warn(packId, config.DebugMode,
+                "ApplyConfigHash: hash version " ..
+                version .. " is newer than supported (" .. HASH_VERSION .. ") — some settings may not apply")
         end
 
         -- Boolean module enabled states

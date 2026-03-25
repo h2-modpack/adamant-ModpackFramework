@@ -34,7 +34,7 @@ function Framework.createDiscovery(packId, config, lib)
         local found = {}
         for modName, mod in pairs(mods) do
             if type(mod) == "table" and mod.definition and
-            mod.definition.modpack and mod.definition.modpack == packId then
+                mod.definition.modpack and mod.definition.modpack == packId then
                 table.insert(found, { modName = modName, mod = mod, def = mod.definition })
             end
         end
@@ -53,7 +53,8 @@ function Framework.createDiscovery(packId, config, lib)
 
             if def.special then
                 if not def.name or not def.apply or not def.revert then
-                    lib.warn(packId, config.DebugMode, "Skipping special " .. modName .. ": missing name, apply, or revert")
+                    lib.warn(packId, config.DebugMode,
+                        "Skipping special " .. modName .. ": missing name, apply, or revert")
                 else
                     if def.stateSchema then
                         lib.validateSchema(def.stateSchema, modName)
@@ -94,8 +95,8 @@ function Framework.createDiscovery(packId, config, lib)
                         for _, opt in ipairs(def.options) do
                             if type(opt.configKey) == "table" then
                                 lib.warn(packId, config.DebugMode, modName ..
-                                ": option configKey is a table -- table-path keys are only valid in stateSchema (special modules). " ..
-                                "Use a flat string key in def.options. Option skipped.")
+                                    ": option configKey is a table -- table-path keys are only valid in stateSchema (special modules). " ..
+                                    "Use a flat string key in def.options. Option skipped.")
                             else
                                 opt._pushId = def.id .. "_" .. tostring(opt.configKey)
                                 table.insert(validOptions, opt)
@@ -196,7 +197,8 @@ function Framework.createDiscovery(packId, config, lib)
         local fn = enabled and module.definition.apply or module.definition.revert
         local ok, err = pcall(fn)
         if not ok then
-            lib.warn(packId, config.DebugMode, module.modName .. " " .. (enabled and "enable" or "disable") .. " failed: " .. tostring(err))
+            lib.warn(packId, config.DebugMode,
+                module.modName .. " " .. (enabled and "enable" or "disable") .. " failed: " .. tostring(err))
         end
     end
 
@@ -221,7 +223,8 @@ function Framework.createDiscovery(packId, config, lib)
         local fn = enabled and special.definition.apply or special.definition.revert
         local ok, err = pcall(fn)
         if not ok then
-            lib.warn(packId, config.DebugMode, special.modName .. " " .. (enabled and "enable" or "disable") .. " failed: " .. tostring(err))
+            lib.warn(packId, config.DebugMode,
+                special.modName .. " " .. (enabled and "enable" or "disable") .. " failed: " .. tostring(err))
         end
     end
 

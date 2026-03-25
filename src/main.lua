@@ -33,9 +33,9 @@ import 'ui.lua'
 -- REGISTRATION STATE (module-level; survives hot reloads)
 -- =============================================================================
 
-local _registered = {}  -- packId -> true  (GUI registration guard)
-local _packs      = {}  -- packId -> { ui, hud, _index }
-local _packList   = {}  -- ordered list of packIds for HUD Y-offset stacking
+local _registered = {} -- packId -> true  (GUI registration guard)
+local _packs      = {} -- packId -> { ui, hud, _index }
+local _packList   = {} -- ordered list of packIds for HUD Y-offset stacking
 
 -- =============================================================================
 -- FRAMEWORK.INIT
@@ -73,8 +73,9 @@ function Framework.init(params)
     -- Discovery must run before createHud so GetConfigHash has modules to read
     discovery.run()
 
-    local hud       = Framework.createHud(params.packId, packIndex, hash, theme, params.config, params.modutil)
-    local ui        = Framework.createUI(discovery, hash, hud, theme, params.def, params.config, lib, params.packId, params.windowTitle)
+    local hud             = Framework.createHud(params.packId, packIndex, hash, theme, params.config, params.modutil)
+    local ui              = Framework.createUI(discovery, hash, hud, theme, params.def, params.config, lib, params
+    .packId, params.windowTitle)
 
     -- Store instances — overwrites on reload; GUI callbacks use late binding
     _packs[params.packId] = { discovery = discovery, hash = hash, hud = hud, ui = ui, _index = packIndex }
@@ -84,7 +85,7 @@ function Framework.init(params)
         _registered[params.packId] = true
         local packId = params.packId
         rom.gui.add_imgui(function()
-            _packs[packId].ui.renderWindow()   -- late binding: picks up new instance after reload
+            _packs[packId].ui.renderWindow() -- late binding: picks up new instance after reload
         end)
         rom.gui.add_to_menu_bar(function()
             _packs[packId].ui.addMenuBar()

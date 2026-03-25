@@ -6,7 +6,7 @@
 -- this factory only returns { renderWindow, addMenuBar }.
 
 function Framework.createUI(discovery, hash, hud, theme, def, config, lib, packId, windowTitle)
-    local ui = rom.ImGui
+    local ui                 = rom.ImGui
 
     -- Unpack theme for convenient access
     local colors             = theme.colors
@@ -32,11 +32,11 @@ function Framework.createUI(discovery, hash, hud, theme, def, config, lib, packI
     -- UI reads/writes go through staging. Chalk is only touched in event handlers.
 
     local staging = {
-        ModEnabled = config.ModEnabled == true,  -- snapshot once
-        modules    = {},  -- [module.id] = bool
-        options    = {},  -- [module.id] = { [configKey] = value }
-        specials   = {},  -- [special.modName] = bool (enabled state)
-        debug      = {},  -- [module.id or special.modName] = bool (DebugMode per entry)
+        ModEnabled = config.ModEnabled == true, -- snapshot once
+        modules    = {},                        -- [module.id] = bool
+        options    = {},                        -- [module.id] = { [configKey] = value }
+        specials   = {},                        -- [special.modName] = bool (enabled state)
+        debug      = {},                        -- [module.id or special.modName] = bool (DebugMode per entry)
     }
 
     -- Profile staging: plain copies of config.Profiles
@@ -179,7 +179,8 @@ function Framework.createUI(discovery, hash, hud, theme, def, config, lib, packI
         local fn = state and module.definition.apply or module.definition.revert
         local ok, err = pcall(fn)
         if not ok then
-            lib.warn(packId, config.DebugMode, (module.modName or "unknown") .. " " .. (state and "apply" or "revert") .. " failed: " .. tostring(err))
+            lib.warn(packId, config.DebugMode,
+                (module.modName or "unknown") .. " " .. (state and "apply" or "revert") .. " failed: " .. tostring(err))
         end
     end
 
@@ -278,7 +279,8 @@ function Framework.createUI(discovery, hash, hud, theme, def, config, lib, packI
                             local opts = staging.options[m.id] or {}
                             for _, opt in ipairs(m.options) do
                                 ui.PushID(opt._pushId)
-                                local newVal, newChg = lib.drawField(ui, opt, opts[opt.configKey], ui.GetWindowWidth() * FIELD_MEDIUM)
+                                local newVal, newChg = lib.drawField(ui, opt, opts[opt.configKey],
+                                    ui.GetWindowWidth() * FIELD_MEDIUM)
                                 if newChg then
                                     ChangeOption(m, opt.configKey, newVal)
                                 end
@@ -502,7 +504,7 @@ function Framework.createUI(discovery, hash, hud, theme, def, config, lib, packI
         local newName, nameChanged = ui.InputText("##SlotName", ps.Name, 64)
         if nameChanged then
             ps.Name = newName
-            config.Profiles[selectedProfileSlot].Name = newName  -- write to Chalk
+            config.Profiles[selectedProfileSlot].Name = newName -- write to Chalk
             slotLabelsDirty = true
         end
         ui.PopItemWidth()
@@ -513,7 +515,7 @@ function Framework.createUI(discovery, hash, hud, theme, def, config, lib, packI
         local newTooltip, tooltipChanged = ui.InputText("##SlotTooltip", ps.Tooltip, 256)
         if tooltipChanged then
             ps.Tooltip = newTooltip
-            config.Profiles[selectedProfileSlot].Tooltip = newTooltip  -- write to Chalk
+            config.Profiles[selectedProfileSlot].Tooltip = newTooltip -- write to Chalk
         end
         ui.PopItemWidth()
 
@@ -522,7 +524,7 @@ function Framework.createUI(discovery, hash, hud, theme, def, config, lib, packI
         if ui.Button("Save Current") then
             local h = GetCachedHash()
             ps.Hash = h
-            config.Profiles[selectedProfileSlot].Hash = h  -- write to Chalk
+            config.Profiles[selectedProfileSlot].Hash = h -- write to Chalk
             if ps.Name == "" then
                 ps.Name = "Profile " .. selectedProfileSlot
                 config.Profiles[selectedProfileSlot].Name = ps.Name
@@ -570,7 +572,7 @@ function Framework.createUI(discovery, hash, hud, theme, def, config, lib, packI
         if ui.Button("Restore Default Profiles") then
             for i = 1, NUM_PROFILES do
                 local d = defaultProfiles[i]
-                local cp = config.Profiles[i]  -- Chalk write
+                local cp = config.Profiles[i] -- Chalk write
                 if d then
                     profileStaging[i] = { Name = d.Name, Hash = d.Hash, Tooltip = d.Tooltip }
                     cp.Name = d.Name
@@ -616,7 +618,8 @@ function Framework.createUI(discovery, hash, hud, theme, def, config, lib, packI
             config.DebugMode = fwVal
         end
         if ui.IsItemHovered() then
-            ui.SetTooltip("Print diagnostic warnings for schema validation, discovery errors, and other framework events.")
+            ui.SetTooltip(
+            "Print diagnostic warnings for schema validation, discovery errors, and other framework events.")
         end
 
         local libVal, libChg = ui.Checkbox("Lib Debug", lib.config.DebugMode == true)
@@ -624,7 +627,8 @@ function Framework.createUI(discovery, hash, hud, theme, def, config, lib, packI
             lib.config.DebugMode = libVal
         end
         if ui.IsItemHovered() then
-            ui.SetTooltip("Print lib-internal diagnostic warnings (schema errors, unknown field types). Shared across all packs.")
+            ui.SetTooltip(
+            "Print lib-internal diagnostic warnings (schema errors, unknown field types). Shared across all packs.")
         end
 
         ui.Spacing()
@@ -692,7 +696,7 @@ function Framework.createUI(discovery, hash, hud, theme, def, config, lib, packI
         local val, chg = ui.Checkbox("Enable Mod", staging.ModEnabled)
         if chg then
             staging.ModEnabled = val
-            config.ModEnabled = val  -- write to Chalk once (event handler)
+            config.ModEnabled = val -- write to Chalk once (event handler)
             -- Apply game-side enable/disable based on staging state.
             -- Staging is preserved so re-enable restores previous selections.
             for _, m in ipairs(discovery.modules) do
