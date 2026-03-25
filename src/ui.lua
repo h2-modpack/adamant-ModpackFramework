@@ -5,7 +5,7 @@
 -- Registration (add_imgui / add_to_menu_bar) is handled by Framework.init —
 -- this factory only returns { renderWindow, addMenuBar }.
 
-function Framework.createUI(discovery, hash, hud, theme, def, config, lib, packId, windowTitle)
+function Framework.createUI(discovery, hud, theme, def, config, lib, packId, windowTitle)
     local ui                 = rom.ImGui
 
     -- Unpack theme for convenient access

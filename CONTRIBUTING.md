@@ -11,7 +11,7 @@ src/
   hash.lua        -- createHash(discovery, config, lib, packId)
   ui_theme.lua    -- createTheme()
   hud.lua         -- createHud(packId, packIndex, hash, theme, config, modutil)
-  ui.lua          -- createUI(discovery, hash, hud, theme, def, config, lib, packId, windowTitle)
+  ui.lua          -- createUI(discovery, hud, theme, def, config, lib, packId, windowTitle)
 ```
 
 Each sub-file exposes one factory function on the `Framework` table. `Framework.init` wires them together, handles GUI registration, and returns the pack table. Factory params replace the old `Core.*` global namespace — state is closed over, not shared.
