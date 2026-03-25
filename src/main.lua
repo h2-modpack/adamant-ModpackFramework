@@ -74,7 +74,8 @@ function Framework.init(params)
     discovery.run()
 
     local hud             = Framework.createHud(params.packId, packIndex, hash, theme, params.config, params.modutil)
-    local ui              = Framework.createUI(discovery, hud, theme, params.def, params.config, lib, params.packId, params.windowTitle)
+    local ui              = Framework.createUI(discovery, hud, theme, params.def, params.config, lib, params.packId,
+        params.windowTitle)
 
     -- Store instances — overwrites on reload; GUI callbacks use late binding
     _packs[params.packId] = { discovery = discovery, hash = hash, hud = hud, ui = ui, _index = packIndex }
