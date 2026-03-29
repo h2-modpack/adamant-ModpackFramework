@@ -56,6 +56,10 @@ function Framework.createDiscovery(packId, config, lib)
                     lib.warn(packId, config.DebugMode,
                         "Skipping special " .. modName .. ": missing name, apply, or revert")
                 else
+                    if not mod.specialState then
+                        lib.warn(packId, config.DebugMode,
+                            modName .. ": special module is missing public.specialState (managed special state)")
+                    end
                     if def.stateSchema then
                         lib.validateSchema(def.stateSchema, modName)
                     end

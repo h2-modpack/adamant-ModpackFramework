@@ -1,10 +1,10 @@
-# Contributing to adamant-Modpack_Framework
+# Contributing to adamant-ModpackFramework
 
-Reusable orchestration library for Hades 2 modpacks. Provides discovery, config hashing, HUD fingerprint, and the shared UI window. Coordinators call `Framework.init(params)` and get everything for free.
+Reusable orchestration library for Hades 2 modpacks. Provides discovery, config hashing, HUD fingerprint, and the shared UI window. Coordinators call `Framework.init(params)` and get the full pack runtime.
 
 ## Architecture
 
-```
+```text
 src/
   main.lua        -- Framework table, ENVY wiring, Framework.init, imports sub-files
   discovery.lua   -- createDiscovery(packId, config, lib)
@@ -14,99 +14,112 @@ src/
   ui.lua          -- createUI(discovery, hud, theme, def, config, lib, packId, windowTitle)
 ```
 
-Each sub-file exposes one factory function on the `Framework` table. `Framework.init` wires them together, handles GUI registration, and returns the pack table. Factory params replace the old `Core.*` global namespace — state is closed over, not shared.
+Each sub-file exposes one factory function on the `Framework` table. `Framework.init` wires them together, handles coordinator registration through Lib, and returns the pack table. Factory params replace the old global `Core.*` style; state is closed over, not shared.
 
-Coordinators own: their Chalk config, `def` (NUM_PROFILES, defaultProfiles), and their `packId`. Framework owns everything else.
+Coordinators own their Chalk config, `def` (`NUM_PROFILES`, `defaultProfiles`), and `packId`. Framework owns discovery, hash, HUD, and the shared UI.
 
 ## Key systems
 
-### Discovery (discovery.lua — `createDiscovery`)
+### Discovery (`discovery.lua` - `createDiscovery`)
 
-Auto-discovers all installed modules that opt in via `definition.modpack = packId`. No registry required — modules are picked up automatically on load.
+Auto-discovers all installed modules that opt in via `definition.modpack = packId`.
 
-- Regular modules: `def.special` is nil/false
-- Special modules: `def.special = true`
-- All metadata (id, name, category, group, tooltip, default) lives in each module's `public.definition`
+- Regular modules: `definition.special` is nil or false
+- Special modules: `definition.special = true`
+- All metadata (`id`, `name`, `category`, `group`, `tooltip`, `default`) lives in each module's `public.definition`
 - Modules are sorted alphabetically by display name; categories and groups are also sorted alphabetically
 
-A new category tab is created automatically the first time a module with an unseen `def.category` is discovered. No Framework changes needed to add a new module or category.
+A new category tab is created automatically the first time a module with a new `definition.category` is discovered.
 
-### Config hash (hash.lua — `createHash`)
+For special modules, discovery expects:
+- `definition.name`
+- `definition.apply`
+- `definition.revert`
+- `public.specialState`
 
-Pure encoding logic with no engine dependencies — fully testable in standalone Lua. Uses a **key-value canonical string** format:
+### Config hash (`hash.lua` - `createHash`)
 
-```
+Pure encoding logic with no engine dependencies. Uses a key-value canonical string:
+
+```text
 _v=1|ModId=1|ModId.configKey=value|adamant-SpecialName.configKey=value
 ```
 
-- Only non-default values are encoded — adding new fields with defaults is non-breaking
+- Only non-default values are encoded
 - Keys are sorted alphabetically for stable output
 - Value encoding is delegated to `lib.FieldTypes[field.type].toHash/fromHash`
-- `_v` version token must be present or the hash is rejected
+- `_v` must be present or the hash is rejected
 
-`GetConfigHash(source)` returns `canonical, fingerprint` — the canonical string is used for import/export, the 12-char base62 fingerprint is shown on the HUD. `ApplyConfigHash(hash)` decodes and applies a canonical string; unknown keys are ignored and missing keys reset to defaults.
+`GetConfigHash(source)` returns `canonical, fingerprint`.
+`ApplyConfigHash(hash)` decodes and applies the canonical string; unknown keys are ignored and missing keys reset to defaults.
 
-### HUD (hud.lua — `createHud`)
+For special modules, hash application writes config directly and then calls `specialState.reloadFromConfig()`.
 
-Manages the fingerprint overlay. Each pack registers its own component named `"ModpackMark_<packId>"`, positioned at `Y = 250 + (packIndex - 1) * 24` so multiple packs stack vertically without overlap. Returns `{ setModMarker, updateHash, getConfigHash, applyConfigHash }`.
+### HUD (`hud.lua` - `createHud`)
 
-### UI (ui.lua — `createUI`)
+Manages the fingerprint overlay. Each pack registers its own component named `ModpackMark_<packId>`, positioned at `Y = 250 + (packIndex - 1) * 24` so multiple packs stack vertically. Returns `{ setModMarker, updateHash, getConfigHash, applyConfigHash }`.
 
-Uses a **staging table** — a plain Lua cache mirroring Chalk configs for fast per-frame reads. Chalk is only written when the user makes a change.
+### UI (`ui.lua` - `createUI`)
+
+Framework uses its own staging table for regular module state and profiles.
 
 Key handlers:
 
 | Function | Purpose |
 |---|---|
-| `ToggleModule(module, val)` | Enable/disable a boolean module |
-| `ChangeOption(module, key, val)` | Change an inline option (triggers revert + apply if dataMutation) |
-| `ToggleSpecial(special, val)` | Enable/disable a special module |
-| `SetModuleState(module, state)` | Game-side only apply/revert (no Chalk, no staging) |
-| `LoadProfile(hash)` | Apply a hash string to all modules and re-snapshot staging |
-| `SetBugFixes(val)` | Bulk toggle all modules in the `"Bug Fixes"` category |
+| `ToggleModule(module, val)` | Enable or disable a regular module |
+| `ChangeOption(module, key, val)` | Change an inline option |
+| `ToggleSpecial(special, val)` | Enable or disable a special module |
+| `SetModuleState(module, state)` | Game-side only apply or revert |
+| `LoadProfile(hash)` | Apply a hash string to all modules and refresh staging |
+| `SetBugFixes(val)` | Bulk toggle all modules in the `Bug Fixes` category |
 
-Returns `{ renderWindow, addMenuBar }`. Registration with `rom.gui` is handled by `Framework.init`, not by `createUI`.
+Special-module rendering contract:
+- Framework passes `public.specialState` into `DrawTab(ui, specialState, theme)` and `DrawQuickContent(ui, specialState, theme)`
+- after each draw, if `specialState.isDirty()` is true, Framework calls `specialState.flushToConfig()` once
+- Framework then invalidates the cached hash and updates the HUD
 
-### Dev tab (ui.lua — `DrawDev`)
+Debug guard for special modules:
+- Framework can snapshot schema-backed config values before special draw
+- after draw, if config changed but `specialState.isDirty()` stayed false, Framework calls `lib.warnIfSpecialConfigBypassedState(...)`
+- this warns when a special writes schema-backed `config` directly during draw instead of using `public.specialState`
+
+Returns `{ renderWindow, addMenuBar }`. Registration with `rom.gui` is handled by the coordinator via `Framework.init`.
+
+### Dev tab (`ui.lua` - `DrawDev`)
 
 Two independent debug controls:
 
 | Control | What it gates | Config key |
 |---|---|---|
-| Framework Debug | `lib.warn(packId, enabled, msg)` calls — schema errors, discovery warnings | `config.DebugMode` (coordinator's config) |
-| Lib Debug | lib-internal diagnostics | `lib.config.DebugMode` (shared across all packs) |
-| Per-module Debug | `lib.log(name, enabled, msg)` in each module's own code | Each module's `config.DebugMode` |
+| Framework Debug | `lib.warn(packId, enabled, msg)` calls for schema errors, discovery warnings, etc. | `config.DebugMode` |
+| Lib Debug | lib-internal diagnostics | `lib.config.DebugMode` |
+| Per-module Debug | `lib.log(name, enabled, msg)` inside module code | each module's `config.DebugMode` |
 
-Framework Debug and Lib Debug are written directly (no staging) — they have no external writers so staging would add complexity with no correctness benefit.
+Framework Debug and Lib Debug are written directly rather than through staging.
 
-### Theme (ui_theme.lua — `createTheme`)
+### Theme (`ui_theme.lua` - `createTheme`)
 
-Declarative colors and layout constants. No parameters — returns the same palette every time. Future: could accept an `overrides` table for pack-specific colors.
+Declarative colors and layout constants. No parameters today; returns the same palette each time.
 
 ## Hot reload
 
-`Framework.init` is safe to call on every reload. Sub-system instances are recreated fresh each call; GUI callbacks are registered only once per `packId` (guarded by `_registered[packId]`). The callbacks use late-binding via `_packs[packId]` so they automatically pick up the new instances.
+`Framework.init` is safe to call on every reload. Subsystem instances are recreated fresh each call, while GUI callbacks remain stable through late binding.
 
 ## Tests
 
-```
-cd adamant-modpack-Framework
+```text
+cd adamant-ModpackFramework
 lua5.1 tests/all.lua
 ```
 
-Tests use `Framework.createHash(mockDiscovery, ...)` directly — no global patching, no engine required. See `tests/TestUtils.lua` for the mock scaffold.
-
-## How-tos
-
-### Adding a new category
-
-Set `def.category` to a new string in a module's `public.definition`. The tab appears automatically — no Framework change needed.
+Tests use the individual factory functions directly with mocks rather than requiring the engine.
 
 ## Guidelines
 
-- **Never rename `def.id` or `field.configKey` after release** — these are hash keys; renaming silently resets that field to default for anyone with an existing profile
-- **`"Bug Fixes"` is a reserved category string** — modules using this exact string get a bulk enable/disable toggle in the Quick Setup tab. Spelling variations create a separate tab without the bulk toggle
-- All module apply/revert calls go through `pcall` — use `lib.warn` for framework errors, never crash
-- UI reads from staging, not Chalk — always keep staging in sync
-- Theme is data-driven — don't hardcode counts or layout numbers
-- **`def.options` configKeys must be flat strings** — table-path keys (e.g. `{"Parent", "Child"}`) are only valid in `def.stateSchema` (special modules). Discovery warns and skips any option with a table configKey. If your config needs nested structure, make it a special module
+- Never rename `definition.id` or `field.configKey` after release; these are hash keys
+- `Bug Fixes` is a reserved category string used by Quick Setup bulk toggle logic
+- All module apply/revert calls go through `pcall`; use `lib.warn(...)` for framework errors, never crash
+- Regular-module UI reads from Framework staging, not Chalk
+- Special-module UI reads from `public.specialState.view` and mutates via `public.specialState.set/update/toggle`
+- `definition.options` config keys must be flat strings; table-path keys are only valid in `definition.stateSchema`

@@ -258,9 +258,7 @@ function Framework.createHash(discovery, config, lib, packId)
                         lib.writePath(cfg, field.configKey, field.default)
                     end
                 end
-                if special.mod.SnapshotStaging then
-                    special.mod.SnapshotStaging()
-                end
+                special.mod.specialState.reloadFromConfig()
             end
         end
 

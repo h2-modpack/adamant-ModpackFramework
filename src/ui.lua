@@ -63,9 +63,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         for _, special in ipairs(discovery.specials) do
             staging.specials[special.modName] = discovery.isSpecialEnabled(special)
             staging.debug[special.modName] = discovery.isDebugEnabled(special)
-            if special.mod.SnapshotStaging then
-                special.mod.SnapshotStaging()
-            end
+            special.mod.specialState.reloadFromConfig()
         end
 
         -- Per-module debug states
@@ -320,19 +318,33 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         return cachedTabList
     end
 
+    local function FlushSpecialState(special)
+        local specialState = special.mod.specialState
+        if specialState.isDirty() then
+            specialState.flushToConfig()
+            InvalidateHash()
+            hud.updateHash()
+            return true
+        end
+        return false
+    end
+
+    local function WarnIfSpecialBypassedState(special, preDrawConfig)
+        lib.warnIfSpecialConfigBypassedState(
+            special.definition.name or special.modName,
+            discovery.isDebugEnabled(special),
+            special.mod.specialState,
+            special.mod.config,
+            special.stateSchema,
+            preDrawConfig
+        )
+    end
+
     -- Build lookup: tab label -> special entry
     local specialByTabLabel = {}
 
     for _, special in ipairs(discovery.specials) do
         specialByTabLabel[special._tabLabel] = special
-        -- Cache the onChanged callback so we don't allocate closures in the render loop
-        special._onChangedCb = function()
-            if special.mod.SyncToConfig then
-                special.mod.SyncToConfig()
-            end
-            InvalidateHash()
-            hud.updateHash()
-        end
     end
 
     -- =============================================================================
@@ -405,7 +417,10 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             if staging.specials[special.modName] and special.mod.DrawQuickContent then
                 ui.Separator()
                 ui.Spacing()
-                special.mod.DrawQuickContent(ui, special._onChangedCb, theme)
+                local preDrawConfig = lib.captureSpecialConfigSnapshot(special.mod.config, special.stateSchema)
+                special.mod.DrawQuickContent(ui, special.mod.specialState, theme)
+                WarnIfSpecialBypassedState(special, preDrawConfig)
+                FlushSpecialState(special)
             end
         end
     end
@@ -427,7 +442,10 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
 
         -- Delegate tab content to the module
         if special.mod.DrawTab then
-            special.mod.DrawTab(ui, special._onChangedCb, theme)
+            local preDrawConfig = lib.captureSpecialConfigSnapshot(special.mod.config, special.stateSchema)
+            special.mod.DrawTab(ui, special.mod.specialState, theme)
+            WarnIfSpecialBypassedState(special, preDrawConfig)
+            FlushSpecialState(special)
         end
     end
 

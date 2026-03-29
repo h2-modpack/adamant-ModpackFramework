@@ -56,11 +56,11 @@ function RestoreWarnings()
 end
 
 -- Load Lib first (Framework depends on it)
-dofile("../adamant-modpack-Lib/src/main.lua")
+dofile("../adamant-ModpackLib/src/main.lua")
 lib = public
 
 -- Set up lib as a rom mod so Framework can find it
-rom.mods['adamant-Modpack_Lib'] = lib
+rom.mods['adamant-ModpackLib'] = lib
 
 -- Load Framework factory functions directly.
 -- Framework.init is NOT called — only individual factory functions are used in tests.
@@ -136,7 +136,12 @@ function MockDiscovery.create(moduleConfigs, optionConfigs, specialConfigs)
     for _, sc in ipairs(specialConfigs) do
         table.insert(discovery.specials, {
             modName = sc.modName,
-            mod = { config = sc.config, SnapshotStaging = function() end },
+            mod = {
+                config = sc.config,
+                specialState = {
+                    reloadFromConfig = function() end,
+                },
+            },
             definition = {},
             stateSchema = sc.stateSchema,
         })
