@@ -265,6 +265,157 @@ function TestHashRobustness:testHashWithDefaultTrueModule()
 end
 
 -- =============================================================================
+-- APPLY ORDER
+-- =============================================================================
+
+TestHashApplyOrder = {}
+
+function TestHashApplyOrder:testRegularModuleApplySeesDecodedOptions()
+    local appliedMode = nil
+    local modConfig = {
+        Enabled = false,
+        Mode = "Vanilla",
+    }
+
+    local module = {
+        modName = "adamant-A",
+        mod = { config = modConfig },
+        definition = {
+            apply = function()
+                appliedMode = modConfig.Mode
+            end,
+            revert = function() end,
+        },
+        id = "A",
+        name = "A",
+        category = "Cat1",
+        default = false,
+        options = {
+            {
+                type = "dropdown",
+                configKey = "Mode",
+                values = { "Vanilla", "Always" },
+                default = "Vanilla",
+                _hashKey = "A.Mode",
+            },
+        },
+    }
+
+    local discovery = {
+        modules = { module },
+        modulesById = { A = module },
+        modulesWithOptions = { module },
+        specials = {},
+    }
+
+    function discovery.isModuleEnabled(m)
+        return m.mod.config.Enabled == true
+    end
+
+    function discovery.setModuleEnabled(m, enabled)
+        m.mod.config.Enabled = enabled
+        local fn = enabled and m.definition.apply or m.definition.revert
+        fn()
+    end
+
+    function discovery.getOptionValue(m, configKey)
+        return m.mod.config[configKey]
+    end
+
+    function discovery.setOptionValue(m, configKey, value)
+        m.mod.config[configKey] = value
+    end
+
+    local _, ApplyHash = withDiscovery(discovery)
+    lu.assertTrue(ApplyHash("_v=1|A=1|A.Mode=Always"))
+    lu.assertTrue(modConfig.Enabled)
+    lu.assertEquals(modConfig.Mode, "Always")
+    lu.assertEquals(appliedMode, "Always")
+end
+
+function TestHashApplyOrder:testSpecialModuleApplySeesDecodedSchemaValues()
+    local appliedWeapon = nil
+    local reloadedWeapon = nil
+    local specialConfig = {
+        Enabled = false,
+        Weapon = "Axe",
+    }
+
+    local special = {
+        modName = "adamant-Special",
+        mod = {
+            config = specialConfig,
+            specialState = {
+                reloadFromConfig = function()
+                    reloadedWeapon = specialConfig.Weapon
+                end,
+            },
+        },
+        definition = {
+            apply = function()
+                appliedWeapon = specialConfig.Weapon
+            end,
+            revert = function() end,
+        },
+        stateSchema = {
+            {
+                type = "dropdown",
+                configKey = "Weapon",
+                values = { "Axe", "Staff" },
+                default = "Axe",
+            },
+        },
+    }
+
+    local discovery = {
+        modules = {},
+        modulesById = {},
+        modulesWithOptions = {},
+        specials = { special },
+    }
+
+    function discovery.isSpecialEnabled(entry)
+        return entry.mod.config.Enabled == true
+    end
+
+    function discovery.setSpecialEnabled(entry, enabled)
+        entry.mod.config.Enabled = enabled
+        local fn = enabled and entry.definition.apply or entry.definition.revert
+        fn()
+    end
+
+    local _, ApplyHash = withDiscovery(discovery)
+    lu.assertTrue(ApplyHash("_v=1|adamant-Special=1|adamant-Special.Weapon=Staff"))
+    lu.assertTrue(specialConfig.Enabled)
+    lu.assertEquals(specialConfig.Weapon, "Staff")
+    lu.assertEquals(reloadedWeapon, "Staff")
+    lu.assertEquals(appliedWeapon, "Staff")
+end
+
+-- =============================================================================
+-- SPECIAL STATE SAFETY
+-- =============================================================================
+
+TestSpecialStateSafety = {}
+
+function TestSpecialStateSafety:testSeparatorFieldsAreIgnoredByManagedSpecialState()
+    local modConfig = {
+        Flag = true,
+    }
+
+    local specialState = lib.createSpecialState(modConfig, {
+        { type = "separator", label = "Section" },
+        { type = "checkbox", configKey = "Flag", default = false },
+    })
+
+    lu.assertTrue(specialState.view.Flag)
+    specialState.set("Flag", false)
+    lu.assertTrue(specialState.isDirty())
+    specialState.flushToConfig()
+    lu.assertFalse(modConfig.Flag)
+end
+
+-- =============================================================================
 -- FINGERPRINT
 -- =============================================================================
 

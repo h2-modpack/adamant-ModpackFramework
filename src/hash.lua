@@ -117,6 +117,10 @@ function Framework.createHash(discovery, config, lib, packId)
         return lib.FieldTypes[field.type].fromHash(field, str)
     end
 
+    local function IsSchemaConfigField(field)
+        return field and field.type ~= "separator" and field.configKey ~= nil
+    end
+
     -- =============================================================================
     -- CONFIG HASH
     -- =============================================================================
@@ -180,9 +184,11 @@ function Framework.createHash(discovery, config, lib, packId)
             if schema then
                 local cfg = special.mod.config
                 for _, field in ipairs(schema) do
-                    local current = lib.readPath(cfg, field.configKey)
-                    if current ~= field.default then
-                        kv[special.modName .. "." .. (field._schemaKey or KeyStr(field.configKey))] = EncodeValue(field, current)
+                    if IsSchemaConfigField(field) then
+                        local current = lib.readPath(cfg, field.configKey)
+                        if current ~= field.default then
+                            kv[special.modName .. "." .. (field._schemaKey or KeyStr(field.configKey))] = EncodeValue(field, current)
+                        end
                     end
                 end
             end
@@ -218,15 +224,18 @@ function Framework.createHash(discovery, config, lib, packId)
                 version, HASH_VERSION)
         end
 
-        -- Boolean module enabled states
+        local moduleTargets = {}
+        local specialTargets = {}
+
+        -- Capture enabled-state targets first, then write all option/schema values
+        -- before any apply() calls run. This ensures data-mutation modules see the
+        -- final decoded config when profile/hash application enables them.
         for _, m in ipairs(discovery.modules) do
             local stored = kv[m.id]
             if stored ~= nil then
-                discovery.setModuleEnabled(m, stored == "1")
+                moduleTargets[m] = stored == "1"
             else
-                -- Not in hash = was at default when hash was made, reset to default
-                local default = m.default == true
-                discovery.setModuleEnabled(m, default)
+                moduleTargets[m] = m.default == true
             end
         end
 
@@ -246,24 +255,35 @@ function Framework.createHash(discovery, config, lib, packId)
 
         -- Special module enabled states and state schema values
         for _, special in ipairs(discovery.specials) do
-            -- Enabled state (default is false)
             local storedEnabled = kv[special.modName]
-            discovery.setSpecialEnabled(special, storedEnabled == "1")
+            specialTargets[special] = storedEnabled == "1"
 
-            -- State schema values
             local schema = special.stateSchema
             if schema then
                 local cfg = special.mod.config
                 for _, field in ipairs(schema) do
-                    local storedField = kv[special.modName .. "." .. (field._schemaKey or KeyStr(field.configKey))]
-                    if storedField ~= nil then
-                        lib.writePath(cfg, field.configKey, DecodeValue(field, storedField))
-                    else
-                        lib.writePath(cfg, field.configKey, field.default)
+                    if IsSchemaConfigField(field) then
+                        local storedField = kv[special.modName .. "." .. (field._schemaKey or KeyStr(field.configKey))]
+                        if storedField ~= nil then
+                            lib.writePath(cfg, field.configKey, DecodeValue(field, storedField))
+                        else
+                            lib.writePath(cfg, field.configKey, field.default)
+                        end
                     end
                 end
-                special.mod.specialState.reloadFromConfig()
+                if special.mod.specialState and special.mod.specialState.reloadFromConfig then
+                    special.mod.specialState.reloadFromConfig()
+                end
             end
+        end
+
+        -- Apply enabled states after all decoded values are in place.
+        for _, m in ipairs(discovery.modules) do
+            discovery.setModuleEnabled(m, moduleTargets[m])
+        end
+
+        for _, special in ipairs(discovery.specials) do
+            discovery.setSpecialEnabled(special, specialTargets[special])
         end
 
         return true

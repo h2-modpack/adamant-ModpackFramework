@@ -59,18 +59,19 @@ function Framework.createDiscovery(packId, config, lib)
                     if not mod.specialState then
                         lib.warn(packId, config.DebugMode,
                             "%s: special module is missing public.specialState (managed special state)", modName)
+                    else
+                        if def.stateSchema then
+                            lib.validateSchema(def.stateSchema, modName)
+                        end
+                        table.insert(Discovery.specials, {
+                            modName      = modName,
+                            mod          = mod,
+                            definition   = def,
+                            stateSchema  = def.stateSchema,
+                            _enableLabel = "Enable " .. tostring(def.name),
+                            _debugLabel  = tostring(def.name) .. "##" .. modName,
+                        })
                     end
-                    if def.stateSchema then
-                        lib.validateSchema(def.stateSchema, modName)
-                    end
-                    table.insert(Discovery.specials, {
-                        modName      = modName,
-                        mod          = mod,
-                        definition   = def,
-                        stateSchema  = def.stateSchema,
-                        _enableLabel = "Enable " .. tostring(def.name),
-                        _debugLabel  = tostring(def.name) .. "##" .. modName,
-                    })
                 end
             else
                 if not def.id or not def.apply or not def.revert then

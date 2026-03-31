@@ -70,3 +70,36 @@ function TestDiscovery:testCategoryOrderCanOverrideDefaultSort()
         lu.assertEquals(discovery.categories[4].key, "Zeta")
     end)
 end
+
+function TestDiscovery:testSpecialMissingSpecialStateIsSkipped()
+    local previousDebugMode = config.DebugMode
+    config.DebugMode = true
+    CaptureWarnings()
+
+    withMockModules({
+        ["test-special"] = {
+            definition = {
+                modpack = "test-pack",
+                special = true,
+                name = "My Special",
+                apply = function() end,
+                revert = function() end,
+            },
+            config = {
+                Enabled = false,
+                DebugMode = false,
+            },
+        },
+    }, function()
+        local discovery = Framework.createDiscovery("test-pack", config, lib)
+        discovery.run()
+        lu.assertEquals(#discovery.specials, 0)
+    end)
+
+    local warnings = Warnings
+    RestoreWarnings()
+    config.DebugMode = previousDebugMode
+
+    lu.assertEquals(#warnings, 1)
+    lu.assertStrContains(warnings[1], "missing public.specialState")
+end

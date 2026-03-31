@@ -39,6 +39,10 @@ rom.mods['SGG_Modding-Chalk'] = {
     auto = function() return { DebugMode = false } end,
 }
 
+import = function(path)
+    dofile("../adamant-ModpackLib/src/" .. path)
+end
+
 -- Warning capture
 Warnings = {}
 

@@ -402,31 +402,14 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         return cachedTabList
     end
 
-    local function FlushSpecialState(special)
-        local specialState = special.mod.specialState
-        if specialState.isDirty() then
-            specialState.flushToConfig()
-            if special.definition.dataMutation and staging.specials[special.modName] then
-                SetModuleState(special, false)
-                SetModuleState(special, true)
-                SetupRunData()
-            end
-            InvalidateHash()
-            hud.updateHash()
-            return true
+    local function OnSpecialStateFlushed(special)
+        if special.definition.dataMutation and staging.specials[special.modName] then
+            SetModuleState(special, false)
+            SetModuleState(special, true)
+            SetupRunData()
         end
-        return false
-    end
-
-    local function WarnIfSpecialBypassedState(special, preDrawConfig)
-        lib.warnIfSpecialConfigBypassedState(
-            special.definition.name or special.modName,
-            discovery.isDebugEnabled(special),
-            special.mod.specialState,
-            special.mod.config,
-            special.stateSchema,
-            preDrawConfig
-        )
+        InvalidateHash()
+        hud.updateHash()
     end
 
     -- Build lookup: tab label -> special entry
@@ -493,11 +476,18 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             if staging.specials[special.modName] and special.mod.DrawQuickContent then
                 ui.Separator()
                 ui.Spacing()
-                local debugEnabled = lib.isSpecialStateValidationEnabled(special.mod.config)
-                local preDrawConfig = debugEnabled and lib.captureSpecialConfigSnapshot(special.mod.config, special.stateSchema)
-                special.mod.DrawQuickContent(ui, special.mod.specialState, theme)
-                if debugEnabled then WarnIfSpecialBypassedState(special, preDrawConfig) end
-                FlushSpecialState(special)
+                lib.runSpecialUiPass({
+                    name = special.definition.name or special.modName,
+                    imgui = ui,
+                    config = special.mod.config,
+                    schema = special.stateSchema,
+                    specialState = special.mod.specialState,
+                    theme = theme,
+                    draw = special.mod.DrawQuickContent,
+                    onFlushed = function()
+                        OnSpecialStateFlushed(special)
+                    end,
+                })
             end
         end
     end
@@ -519,11 +509,18 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
 
         -- Delegate tab content to the module
         if special.mod.DrawTab then
-            local debugEnabled = lib.isSpecialStateValidationEnabled(special.mod.config)
-            local preDrawConfig = debugEnabled and lib.captureSpecialConfigSnapshot(special.mod.config, special.stateSchema)
-            special.mod.DrawTab(ui, special.mod.specialState, theme)
-            if debugEnabled then WarnIfSpecialBypassedState(special, preDrawConfig) end
-            FlushSpecialState(special)
+            lib.runSpecialUiPass({
+                name = special.definition.name or special.modName,
+                imgui = ui,
+                config = special.mod.config,
+                schema = special.stateSchema,
+                specialState = special.mod.specialState,
+                theme = theme,
+                draw = special.mod.DrawTab,
+                onFlushed = function()
+                    OnSpecialStateFlushed(special)
+                end,
+            })
         end
     end
 
@@ -703,7 +700,9 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         DrawColoredText(colors.info, "Developer options for module authors and debugging.")
         ui.Spacing()
 
-        -- Framework debug: gates lib.warn calls from schema validation, discovery, etc.
+        -- Framework debug gates framework-owned warnings such as discovery, hash import,
+        -- and framework-managed apply/revert failures.
+        -- Load-time schema validation and runtime direct-config-write detection live in Lib.
         -- Read/write directly from config — intentional exception to the staging pattern.
         -- These flags have no external writers (no profile load),
         -- so staging would add complexity with no correctness benefit.
@@ -715,7 +714,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         end
         if ui.IsItemHovered() then
             ui.SetTooltip(
-            "Print diagnostic warnings for schema validation, discovery errors, and other framework events.")
+            "Print framework diagnostics for discovery, hash parsing, and apply/revert failures.")
         end
 
         local libVal, libChg = ui.Checkbox("Lib Debug", lib.config.DebugMode == true)
@@ -727,11 +726,15 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             "Print lib-internal diagnostic warnings (schema errors, unknown field types). Shared across all packs.")
         end
 
-        lib.drawSpecialStateValidationToggle(
+        lib.drawSpecialConfigWriteDebugToggle(
             ui,
-            nil,
-            "Special State Validation"
+            "Direct Config Write Detection"
         )
+        if ui.IsItemHovered() then
+            ui.SetTooltip(
+                "Continuously warn when special-module UI writes schema-backed config directly instead of using public.specialState."
+            )
+        end
 
         ui.Spacing()
         ui.Separator()
