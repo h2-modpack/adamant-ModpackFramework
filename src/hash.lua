@@ -17,6 +17,18 @@ function Framework.createHash(discovery, config, lib, packId)
 
     local Hash = {}
 
+    local function ReadPersisted(mod, key)
+        return mod.store.read(key)
+    end
+
+    local function WritePersisted(mod, key, value)
+        mod.store.write(key, value)
+    end
+
+    local function GetSpecialState(mod)
+        return mod.store.specialState
+    end
+
     local BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
     -- =============================================================================
@@ -182,10 +194,9 @@ function Framework.createHash(discovery, config, lib, packId)
             -- State schema values (omit if matches field default)
             local schema = special.stateSchema
             if schema then
-                local cfg = special.mod.config
                 for _, field in ipairs(schema) do
                     if IsSchemaConfigField(field) then
-                        local current = lib.readPath(cfg, field.configKey)
+                        local current = ReadPersisted(special.mod, field.configKey)
                         if current ~= field.default then
                             kv[special.modName .. "." .. (field._schemaKey or KeyStr(field.configKey))] = EncodeValue(field, current)
                         end
@@ -260,19 +271,19 @@ function Framework.createHash(discovery, config, lib, packId)
 
             local schema = special.stateSchema
             if schema then
-                local cfg = special.mod.config
                 for _, field in ipairs(schema) do
                     if IsSchemaConfigField(field) then
                         local storedField = kv[special.modName .. "." .. (field._schemaKey or KeyStr(field.configKey))]
                         if storedField ~= nil then
-                            lib.writePath(cfg, field.configKey, DecodeValue(field, storedField))
+                            WritePersisted(special.mod, field.configKey, DecodeValue(field, storedField))
                         else
-                            lib.writePath(cfg, field.configKey, field.default)
+                            WritePersisted(special.mod, field.configKey, field.default)
                         end
                     end
                 end
-                if special.mod.specialState and special.mod.specialState.reloadFromConfig then
-                    special.mod.specialState.reloadFromConfig()
+                local specialState = GetSpecialState(special.mod)
+                if specialState and specialState.reloadFromConfig then
+                    specialState.reloadFromConfig()
                 end
             end
         end

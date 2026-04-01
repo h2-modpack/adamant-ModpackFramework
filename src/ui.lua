@@ -67,7 +67,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         for _, special in ipairs(discovery.specials) do
             staging.specials[special.modName] = discovery.isSpecialEnabled(special)
             staging.debug[special.modName] = discovery.isDebugEnabled(special)
-            special.mod.specialState.reloadFromConfig()
+            special.specialState.reloadFromConfig()
         end
 
         -- Per-module debug states
@@ -422,12 +422,9 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         specialQuickPassOpts[special.modName] = {
             name = special.definition.name or special.modName,
             imgui = ui,
-            config = special.mod.config,
-            schema = special.stateSchema,
-            specialState = special.mod.specialState,
+            specialState = special.specialState,
             theme = theme,
             draw = special.mod.DrawQuickContent,
-            validateEnabled = false,
             onFlushed = function()
                 OnSpecialStateFlushed(special)
             end,
@@ -435,9 +432,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         specialTabPassOpts[special.modName] = {
             name = special.definition.name or special.modName,
             imgui = ui,
-            config = special.mod.config,
-            schema = special.stateSchema,
-            specialState = special.mod.specialState,
+            specialState = special.specialState,
             theme = theme,
             draw = special.mod.DrawTab,
             onFlushed = function()
@@ -711,7 +706,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
 
         -- Framework debug gates framework-owned warnings such as discovery, hash import,
         -- and framework-managed apply/revert failures.
-        -- Load-time schema validation and runtime direct-config-write detection live in Lib.
+        -- Load-time schema validation lives in Lib.
         -- Read/write directly from config — intentional exception to the staging pattern.
         -- These flags have no external writers (no profile load),
         -- so staging would add complexity with no correctness benefit.
@@ -735,19 +730,6 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             "Print lib-internal diagnostic warnings (schema errors, unknown field types). Shared across all packs.")
         end
 
-        lib.drawSpecialConfigWriteDebugToggle(
-            ui,
-            "Direct Config Write Detection"
-        )
-        if ui.IsItemHovered() then
-            ui.SetTooltip(
-                "Continuously warn when special-module UI writes schema-backed config directly instead of using public.specialState."
-            )
-        end
-
-        ui.Spacing()
-        ui.Separator()
-        ui.Spacing()
         DrawColoredText(colors.info, "Per-Module Debug")
         ui.Spacing()
 

@@ -21,6 +21,10 @@ local function withMockModules(entries, fn)
 end
 
 local function makeModule(id, category)
+    local persisted = {
+        Enabled = false,
+        DebugMode = false,
+    }
     return {
         definition = {
             modpack = "test-pack",
@@ -30,10 +34,7 @@ local function makeModule(id, category)
             apply = function() end,
             revert = function() end,
         },
-        config = {
-            Enabled = false,
-            DebugMode = false,
-        },
+        store = lib.createStore(persisted),
     }
 end
 
@@ -101,5 +102,5 @@ function TestDiscovery:testSpecialMissingSpecialStateIsSkipped()
     config.DebugMode = previousDebugMode
 
     lu.assertEquals(#warnings, 1)
-    lu.assertStrContains(warnings[1], "missing public.specialState")
+    lu.assertStrContains(warnings[1], "missing public.store")
 end

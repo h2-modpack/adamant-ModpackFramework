@@ -107,9 +107,20 @@ function MockDiscovery.create(moduleConfigs, optionConfigs, specialConfigs)
     local categorySet = {}
 
     for _, mc in ipairs(moduleConfigs) do
+        local persisted = { Enabled = mc.enabled }
+        if mc.options then
+            for _, opt in ipairs(mc.options) do
+                if opt.configKey ~= nil and persisted[opt.configKey] == nil then
+                    persisted[opt.configKey] = opt.default
+                end
+            end
+        end
         local mod = {
             modName = "adamant-" .. mc.id,
-            mod = { config = { Enabled = mc.enabled } },
+            mod = {
+                config = persisted,
+                store = lib.createStore(persisted),
+            },
             definition = {
                 apply = function() end,
                 revert = function() end,
@@ -138,42 +149,42 @@ function MockDiscovery.create(moduleConfigs, optionConfigs, specialConfigs)
     end
 
     for _, sc in ipairs(specialConfigs) do
+        local store = lib.createStore(sc.config, sc.stateSchema)
         table.insert(discovery.specials, {
             modName = sc.modName,
             mod = {
                 config = sc.config,
-                specialState = {
-                    reloadFromConfig = function() end,
-                },
+                store = store,
             },
             definition = {},
             stateSchema = sc.stateSchema,
+            specialState = store.specialState,
         })
     end
 
     -- State accessors
     function discovery.isModuleEnabled(m)
-        return m.mod.config.Enabled == true
+        return m.mod.store.read("Enabled") == true
     end
 
     function discovery.setModuleEnabled(m, enabled)
-        m.mod.config.Enabled = enabled
+        m.mod.store.write("Enabled", enabled)
     end
 
     function discovery.getOptionValue(m, configKey)
-        return m.mod.config[configKey]
+        return m.mod.store.read(configKey)
     end
 
     function discovery.setOptionValue(m, configKey, value)
-        m.mod.config[configKey] = value
+        m.mod.store.write(configKey, value)
     end
 
     function discovery.isSpecialEnabled(special)
-        return special.mod.config.Enabled == true
+        return special.mod.store.read("Enabled") == true
     end
 
     function discovery.setSpecialEnabled(special, enabled)
-        special.mod.config.Enabled = enabled
+        special.mod.store.write("Enabled", enabled)
     end
 
     return discovery

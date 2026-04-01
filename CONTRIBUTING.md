@@ -44,7 +44,7 @@ For special modules, discovery expects:
 - `definition.name`
 - `definition.apply`
 - `definition.revert`
-- `public.specialState`
+- `public.store.specialState`
 
 ### Config hash (`hash.lua` - `createHash`)
 
@@ -85,16 +85,13 @@ Key handlers:
 | `getCategoryStatus(category)` | Return category status text/color/exists for coordinator quick-setup UI |
 
 Special-module rendering contract:
-- Framework passes `public.specialState` into `DrawTab(ui, specialState, theme)` and `DrawQuickContent(ui, specialState, theme)`
+- Framework passes `public.store.specialState` into `DrawTab(ui, specialState, theme)` and `DrawQuickContent(ui, specialState, theme)`
 - after each draw, if `specialState.isDirty()` is true, Framework calls `specialState.flushToConfig()` once
 - Framework then invalidates the cached hash and updates the HUD
 
-Debug guard for special modules:
-- only active when `discovery.isDebugEnabled(special)` returns true
-- Framework snapshots schema-backed config values before special draw
-- after draw, if config changed but `specialState.isDirty()` stayed false, Framework calls `lib.warnIfSpecialConfigBypassedState(...)`
-- this warns when a special writes schema-backed `config` directly during draw instead of using `public.specialState`
-- gated to avoid per-frame allocation in production builds
+Special-module flush behavior:
+- Framework passes `specialState` into module draw functions
+- after draw, if `specialState.isDirty()` is true, Framework flushes once and updates the HUD/hash state
 
 Returns `{ renderWindow, addMenuBar }`. Registration with `rom.gui` is handled by the coordinator via `Framework.init`.
 
@@ -162,5 +159,5 @@ Tests use the individual factory functions directly with mocks rather than requi
 - Coordinator-specific Quick Setup UI belongs in `def.renderQuickSetup(ctx)`, not in Framework
 - All module apply/revert calls go through `pcall`; use `lib.warn(...)` for framework errors, never crash
 - Regular-module UI reads from Framework staging, not Chalk
-- Special-module UI reads from `public.specialState.view` and mutates via `public.specialState.set/update/toggle`
+- Special-module UI reads from `public.store.specialState.view` and mutates via `public.store.specialState.set/update/toggle`
 - `definition.options` config keys must be flat strings; table-path keys are only valid in `definition.stateSchema`

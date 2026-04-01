@@ -9,6 +9,22 @@
 function Framework.createDiscovery(packId, config, lib)
     local Discovery = {}
 
+    local function GetStore(mod)
+        return type(mod.store) == "table" and mod.store or nil
+    end
+
+    local function ReadPersisted(mod, key)
+        return GetStore(mod).read(key)
+    end
+
+    local function WritePersisted(mod, key, value)
+        GetStore(mod).write(key, value)
+    end
+
+    local function GetSpecialState(mod)
+        return GetStore(mod).specialState
+    end
+
     -- -------------------------------------------------------------------------
     -- DISCOVERY STATE
     -- -------------------------------------------------------------------------
@@ -51,18 +67,18 @@ function Framework.createDiscovery(packId, config, lib)
             local mod     = entry.mod
             local def     = entry.def
 
-            if type(mod.config) == "table" then
-                lib.prepareConfigBackend(mod.config)
-            end
-
             if def.special then
                 if not def.name or not def.apply or not def.revert then
                     lib.warn(packId, config.DebugMode,
                         "Skipping special %s: missing name, apply, or revert", modName)
                 else
-                    if not mod.specialState then
+                    local store = GetStore(mod)
+                    if not store or type(store.read) ~= "function" or type(store.write) ~= "function" then
                         lib.warn(packId, config.DebugMode,
-                            "%s: special module is missing public.specialState (managed special state)", modName)
+                            "%s: special module is missing public.store", modName)
+                    elseif not GetSpecialState(mod) then
+                        lib.warn(packId, config.DebugMode,
+                            "%s: special module is missing public.store.specialState (managed special state)", modName)
                     else
                         if def.stateSchema then
                             lib.validateSchema(def.stateSchema, modName)
@@ -72,6 +88,7 @@ function Framework.createDiscovery(packId, config, lib)
                             mod          = mod,
                             definition   = def,
                             stateSchema  = def.stateSchema,
+                            specialState = GetSpecialState(mod),
                             _enableLabel = "Enable " .. tostring(def.name),
                             _debugLabel  = tostring(def.name) .. "##" .. modName,
                         })
@@ -80,6 +97,8 @@ function Framework.createDiscovery(packId, config, lib)
             else
                 if not def.id or not def.apply or not def.revert then
                     lib.warn(packId, config.DebugMode, "Skipping %s: missing id, apply, or revert", modName)
+                elseif not GetStore(mod) or type(GetStore(mod).read) ~= "function" or type(GetStore(mod).write) ~= "function" then
+                    lib.warn(packId, config.DebugMode, "%s: module is missing public.store", modName)
                 else
                     local cat = def.category or "General"
                     local module = {
@@ -224,12 +243,12 @@ function Framework.createDiscovery(packId, config, lib)
 
     --- Read a module's current Enabled state from its own config.
     function Discovery.isModuleEnabled(module)
-        return module.mod.config.Enabled == true
+        return ReadPersisted(module.mod, "Enabled") == true
     end
 
     --- Write a module's Enabled state and call enable/disable.
     function Discovery.setModuleEnabled(module, enabled)
-        module.mod.config.Enabled = enabled
+        WritePersisted(module.mod, "Enabled", enabled)
         local fn = enabled and module.definition.apply or module.definition.revert
         local ok, err = pcall(fn)
         if not ok then
@@ -240,22 +259,22 @@ function Framework.createDiscovery(packId, config, lib)
 
     --- Read a module option's current value from its config.
     function Discovery.getOptionValue(module, configKey)
-        return module.mod.config[configKey]
+        return ReadPersisted(module.mod, configKey)
     end
 
     --- Write a module option's value to its config.
     function Discovery.setOptionValue(module, configKey, value)
-        module.mod.config[configKey] = value
+        WritePersisted(module.mod, configKey, value)
     end
 
     --- Read a special module's Enabled state from its config.
     function Discovery.isSpecialEnabled(special)
-        return special.mod.config.Enabled == true
+        return ReadPersisted(special.mod, "Enabled") == true
     end
 
     --- Write a special module's Enabled state and call enable/disable.
     function Discovery.setSpecialEnabled(special, enabled)
-        special.mod.config.Enabled = enabled
+        WritePersisted(special.mod, "Enabled", enabled)
         local fn = enabled and special.definition.apply or special.definition.revert
         local ok, err = pcall(fn)
         if not ok then
@@ -266,12 +285,12 @@ function Framework.createDiscovery(packId, config, lib)
 
     --- Read a module or special's DebugMode state from its config.
     function Discovery.isDebugEnabled(entry)
-        return entry.mod.config.DebugMode == true
+        return ReadPersisted(entry.mod, "DebugMode") == true
     end
 
     --- Write a module or special's DebugMode state to its config.
     function Discovery.setDebugEnabled(entry, val)
-        entry.mod.config.DebugMode = val
+        WritePersisted(entry.mod, "DebugMode", val)
     end
 
     return Discovery

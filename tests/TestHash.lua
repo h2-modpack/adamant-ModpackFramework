@@ -279,7 +279,10 @@ function TestHashApplyOrder:testRegularModuleApplySeesDecodedOptions()
 
     local module = {
         modName = "adamant-A",
-        mod = { config = modConfig },
+        mod = {
+            config = modConfig,
+            store = lib.createStore(modConfig),
+        },
         definition = {
             apply = function()
                 appliedMode = modConfig.Mode
@@ -309,21 +312,21 @@ function TestHashApplyOrder:testRegularModuleApplySeesDecodedOptions()
     }
 
     function discovery.isModuleEnabled(m)
-        return m.mod.config.Enabled == true
+        return m.mod.store.read("Enabled") == true
     end
 
     function discovery.setModuleEnabled(m, enabled)
-        m.mod.config.Enabled = enabled
+        m.mod.store.write("Enabled", enabled)
         local fn = enabled and m.definition.apply or m.definition.revert
         fn()
     end
 
     function discovery.getOptionValue(m, configKey)
-        return m.mod.config[configKey]
+        return m.mod.store.read(configKey)
     end
 
     function discovery.setOptionValue(m, configKey, value)
-        m.mod.config[configKey] = value
+        m.mod.store.write(configKey, value)
     end
 
     local _, ApplyHash = withDiscovery(discovery)
@@ -343,14 +346,7 @@ function TestHashApplyOrder:testSpecialModuleApplySeesDecodedSchemaValues()
 
     local special = {
         modName = "adamant-Special",
-        mod = {
-            config = specialConfig,
-            specialState = {
-                reloadFromConfig = function()
-                    reloadedWeapon = specialConfig.Weapon
-                end,
-            },
-        },
+        mod = {},
         definition = {
             apply = function()
                 appliedWeapon = specialConfig.Weapon
@@ -366,6 +362,11 @@ function TestHashApplyOrder:testSpecialModuleApplySeesDecodedSchemaValues()
             },
         },
     }
+    special.mod.config = specialConfig
+    special.mod.store = lib.createStore(specialConfig, special.stateSchema)
+    special.mod.store.specialState.reloadFromConfig = function()
+        reloadedWeapon = specialConfig.Weapon
+    end
 
     local discovery = {
         modules = {},
@@ -375,11 +376,11 @@ function TestHashApplyOrder:testSpecialModuleApplySeesDecodedSchemaValues()
     }
 
     function discovery.isSpecialEnabled(entry)
-        return entry.mod.config.Enabled == true
+        return entry.mod.store.read("Enabled") == true
     end
 
     function discovery.setSpecialEnabled(entry, enabled)
-        entry.mod.config.Enabled = enabled
+        entry.mod.store.write("Enabled", enabled)
         local fn = enabled and entry.definition.apply or entry.definition.revert
         fn()
     end
@@ -403,10 +404,10 @@ function TestSpecialStateSafety:testSeparatorFieldsAreIgnoredByManagedSpecialSta
         Flag = true,
     }
 
-    local specialState = lib.createSpecialState(modConfig, {
+    local specialState = lib.createStore(modConfig, {
         { type = "separator", label = "Section" },
         { type = "checkbox", configKey = "Flag", default = false },
-    })
+    }).specialState
 
     lu.assertTrue(specialState.view.Flag)
     specialState.set("Flag", false)
