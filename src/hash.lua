@@ -11,6 +11,100 @@ function Framework.createHash(discovery, config, lib, packId)
         mod.store.write(key, value)
     end
 
+    local function EncodeGroupMemberValue(node, value)
+        if node.type == "bool" then
+            return value == true and 1 or 0
+        end
+        local min = math.floor(node.min or 0)
+        local v = math.floor(tonumber(value) or min)
+        if node.min then v = math.max(math.floor(node.min), v) end
+        if node.max then v = math.min(math.floor(node.max), v) end
+        return v - min
+    end
+
+    local function DecodeGroupMemberValue(node, encoded)
+        if node.type == "bool" then
+            return encoded ~= 0
+        end
+        return encoded + math.floor(node.min or 0)
+    end
+
+    local function BuildHashGroups(storage, hashGroupsDecl)
+        local aliasNodes = lib.getStorageAliases(storage)
+        local groups = {}
+        local groupedAliases = {}
+        local seenKeys = {}
+
+        for groupIndex, groupDecl in ipairs(hashGroupsDecl) do
+            local key = type(groupDecl.key) == "string" and groupDecl.key or ("#" .. groupIndex)
+            if seenKeys[key] then
+                lib.contractWarn(packId, "hashGroups: duplicate group key '%s' at index %d; group will be skipped", key, groupIndex)
+                goto continue
+            end
+            seenKeys[key] = true
+            local members = {}
+            local offset = 0
+            local valid = true
+
+            for _, alias in ipairs(groupDecl) do
+                local node = aliasNodes[alias]
+                if not node then
+                    lib.contractWarn(packId, "hashGroups: unknown alias '%s' in group '%s'", alias, key)
+                    valid = false
+                    break
+                end
+                local width = lib.getPackWidth(node)
+                if not width then
+                    lib.contractWarn(packId, "hashGroups: alias '%s' in group '%s' cannot be packed (no derivable width)", alias, key)
+                    valid = false
+                    break
+                end
+                if offset + width > 32 then
+                    lib.contractWarn(packId, "hashGroups: group '%s' exceeds 32 bits at alias '%s'", key, alias)
+                    valid = false
+                    break
+                end
+                table.insert(members, { alias = alias, node = node, offset = offset, width = width })
+                offset = offset + width
+            end
+
+            if valid and #members > 0 then
+                local packedDefault = 0
+                for _, member in ipairs(members) do
+                    local encoded = EncodeGroupMemberValue(member.node, member.node.default)
+                    packedDefault = lib.writeBitsValue(packedDefault, member.offset, member.width, encoded)
+                end
+                table.insert(groups, { key = key, members = members, packedDefault = packedDefault })
+                for _, member in ipairs(members) do
+                    groupedAliases[member.alias] = true
+                end
+            end
+            ::continue::
+        end
+
+        return groups, groupedAliases
+    end
+
+    local function GetEntryHashMeta(entry)
+        local storage = entry.storage
+        local definition = entry.mod and entry.mod.definition
+        if not storage or not definition or type(definition.hashGroups) ~= "table" then
+            return {}, {}
+        end
+        return BuildHashGroups(storage, definition.hashGroups)
+    end
+
+    local moduleHashMeta = {}
+    local specialHashMeta = {}
+    for _, m in ipairs(discovery.modules) do
+        local groups, groupedAliases = GetEntryHashMeta(m)
+        moduleHashMeta[m] = { groups = groups, groupedAliases = groupedAliases }
+    end
+    for _, special in ipairs(discovery.specials) do
+        local groups, groupedAliases = GetEntryHashMeta(special)
+        specialHashMeta[special] = { groups = groups, groupedAliases = groupedAliases }
+    end
+
     local function ClonePersistedValue(value)
         if type(value) == "table" then
             return rom.game.DeepCopyTable(value)
@@ -240,12 +334,31 @@ function Framework.createHash(discovery, config, lib, packId)
                 kv[m.id] = enabled and "1" or "0"
             end
 
+            local meta = moduleHashMeta[m]
+            for _, group in ipairs(meta.groups) do
+                local packedValue = 0
+                local isDefault = true
+                for _, member in ipairs(group.members) do
+                    local value = ReadPersisted(m.mod, member.alias)
+                    local encoded = EncodeGroupMemberValue(member.node, value)
+                    if encoded ~= EncodeGroupMemberValue(member.node, member.node.default) then
+                        isDefault = false
+                    end
+                    packedValue = lib.writeBitsValue(packedValue, member.offset, member.width, encoded)
+                end
+                if not isDefault then
+                    kv[m.id .. "." .. group.key] = Hash.EncodeBase62(packedValue)
+                end
+            end
+
             for _, root in ipairs(GetRootStorage(m)) do
-                local current = ReadPersisted(m.mod, root.alias)
-                if not lib.valuesEqual(root, current, root.default) then
-                    local encoded = EncodeValue(root, current, "storage root")
-                    if encoded ~= nil then
-                        kv[m.id .. "." .. root.alias] = encoded
+                if not meta.groupedAliases[root.alias] then
+                    local current = ReadPersisted(m.mod, root.alias)
+                    if not lib.valuesEqual(root, current, root.default) then
+                        local encoded = EncodeValue(root, current, "storage root")
+                        if encoded ~= nil then
+                            kv[m.id .. "." .. root.alias] = encoded
+                        end
                     end
                 end
             end
@@ -263,12 +376,31 @@ function Framework.createHash(discovery, config, lib, packId)
                 kv[special.modName] = "1"
             end
 
+            local meta = specialHashMeta[special]
+            for _, group in ipairs(meta.groups) do
+                local packedValue = 0
+                local isDefault = true
+                for _, member in ipairs(group.members) do
+                    local value = ReadPersisted(special.mod, member.alias)
+                    local encoded = EncodeGroupMemberValue(member.node, value)
+                    if encoded ~= EncodeGroupMemberValue(member.node, member.node.default) then
+                        isDefault = false
+                    end
+                    packedValue = lib.writeBitsValue(packedValue, member.offset, member.width, encoded)
+                end
+                if not isDefault then
+                    kv[special.modName .. "." .. group.key] = Hash.EncodeBase62(packedValue)
+                end
+            end
+
             for _, root in ipairs(GetRootStorage(special)) do
-                local current = ReadPersisted(special.mod, root.alias)
-                if not lib.valuesEqual(root, current, root.default) then
-                    local encoded = EncodeValue(root, current, "storage root")
-                    if encoded ~= nil then
-                        kv[special.modName .. "." .. root.alias] = encoded
+                if not meta.groupedAliases[root.alias] then
+                    local current = ReadPersisted(special.mod, root.alias)
+                    if not lib.valuesEqual(root, current, root.default) then
+                        local encoded = EncodeValue(root, current, "storage root")
+                        if encoded ~= nil then
+                            kv[special.modName .. "." .. root.alias] = encoded
+                        end
                     end
                 end
             end
@@ -314,12 +446,30 @@ function Framework.createHash(discovery, config, lib, packId)
 
         local okWrite, writeErr = xpcall(function()
             for _, m in ipairs(discovery.modules) do
-                for _, root in ipairs(GetRootStorage(m)) do
-                    local stored = kv[m.id .. "." .. root.alias]
+                local meta = moduleHashMeta[m]
+                for _, group in ipairs(meta.groups) do
+                    local stored = kv[m.id .. "." .. group.key]
                     if stored ~= nil then
-                        WritePersisted(m.mod, root.alias, DecodeValue(root, stored, "storage root"))
+                        local packedValue = Hash.DecodeBase62(stored) or group.packedDefault
+                        for _, member in ipairs(group.members) do
+                            local encoded = lib.readBitsValue(packedValue, member.offset, member.width)
+                            WritePersisted(m.mod, member.alias, DecodeGroupMemberValue(member.node, encoded))
+                        end
                     else
-                        WritePersisted(m.mod, root.alias, root.default)
+                        for _, member in ipairs(group.members) do
+                            WritePersisted(m.mod, member.alias, member.node.default)
+                        end
+                    end
+                end
+
+                for _, root in ipairs(GetRootStorage(m)) do
+                    if not meta.groupedAliases[root.alias] then
+                        local stored = kv[m.id .. "." .. root.alias]
+                        if stored ~= nil then
+                            WritePersisted(m.mod, root.alias, DecodeValue(root, stored, "storage root"))
+                        else
+                            WritePersisted(m.mod, root.alias, root.default)
+                        end
                     end
                 end
             end
@@ -328,12 +478,30 @@ function Framework.createHash(discovery, config, lib, packId)
                 local storedEnabled = kv[special.modName]
                 specialTargets[special] = storedEnabled == "1"
 
-                for _, root in ipairs(GetRootStorage(special)) do
-                    local stored = kv[special.modName .. "." .. root.alias]
+                local meta = specialHashMeta[special]
+                for _, group in ipairs(meta.groups) do
+                    local stored = kv[special.modName .. "." .. group.key]
                     if stored ~= nil then
-                        WritePersisted(special.mod, root.alias, DecodeValue(root, stored, "storage root"))
+                        local packedValue = Hash.DecodeBase62(stored) or group.packedDefault
+                        for _, member in ipairs(group.members) do
+                            local encoded = lib.readBitsValue(packedValue, member.offset, member.width)
+                            WritePersisted(special.mod, member.alias, DecodeGroupMemberValue(member.node, encoded))
+                        end
                     else
-                        WritePersisted(special.mod, root.alias, root.default)
+                        for _, member in ipairs(group.members) do
+                            WritePersisted(special.mod, member.alias, member.node.default)
+                        end
+                    end
+                end
+
+                for _, root in ipairs(GetRootStorage(special)) do
+                    if not meta.groupedAliases[root.alias] then
+                        local stored = kv[special.modName .. "." .. root.alias]
+                        if stored ~= nil then
+                            WritePersisted(special.mod, root.alias, DecodeValue(root, stored, "storage root"))
+                        else
+                            WritePersisted(special.mod, root.alias, root.default)
+                        end
                     end
                 end
             end
