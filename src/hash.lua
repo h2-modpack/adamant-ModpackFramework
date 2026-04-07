@@ -101,13 +101,17 @@ function Framework.createHash(discovery, config, lib, packId)
 
     local moduleHashMeta = {}
     local specialHashMeta = {}
-    for _, m in ipairs(discovery.modules) do
-        local groups, groupedAliases = GetEntryHashMeta(m)
-        moduleHashMeta[m] = { groups = groups, groupedAliases = groupedAliases }
-    end
-    for _, special in ipairs(discovery.specials) do
-        local groups, groupedAliases = GetEntryHashMeta(special)
-        specialHashMeta[special] = { groups = groups, groupedAliases = groupedAliases }
+
+    local function EnsureEntryHashMeta(cache, entry)
+        local meta = cache[entry]
+        if meta then
+            return meta
+        end
+
+        local groups, groupedAliases = GetEntryHashMeta(entry)
+        meta = { groups = groups, groupedAliases = groupedAliases }
+        cache[entry] = meta
+        return meta
     end
 
     local function ClonePersistedValue(value)
@@ -339,7 +343,7 @@ function Framework.createHash(discovery, config, lib, packId)
                 kv[m.id] = enabled and "1" or "0"
             end
 
-            local meta = moduleHashMeta[m]
+            local meta = EnsureEntryHashMeta(moduleHashMeta, m)
             for _, group in ipairs(meta.groups) do
                 local packedValue = 0
                 local isDefault = true
@@ -381,7 +385,7 @@ function Framework.createHash(discovery, config, lib, packId)
                 kv[special.modName] = "1"
             end
 
-            local meta = specialHashMeta[special]
+            local meta = EnsureEntryHashMeta(specialHashMeta, special)
             for _, group in ipairs(meta.groups) do
                 local packedValue = 0
                 local isDefault = true
@@ -451,7 +455,7 @@ function Framework.createHash(discovery, config, lib, packId)
 
         local okWrite, writeErr = xpcall(function()
             for _, m in ipairs(discovery.modules) do
-                local meta = moduleHashMeta[m]
+                local meta = EnsureEntryHashMeta(moduleHashMeta, m)
                 for _, group in ipairs(meta.groups) do
                     local stored = kv[m.id .. "." .. group.key]
                     if stored ~= nil then
@@ -483,7 +487,7 @@ function Framework.createHash(discovery, config, lib, packId)
                 local storedEnabled = kv[special.modName]
                 specialTargets[special] = storedEnabled == "1"
 
-                local meta = specialHashMeta[special]
+                local meta = EnsureEntryHashMeta(specialHashMeta, special)
                 for _, group in ipairs(meta.groups) do
                     local stored = kv[special.modName .. "." .. group.key]
                     if stored ~= nil then
