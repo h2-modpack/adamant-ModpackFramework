@@ -7,7 +7,7 @@ namespace = "adamant"
 name = "ModpackFramework"
 versionNumber = "1.0.0"
 description = "Reusable modpack framework: discovery, hash, HUD, and UI. Used by modpack coordinators."
-websiteUrl = "https://github.com/h2-modpack/ModpackFramework"
+websiteUrl = "https://github.com/h2-modpack/adamant-ModpackFramework"
 containsNsfwContent = false
 
 [package.dependencies]
