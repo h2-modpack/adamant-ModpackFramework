@@ -48,7 +48,7 @@ function TestDiscovery:testRegularModulesDiscoverStorageUiAndQuickNodes()
         id = "GodPool",
         name = "God Pool",
         category = "Run Director",
-        group = "Run Setup",
+        subgroup = "Run Setup",
         storage = {
             { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
         },
@@ -75,7 +75,7 @@ function TestDiscovery:testRegularModulesDiscoverQuickNodesFromCustomTypes()
         id = "GodPoolCustom",
         name = "God Pool Custom",
         category = "Run Director",
-        group = "Run Setup",
+        subgroup = "Run Setup",
         storage = {
             { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
         },
@@ -137,7 +137,7 @@ function TestDiscovery:testSpecialModulesRequireStorageAndManagedUiState()
         modpack = "test-pack",
         special = true,
         name = "Biome Control",
-        tabLabel = "Biome",
+        shortName = "Biome",
         storage = {
             { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
         },
@@ -162,7 +162,7 @@ function TestDiscovery:testUnifiedTabOrderRespectsCategoryOrderAcrossCategoriesA
         id = "GodPool",
         name = "God Pool",
         category = "Run Director",
-        group = "Run Setup",
+        subgroup = "Run Setup",
         storage = {
             { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
         },
@@ -175,7 +175,7 @@ function TestDiscovery:testUnifiedTabOrderRespectsCategoryOrderAcrossCategoriesA
         modpack = "test-pack",
         special = true,
         name = "Biome Control",
-        tabLabel = "Biome",
+        shortName = "Biome",
         storage = {
             { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
         },

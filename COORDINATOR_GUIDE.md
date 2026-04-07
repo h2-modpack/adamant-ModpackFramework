@@ -78,7 +78,7 @@ public.definition.modpack = PACK_ID
 
 Regular modules:
 - `definition.special` absent or false
-- discovered into category/group tabs
+- discovered into category/subgroup tabs
 
 Special modules:
 - `definition.special = true`

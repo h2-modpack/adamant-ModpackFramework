@@ -190,7 +190,7 @@ function Framework.createDiscovery(packId, config, lib)
                         id          = def.id,
                         name        = def.name,
                         category    = cat,
-                        group       = def.group or "General",
+                        subgroup    = def.subgroup or "General",
                         tooltip     = def.tooltip or "",
                         default     = def.default,
                         storage     = def.storage,
@@ -226,28 +226,28 @@ function Framework.createDiscovery(packId, config, lib)
             end
         end
 
-        -- Resolve tab labels for all specials; suffix duplicates as (1), (2), ... and warn
+        -- Resolve compact labels for all specials; suffix duplicates as (1), (2), ... and warn
         local labelCount = {}
         for _, special in ipairs(Discovery.specials) do
-            local label = special.definition.tabLabel or special.definition.name
+            local label = special.definition.shortName or special.definition.name
             labelCount[label] = (labelCount[label] or 0) + 1
         end
         local labelIndex = {}
         for _, special in ipairs(Discovery.specials) do
-            local label = special.definition.tabLabel or special.definition.name
+            local label = special.definition.shortName or special.definition.name
             if labelCount[label] > 1 then
                 labelIndex[label] = (labelIndex[label] or 0) + 1
                 special._tabLabel = label .. " (" .. labelIndex[label] .. ")"
                 lib.warn(packId, config.DebugMode,
-                    "%s: tabLabel '%s' is shared by multiple specials." ..
-                    " Rename tabLabel or definition.name to resolve. Rendering as '%s'.",
+                    "%s: shortName '%s' is shared by multiple specials." ..
+                    " Rename shortName or definition.name to resolve. Rendering as '%s'.",
                     special.modName, label, special._tabLabel)
             else
                 special._tabLabel = label
             end
         end
 
-        -- Build a lookup from special tabLabel/name -> special entry for unified ordering.
+        -- Build a lookup from shortName/name -> special entry for unified ordering.
         local specialByLabel = {}
         for _, special in ipairs(Discovery.specials) do
             specialByLabel[special._tabLabel] = special
@@ -339,7 +339,7 @@ function Framework.createDiscovery(packId, config, lib)
         local catStyle = groupStyle and groupStyle[category]
 
         for _, m in ipairs(mods) do
-            local g = m.group
+            local g = m.subgroup
             if not groups[g] then
                 local style = (catStyle and catStyle[g]) or groupStyleDefault or "collapsing"
                 groups[g] = { Header = g, Items = {}, style = style }

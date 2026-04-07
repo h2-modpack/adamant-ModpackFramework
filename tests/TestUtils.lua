@@ -158,7 +158,7 @@ function MockDiscovery.create(moduleDefs, specialDefs)
             id = definition.id,
             name = definition.name,
             category = definition.category,
-            group = def.group or "General",
+            subgroup = def.subgroup or "General",
             default = definition.default,
             storage = definition.storage,
             ui = definition.ui,
@@ -193,7 +193,7 @@ function MockDiscovery.create(moduleDefs, specialDefs)
         local definition = {
             special = true,
             name = def.name or def.modName,
-            tabLabel = def.tabLabel or def.name or def.modName,
+            shortName = def.shortName,
             storage = def.storage or {},
             ui = def.ui or {},
             hashGroups = def.hashGroups,
@@ -215,7 +215,7 @@ function MockDiscovery.create(moduleDefs, specialDefs)
             storage = definition.storage,
             ui = definition.ui,
             uiState = store.uiState,
-            _tabLabel = definition.tabLabel,
+            _tabLabel = definition.shortName or definition.name,
         }
         table.insert(discovery.specials, special)
     end
