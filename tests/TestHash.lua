@@ -213,3 +213,50 @@ function TestHashStorage:testHashGroupsAllowPackedRootAliases()
 
     lu.assertStrContains(canonical, "GodPool.PackedRoots=")
 end
+
+function TestHashStorage:testTransientRootsAreExcludedFromHash()
+    local discovery = MockDiscovery.create({
+        {
+            id = "GodPool",
+            default = false,
+            enabled = false,
+            storage = {
+                { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+                { type = "string", alias = "FilterText", lifetime = "transient", default = "", maxLen = 64 },
+            },
+            values = {
+                EnabledFlag = true,
+                FilterText = "Apollo",
+            },
+        },
+    })
+
+    discovery.modulesById.GodPool.mod.store.uiState.set("FilterText", "Apollo")
+    local canonical = makeHash(discovery).GetConfigHash()
+
+    lu.assertStrContains(canonical, "GodPool.EnabledFlag=1")
+    lu.assertNotStrContains(canonical, "FilterText")
+end
+
+function TestHashStorage:testHashGroupsRejectTransientAliases()
+    CaptureWarnings()
+    local discovery = MockDiscovery.create({
+        {
+            id = "GodPool",
+            default = false,
+            enabled = false,
+            hashGroups = {
+                { key = "TransientGroup", "FilterMode" },
+            },
+            storage = {
+                { type = "string", alias = "FilterMode", lifetime = "transient", default = "all", maxLen = 16 },
+            },
+        },
+    })
+
+    local canonical = makeHash(discovery).GetConfigHash()
+
+    lu.assertEquals(canonical, "_v=1")
+    assertWarningContains("is transient; only persisted root aliases are supported")
+    RestoreWarnings()
+end

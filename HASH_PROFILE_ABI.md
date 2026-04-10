@@ -54,6 +54,7 @@ Supported members:
 
 Not supported:
 - packed child aliases inside a `packedInt`
+- transient root aliases declared with `lifetime = "transient"`
 
 Reason:
 - packed child aliases are already subfields of a packed root

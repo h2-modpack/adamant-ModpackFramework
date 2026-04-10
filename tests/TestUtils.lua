@@ -102,12 +102,17 @@ local function makePersistedConfig(storage, overrides)
         Enabled = false,
         DebugMode = false,
     }
+    local transientAliases = {}
     for _, root in ipairs(storage or {}) do
-        persisted[root.configKey] = overrides and overrides[root.alias] or root.default
+        if root.lifetime ~= "transient" then
+            persisted[root.configKey] = overrides and overrides[root.alias] or root.default
+        else
+            transientAliases[root.alias] = true
+        end
     end
     if overrides then
         for key, value in pairs(overrides) do
-            if persisted[key] == nil then
+            if persisted[key] == nil and not transientAliases[key] then
                 persisted[key] = value
             end
         end

@@ -58,6 +58,13 @@ function Framework.createHash(discovery, config, lib, packId)
                     valid = false
                     break
                 end
+                if node._lifetime == "transient" then
+                    lib.contractWarn(packId,
+                        "hashGroups: alias '%s' in group '%s' is transient; only persisted root aliases are supported",
+                        alias, key)
+                    valid = false
+                    break
+                end
                 local width = lib.getPackWidth(node)
                 if not width then
                     lib.contractWarn(packId, "hashGroups: alias '%s' in group '%s' cannot be packed (no derivable width)", alias, key)
