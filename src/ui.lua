@@ -483,7 +483,9 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             commit = function(state)
                 return lib.commitUiState(special.definition, special.mod.store, state)
             end,
+            beforeDraw = nil,
             draw = nil,
+            afterDraw = nil,
             onFlushed = function()
                 OnUiStateFlushed(special.definition, staging.specials[special.modName])
             end,
@@ -613,7 +615,9 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
                     ui.Separator()
                     ui.Spacing()
                     local passOpts = specialQuickPassOpts[special.modName]
+                    passOpts.beforeDraw = special.mod.BeforeDrawQuickContent
                     passOpts.draw = passOpts.draw or special.mod.DrawQuickContent
+                    passOpts.afterDraw = special.mod.AfterDrawQuickContent
                     lib.runUiStatePass(passOpts)
                 end
             else
@@ -663,9 +667,11 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         -- Delegate tab content to the module or fall back to definition.ui
         if special.mod.DrawTab or (type(special.ui) == "table" and #special.ui > 0) then
             local passOpts = specialTabPassOpts[special.modName]
+            passOpts.beforeDraw = special.mod.BeforeDrawTab
             passOpts.draw = passOpts.draw or special.mod.DrawTab or function(ui)
                 lib.drawUiTree(ui, special.ui, special.uiState, ui.GetWindowWidth() * FIELD_MEDIUM, special.definition.customTypes)
             end
+            passOpts.afterDraw = special.mod.AfterDrawTab
             lib.runUiStatePass(passOpts)
         end
     end

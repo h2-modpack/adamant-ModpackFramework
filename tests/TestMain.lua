@@ -59,7 +59,11 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
         Text = noop,
         TextColored = noop,
         GetCursorPosX = function() return 0 end,
+        GetCursorPosY = function() return 0 end,
+        SetCursorPos = noop,
         SetCursorPosX = noop,
+        GetFrameHeight = function() return 20 end,
+        GetFrameHeightWithSpacing = function() return 24 end,
         GetStyle = function()
             return {
                 FramePadding = { x = 4, y = 3 },
@@ -204,7 +208,11 @@ function TestMain:testQuickSetupCanFilterQuickCandidatesByDefinitionSelector()
         Text = noop,
         TextColored = noop,
         GetCursorPosX = function() return 0 end,
+        GetCursorPosY = function() return 0 end,
+        SetCursorPos = noop,
         SetCursorPosX = noop,
+        GetFrameHeight = function() return 20 end,
+        GetFrameHeightWithSpacing = function() return 24 end,
         GetStyle = function()
             return {
                 FramePadding = { x = 4, y = 3 },
