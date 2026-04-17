@@ -34,7 +34,7 @@ import "ui.lua"
 local _packs = {}
 local _packList = {}
 
-local function ValidateInitParams(params, lib)
+local function ValidateInitParams(params)
     assert(type(params) == "table", "Framework.init: params must be a table")
     assert(type(params.packId) == "string" and params.packId ~= "",
         "Framework.init: packId must be a non-empty string")
@@ -66,10 +66,7 @@ local function ValidateInitParams(params, lib)
         profile.Tooltip = profile.Tooltip or ""
     end
 
-    if params.def.groupStyle ~= nil or params.def.groupStyleDefault ~= nil then
-        lib.warn(params.packId, params.config.DebugMode,
-            "Framework.init: groupStyle/groupStyleDefault are ignored under the one-tab-per-module contract")
-    end
+
 end
 
 --- Scan saved profiles against the current discovered key surface.
@@ -107,7 +104,7 @@ local function AuditSavedProfiles(packId, profiles, discovery, lib)
                     if field then
                         local moduleFields = knownModules[namespace]
                         if moduleFields and not moduleFields[field] then
-                            lib.contractWarn(packId,
+                            lib.logging.warn(packId,
                                 "Profile '%s': unrecognized key '%s.%s' â€” possible rename or removed option",
                                 profileLabel, namespace, field)
                         end
@@ -122,9 +119,9 @@ Framework.auditSavedProfiles = AuditSavedProfiles
 
 function Framework.init(params)
     local lib = rom.mods["adamant-ModpackLib"]
-    ValidateInitParams(params, lib)
+    ValidateInitParams(params)
 
-    lib.registerCoordinator(params.packId, params.config)
+    lib.coordinator.register(params.packId, params.config)
     import_as_fallback(rom.game)
 
     local packIndex = _packs[params.packId] and _packs[params.packId]._index or nil
@@ -137,7 +134,7 @@ function Framework.init(params)
     local hash = Framework.createHash(discovery, params.config, lib, params.packId)
     local theme = Framework.createTheme()
 
-    discovery.run(params.def and params.def.categoryOrder)
+    discovery.run(params.def and params.def.moduleOrder)
 
     AuditSavedProfiles(params.packId, params.config.Profiles, discovery, lib)
 

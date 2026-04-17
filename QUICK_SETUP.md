@@ -1,36 +1,27 @@
 # Quick Setup
 
-This document covers the Framework Quick Setup surface:
-
-- coordinator-owned quick content
-- module quick UI nodes
-- special-module quick content
-- runtime quick selection
+This document covers the current Framework Quick Setup surface.
 
 Use [README.md](README.md) as the entrypoint for Framework docs.
 
 ## What Quick Setup Is
 
-Quick Setup is the context-oriented panel in the Framework window.
+Quick Setup is the top-level framework panel for high-frequency controls.
 
 It is meant for:
+- a small coordinator-owned control surface
+- a small per-module quick surface
 
-- high-frequency controls
-- small slices of module UI that matter immediately
-- run- or state-dependent quick access
-
-It is not meant to replace full module tabs.
+It is not meant to mirror full module tabs.
 
 ## Render Order
 
 Quick Setup renders in this order:
 
-1. coordinator-owned quick content from `def.renderQuickSetup(ctx)`
-2. special-module quick content from `DrawQuickContent`
-3. regular-module quick nodes collected from `definition.ui`
+1. coordinator-owned content from `def.renderQuickSetup(ctx)`
+2. each discovered module that exposes `DrawQuickContent(ui, uiState)`
 
-This all happens inside the Framework UI pass in
-[`src/ui.lua`](src/ui.lua).
+This happens inside [`src/ui.lua`](src/ui.lua).
 
 ## Coordinator Quick Content
 
@@ -42,149 +33,55 @@ def.renderQuickSetup = function(ctx)
 end
 ```
 
-`ctx` is the Quick Setup context provided by Framework.
-
-Current fields:
-
-- `imgui`
-  - the active ImGui binding
+Current `ctx` fields:
+- `ui`
+- `colors`
 - `theme`
-  - the current Framework theme object
-- `config`
-  - the coordinator Chalk config
-- `staging`
-  - Framework-owned staged values for pack/module/special enable state and profile UI state
-- `discovery`
-  - the current discovery object
-- `lib`
-  - the ModpackLib export
-- `packId`
-  - the current coordinator pack id
+- `drawColoredText`
 
-Coordinator quick content should stay coordinator-scoped.
-If a control belongs to a module, prefer putting it in the module's quick surface instead.
+Keep coordinator quick content coordinator-scoped.
+If a control belongs to a module, put it in that module’s `DrawQuickContent`.
 
-## Regular Module Quick UI
+## Module Quick Content
 
-Regular modules participate in Quick Setup through declarative UI nodes.
-
-Mark a node with:
+Modules participate in Quick Setup through:
 
 ```lua
-quick = true
-```
-
-Framework collects these candidates from `definition.ui` during discovery and stores them as the
-module's quick-node set.
-
-At render time, Framework draws the selected quick nodes through:
-
-- `lib.runUiStatePass(...)`
-- `lib.drawUiNode(...)`
-- `lib.commitUiState(...)`
-
-So Quick Setup uses the same managed UI state path as full module UI.
-
-## Quick IDs
-
-Quick candidates need stable identities when runtime filtering is used.
-
-Framework resolves a quick node id through:
-
-- explicit `quickId`, if present
-- otherwise a derived id from the node's `binds`
-
-If a module uses runtime quick selection, explicit `quickId` is recommended.
-
-Use explicit ids when:
-
-- multiple quick nodes could bind the same storage
-- a node's identity should stay stable even if binds change later
-- runtime filtering depends on names that should be obvious in code
-
-## Runtime Quick Selection
-
-Modules may narrow their quick surface at render time through:
-
-```lua
-definition.selectQuickUi = function(store, uiState, quickNodes)
+public.DrawQuickContent = function(ui, uiState)
     ...
 end
 ```
 
-This callback receives:
+Framework behavior:
+- only enabled modules render their quick content
+- module quick content receives the module managed `uiState`
+- if the module dirty-stages persisted state during quick content, Framework commits it after draw
 
-- `store`
-  - the module store
-- `uiState`
-  - the module managed UI state
-- `quickNodes`
-  - the full discovered quick candidate list for that module
+## What Was Removed
 
-Return values:
+The old quick surface is gone:
+- no quick-node discovery from `definition.ui`
+- no `quick = true`
+- no `quickId`
+- no `selectQuickUi`
+- no special-module-only quick path
 
-- `nil`
-  - render all quick candidates
-- a string
-  - render the node whose `quickId` matches that string
-- a table of strings
-  - render nodes whose `quickId` values are in that list
-- a set-like table
-  - render nodes whose `quickId` keys map to `true`
-
-This is selection, not discovery.
-
-Framework does not discover new quick nodes at runtime.
-It filters among the already-declared quick candidates.
-
-## Special Modules
-
-Special modules participate in Quick Setup through:
-
-- `DrawQuickContent`
-
-Framework runs special quick content through `lib.runUiStatePass(...)` when the special is enabled.
-
-Special-module quick content is appropriate when:
-
-- the module already has a custom special UI surface
-- the quick surface is not naturally expressible as declarative nodes
-
-If a regular module can express its quick content declaratively, prefer the declarative path.
+Quick Setup is now immediate-mode only.
 
 ## What Belongs In Quick Setup
 
 Good Quick Setup content:
-
-- one or two controls the user reaches for often
-- context-dependent selectors
-- enable/disable or hot-path tuning controls
+- one or two high-frequency controls
+- fast run-setup toggles
+- controls you want without opening the full module tab
 
 Bad Quick Setup content:
-
 - the full module UI copied into Quick Setup
-- large audit surfaces
-- controls that are only meaningful during deep configuration
-
-Quick Setup should stay narrow and fast.
-
-## Design Boundary
-
-Use Quick Setup for:
-
-- contextual access
-- narrowed access
-- repeated actions
-
-Use full module tabs for:
-
-- complete configuration
-- explanation-heavy UI
-- large or exploratory editing surfaces
+- large audit/configuration surfaces
+- controls that only make sense in deep configuration
 
 ## Related Docs
 
 - [README.md](README.md)
 - [COORDINATOR_GUIDE.md](COORDINATOR_GUIDE.md)
 - [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md)
-- [ModpackLib README.md](https://github.com/h2-modpack/adamant-ModpackLib/blob/main/README.md)

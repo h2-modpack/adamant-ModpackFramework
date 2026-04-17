@@ -2,35 +2,45 @@
 
 Reusable coordinator framework for adamant modpacks.
 
-Start here for Framework documentation.
-This page links to the current coordinator and compatibility references.
-External repos and templates should link here rather than to individual Framework docs.
-
-It owns:
-- discovery
+Framework now owns:
+- module discovery for one `packId`
 - config hashing and profile load
 - HUD fingerprint rendering
-- the shared coordinator UI
+- the shared coordinator window
+
+Framework does not define module UI shapes anymore.
+Under the current contract, each discovered coordinated module renders itself through:
+- `DrawTab(ui, uiState)`
+- optional `DrawQuickContent(ui, uiState)`
 
 ## Docs
 
 - [COORDINATOR_GUIDE.md](COORDINATOR_GUIDE.md)
-  Bootstrap, discovery, and coordinator-facing Framework contract.
+  Bootstrap, discovery, and the live coordinator/module contract.
 - [QUICK_SETUP.md](QUICK_SETUP.md)
-  Quick Setup model, coordinator quick content, module quick nodes, and runtime quick filtering.
+  Current Quick Setup model: coordinator quick content plus module `DrawQuickContent`.
 - [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md)
-  Compatibility rules for hashes, profiles, aliases, defaults, and hash groups.
+  Compatibility rules for module ids, storage aliases/defaults, and hash groups.
 - [CONTRIBUTING.md](CONTRIBUTING.md)
-  Contributor expectations for changing Framework behavior or public contract.
+  Contributor expectations for framework behavior and compatibility-sensitive changes.
 
-## Public Contract Freeze
+## Current Framework Contract
 
-The public Framework contract is intended to be stable:
-- coordinator init shape and discovery expectations
-- shared UI, HUD, and profile/hash behavior
-- rollback behavior for major framework-owned operations
+Discovery includes modules that expose:
+- `definition.modpack = PACK_ID`
+- `definition.id`
+- `definition.name`
+- `definition.storage`
+- public `store`
+- public `DrawTab`
 
-Hash/profile ABI is compatibility-sensitive. Changes to ids, keys, defaults, or field serialization should be treated as compatibility work, not refactoring.
+`DrawQuickContent` is optional.
+
+Framework sidebar behavior is now:
+- one top-level tab per discovered module
+- `moduleOrder` may pin known labels first
+- no category/subgroup grouping
+- no special-module split
 
 ## Validation
 

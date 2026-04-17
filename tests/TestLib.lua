@@ -1,52 +1,41 @@
 local lu = require('luaunit')
 
-TestLibUiStatePass = {}
+TestLibHost = {}
 
-function TestLibUiStatePass:testFlushesManagedAliasStateAndCallsCallback()
-    local config = { Flag = false }
+function TestLibHost:testCommitStateFlushesManagedAliasState()
+    local config = { Flag = false, Enabled = false, DebugMode = false }
     local definition = {
+        id = "ManagedState",
+        name = "Managed State",
         storage = {
             { type = "bool", alias = "Flag", configKey = "Flag", default = false },
         },
-        ui = {
-            { type = "checkbox", binds = { value = "Flag" }, label = "Flag" },
-        },
+        affectsRunData = false,
     }
-    local uiState = lib.createStore(config, definition).uiState
+    local store = lib.store.create(config, definition)
+    local uiState = store.uiState
 
-    local flushed = false
-    local didFlush = lib.runUiStatePass({
-        name = "ManagedState",
-        uiState = uiState,
-        draw = function(_, state)
-            state.set("Flag", true)
-        end,
-        onFlushed = function()
-            flushed = true
-        end,
-    })
+    uiState.set("Flag", true)
 
-    lu.assertTrue(didFlush)
-    lu.assertTrue(flushed)
+    local ok, err = lib.host.commitState(definition, store, uiState)
+
+    lu.assertTrue(ok, tostring(err))
     lu.assertTrue(config.Flag)
+    lu.assertFalse(uiState.isDirty())
 end
 
-function TestLibUiStatePass:testMissingUiStateSkipsSafely()
-    local didFlush = lib.runUiStatePass({
-        name = "MissingState",
-        draw = function()
-            error("draw should not run")
-        end,
-    })
+function TestLibHost:testCommitStateRejectsMissingUiState()
+    local ok, err = lib.host.commitState({ id = "Missing" }, { read = function() return false end }, nil)
 
-    lu.assertFalse(didFlush)
+    lu.assertFalse(ok)
+    lu.assertStrContains(err, "uiState is missing transactional commit helpers")
 end
 
 TestLibValidation = {}
 
 function TestLibValidation:testDuplicateStorageAliasesWarn()
     CaptureWarnings()
-    lib.validateStorage({
+    lib.storage.validate({
         { type = "bool", alias = "Flag", configKey = "FlagA", default = false },
         { type = "bool", alias = "Flag", configKey = "FlagB", default = false },
     }, "DuplicateStorage")

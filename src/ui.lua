@@ -17,10 +17,16 @@
 --- @return table ui UI object exposing `{ renderWindow, addMenuBar }`.
 function Framework.createUI(discovery, hud, theme, def, config, lib, packId, windowTitle)
     local ui                 = rom.ImGui
+    local contractWarn       = lib.logging.warn
+    local mutatesRunData     = lib.mutation.mutatesRunData
+    local applyDefinition    = lib.mutation.apply
+    local revertDefinition   = lib.mutation.revert
+    local commitState        = lib.host.commitState
+    local auditAndResyncState = lib.host.auditAndResyncState
 
     -- Unpack theme for convenient access
     local colors             = theme.colors
-    local ImGuiTreeNodeFlags = theme.ImGuiTreeNodeFlags
+
     local SIDEBAR_RATIO      = theme.SIDEBAR_RATIO
     local FIELD_MEDIUM       = theme.FIELD_MEDIUM
     local FIELD_NARROW       = theme.FIELD_NARROW
@@ -31,10 +37,6 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local function DrawColoredText(color, text)
         ui.TextColored(color[1], color[2], color[3], color[4], text)
     end
-    local function PushTextColor(color)
-        ui.PushStyleColor(rom.ImGuiCol.Text, color[1], color[2], color[3], color[4])
-    end
-
     -- =============================================================================
     -- STAGING TABLE (performance cache — avoids Chalk reads in render loop)
     -- =============================================================================
@@ -133,8 +135,8 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     -- =============================================================================
 
     local function FinishUiChange(definition, enabled)
-        if lib.affectsRunData(definition) and enabled then
-            SetupRunData()
+        if mutatesRunData(definition) and enabled then
+            rom.game.SetupRunData()
         end
         InvalidateHash()
         hud.markHashDirty()
@@ -158,12 +160,12 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local function SetEntryRuntimeState(entry, state)
         local ok, err
         if state then
-            ok, err = lib.applyDefinition(entry.definition, entry.mod.store)
+            ok, err = applyDefinition(entry.definition, entry.mod.store)
         else
-            ok, err = lib.revertDefinition(entry.definition, entry.mod.store)
+            ok, err = revertDefinition(entry.definition, entry.mod.store)
         end
         if not ok then
-            lib.contractWarn(packId,
+            contractWarn(packId,
                 "%s %s failed: %s", entry.modName or "unknown", state and "apply" or "revert", err)
         end
         return ok, err
@@ -182,7 +184,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             end
         end
         if #rollbackErrors > 0 then
-            lib.contractWarn(packId,
+            contractWarn(packId,
                 "Enable Mod rollback incomplete: %s",
                 table.concat(rollbackErrors, "; "))
         end
@@ -200,7 +202,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             if staging.modules[m.id] then
                 local ok, err = SetEntryRuntimeState(m, state)
                 if not ok then
-                    lib.contractWarn(packId,
+                    contractWarn(packId,
                         "Enable Mod toggle failed; restoring previous runtime state")
                     RollBackTouchedEntries(touched, previousState)
                     return false, err
@@ -211,7 +213,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
 
         staging.ModEnabled = state
         config.ModEnabled = state
-        SetupRunData()
+        rom.game.SetupRunData()
         hud.setModMarker(state)
         return true, nil
     end
@@ -219,7 +221,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     --- Load a profile hash: decode, apply to all module configs, re-snapshot.
     local function LoadProfile(profileHash)
         if hud.applyConfigHash(profileHash) then
-            SetupRunData()
+            rom.game.SetupRunData()
             SnapshotToStaging()
             InvalidateHash()
             slotLabelsDirty = true
@@ -230,13 +232,10 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     end
 
     local quickSetupContext = {
-        ui                = ui,
-        colors            = colors,
-        theme             = theme,
-        drawColoredText   = DrawColoredText,
-        getCategoryStatus = function() return "N/A", colors.textDisabled, false end,
-        setCategoryEnabled = function() end,
-        getCategoryModules = function() return {} end,
+        ui              = ui,
+        colors          = colors,
+        theme           = theme,
+        drawColoredText = DrawColoredText,
     }
 
     local defaultProfiles = def.defaultProfiles
@@ -251,7 +250,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             return
         end
 
-        local ok = lib.host.commitState(entry.definition, entry.mod.store, uiState)
+        local ok = commitState(entry.definition, entry.mod.store, uiState)
         if ok then
             OnUiStateFlushed(entry.definition, enabled)
         end
@@ -262,16 +261,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             return
         end
 
-        local beforeDrawTab = entry.mod.BeforeDrawTab
-        local afterDrawTab = entry.mod.AfterDrawTab
-
-        if beforeDrawTab then
-            beforeDrawTab(ui, entry.uiState)
-        end
         entry.mod.DrawTab(ui, entry.uiState)
-        if afterDrawTab then
-            afterDrawTab(ui, entry.uiState)
-        end
 
         CommitEntryUiState(entry, enabled)
     end
@@ -306,7 +296,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         for _, m in ipairs(discovery.modules) do
             local uiState = m.mod.store and m.mod.store.uiState
             if uiState then
-                lib.host.auditAndResyncState(m.name or m.id or m.modName, uiState)
+                auditAndResyncState(m.name or m.id or m.modName, uiState)
             end
         end
         SnapshotToStaging()
@@ -375,13 +365,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
                 ui.Spacing()
                 DrawColoredText(colors.info, entry.name or entry.id)
                 ui.Spacing()
-                if entry.mod.BeforeDrawQuickContent then
-                    entry.mod.BeforeDrawQuickContent(ui, entry.uiState)
-                end
                 entry.mod.DrawQuickContent(ui, entry.uiState)
-                if entry.mod.AfterDrawQuickContent then
-                    entry.mod.AfterDrawQuickContent(ui, entry.uiState)
-                end
                 CommitEntryUiState(entry, staging.modules[entry.id])
             end
         end

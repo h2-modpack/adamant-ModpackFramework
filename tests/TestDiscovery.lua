@@ -12,21 +12,10 @@ local function resetMods()
     }
 end
 
-local function attachRegularModule(modName, definition, persisted)
-    local exports = {
-        definition = definition,
-    }
-    exports.store = lib.createStore(persisted or {}, definition)
-    rom.mods[modName] = exports
-    return exports
-end
-
-local function attachSpecialModule(modName, definition, persisted)
-    local exports = {
-        definition = definition,
-        DrawTab = function() end,
-    }
-    exports.store = lib.createStore(persisted or {}, definition)
+local function attachModule(modName, definition, persisted, exports)
+    exports = exports or {}
+    exports.definition = definition
+    exports.store = lib.store.create(persisted or {}, definition)
     rom.mods[modName] = exports
     return exports
 end
@@ -42,87 +31,41 @@ function TestDiscovery:tearDown()
     RestoreWarnings()
 end
 
-function TestDiscovery:testRegularModulesDiscoverStorageUiAndQuickNodes()
-    attachRegularModule("test-GodPool", {
+function TestDiscovery:testModulesDiscoverDrawTabAndQuickContent()
+    attachModule("test-GodPool", {
         modpack = "test-pack",
         id = "GodPool",
         name = "God Pool",
-        category = "Run Director",
-        subgroup = "Run Setup",
+        shortName = "Pool",
         storage = {
             { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
         },
-        ui = {
-            { type = "checkbox", binds = { value = "EnabledFlag" }, label = "Enabled", quick = true },
-        },
         apply = function() end,
         revert = function() end,
-    }, { Enabled = false, DebugMode = false, EnabledFlag = false })
+    }, { Enabled = false, DebugMode = false, EnabledFlag = false }, {
+        DrawTab = function() end,
+        DrawQuickContent = function() end,
+    })
 
     local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
     discovery.run()
 
     lu.assertEquals(#discovery.modules, 1)
-    lu.assertEquals(#discovery.modulesWithUi, 1)
-    lu.assertEquals(#discovery.modulesWithQuickUi, 1)
-    lu.assertEquals(#discovery.modulesWithQuickUi[1].quickUi, 1)
-    lu.assertEquals(discovery.categories[1].key, "Run Director")
+    lu.assertEquals(#discovery.modulesWithQuickContent, 1)
+    lu.assertEquals(#discovery.tabOrder, 1)
+    lu.assertEquals(discovery.tabOrder[1]._tabLabel, "Pool")
 end
 
-function TestDiscovery:testRegularModulesDiscoverQuickNodesFromCustomTypes()
-    attachRegularModule("test-GodPoolCustom", {
-        modpack = "test-pack",
-        id = "GodPoolCustom",
-        name = "God Pool Custom",
-        category = "Run Director",
-        subgroup = "Run Setup",
-        storage = {
-            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
-        },
-        customTypes = {
-            widgets = {
-                fancyToggle = {
-                    binds = { value = { storageType = "bool" } },
-                    validate = function() end,
-                    draw = function() end,
-                },
-            },
-            layouts = {
-                fancyGroup = {
-                    validate = function() end,
-                    render = function() return true end,
-                },
-            },
-        },
-        ui = {
-            {
-                type = "fancyGroup",
-                children = {
-                    { type = "fancyToggle", binds = { value = "EnabledFlag" }, label = "Enabled", quick = true },
-                },
-            },
-        },
-        apply = function() end,
-        revert = function() end,
-    }, { Enabled = false, DebugMode = false, EnabledFlag = false })
-
-    local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run()
-
-    lu.assertEquals(#discovery.modulesWithQuickUi, 1)
-    lu.assertEquals(#discovery.modulesWithQuickUi[1].quickUi, 1)
-    lu.assertEquals(discovery.modulesWithQuickUi[1].quickUi[1].type, "fancyToggle")
-end
-
-function TestDiscovery:testMissingStorageSkipsRegularModule()
-    attachRegularModule("test-MissingStorage", {
+function TestDiscovery:testMissingStorageSkipsModule()
+    attachModule("test-MissingStorage", {
         modpack = "test-pack",
         id = "MissingStorage",
         name = "Missing Storage",
-        category = "Run Director",
         apply = function() end,
         revert = function() end,
-    }, { Enabled = false, DebugMode = false })
+    }, { Enabled = false, DebugMode = false }, {
+        DrawTab = function() end,
+    })
 
     local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
     discovery.run()
@@ -132,39 +75,13 @@ function TestDiscovery:testMissingStorageSkipsRegularModule()
     lu.assertStrContains(Warnings[1], "missing definition.storage")
 end
 
-function TestDiscovery:testRegularModulesWarnWhenSpecialDrawExportsArePresent()
-    local exports = attachRegularModule("test-RegularWithDrawTab", {
+function TestDiscovery:testMissingDrawTabSkipsModule()
+    attachModule("test-NoDrawTab", {
         modpack = "test-pack",
-        id = "RegularWithDrawTab",
-        name = "Regular With DrawTab",
-        category = "Run Director",
+        id = "NoDrawTab",
+        name = "No DrawTab",
         storage = {
             { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
-        },
-        ui = {},
-        apply = function() end,
-        revert = function() end,
-    }, { Enabled = false, DebugMode = false, EnabledFlag = false })
-    exports.DrawTab = function() end
-
-    local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run()
-
-    lu.assertEquals(#Warnings, 1)
-    lu.assertStrContains(Warnings[1], "regular modules ignore DrawTab/DrawQuickContent")
-end
-
-function TestDiscovery:testSpecialModulesRequireStorageAndManagedUiState()
-    attachSpecialModule("test-Biome", {
-        modpack = "test-pack",
-        special = true,
-        name = "Biome Control",
-        shortName = "Biome",
-        storage = {
-            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
-        },
-        ui = {
-            { type = "checkbox", binds = { value = "EnabledFlag" }, label = "Enabled" },
         },
         apply = function() end,
         revert = function() end,
@@ -173,78 +90,76 @@ function TestDiscovery:testSpecialModulesRequireStorageAndManagedUiState()
     local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
     discovery.run()
 
-    lu.assertEquals(#discovery.specials, 1)
-    lu.assertNotNil(discovery.specials[1].uiState)
-    lu.assertEquals(discovery.specials[1]._tabLabel, "Biome")
+    lu.assertEquals(#discovery.modules, 0)
+    lu.assertEquals(#Warnings, 1)
+    lu.assertStrContains(Warnings[1], "must expose DrawTab")
 end
 
-function TestDiscovery:testSpecialModulesWarnWhenNoTabQuickOrUiFallbackExists()
-    rom.mods["test-BareSpecial"] = {
-        definition = {
-            modpack = "test-pack",
-            special = true,
-            name = "Bare Special",
-            storage = {
-                { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
-            },
-            ui = {},
-            apply = function() end,
-            revert = function() end,
+function TestDiscovery:testDuplicateIdsSkipConflictingEntries()
+    attachModule("test-Alpha", {
+        modpack = "test-pack",
+        id = "SharedId",
+        name = "Alpha",
+        storage = {
+            { type = "bool", alias = "Flag", configKey = "Flag", default = false },
         },
-        store = lib.createStore({ Enabled = false, DebugMode = false, EnabledFlag = false }, {
-            modpack = "test-pack",
-            special = true,
-            name = "Bare Special",
-            storage = {
-                { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
-            },
-            ui = {},
-            apply = function() end,
-            revert = function() end,
-        }),
-    }
+        apply = function() end,
+        revert = function() end,
+    }, { Enabled = false, DebugMode = false, Flag = false }, {
+        DrawTab = function() end,
+    })
+    attachModule("test-Bravo", {
+        modpack = "test-pack",
+        id = "SharedId",
+        name = "Bravo",
+        storage = {
+            { type = "bool", alias = "Flag", configKey = "Flag", default = false },
+        },
+        apply = function() end,
+        revert = function() end,
+    }, { Enabled = false, DebugMode = false, Flag = false }, {
+        DrawTab = function() end,
+    })
 
     local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
     discovery.run()
 
+    lu.assertEquals(#discovery.modules, 0)
     lu.assertEquals(#Warnings, 1)
-    lu.assertStrContains(Warnings[1], "exposes neither DrawTab nor DrawQuickContent and has no definition.ui fallback")
+    lu.assertStrContains(Warnings[1], "duplicate hash namespace 'SharedId'")
 end
 
-function TestDiscovery:testUnifiedTabOrderRespectsCategoryOrderAcrossCategoriesAndSpecials()
-    attachRegularModule("test-GodPool", {
+function TestDiscovery:testTabOrderPinsKnownLabelsFirst()
+    attachModule("test-GodPool", {
         modpack = "test-pack",
         id = "GodPool",
         name = "God Pool",
-        category = "Run Director",
-        subgroup = "Run Setup",
         storage = {
-            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+            { type = "bool", alias = "FlagA", configKey = "FlagA", default = false },
         },
-        ui = {},
         apply = function() end,
         revert = function() end,
-    }, { Enabled = false, DebugMode = false, EnabledFlag = false })
-
-    attachSpecialModule("test-Biome", {
+    }, { Enabled = false, DebugMode = false, FlagA = false }, {
+        DrawTab = function() end,
+    })
+    attachModule("test-Biome", {
         modpack = "test-pack",
-        special = true,
+        id = "BiomeControl",
         name = "Biome Control",
         shortName = "Biome",
         storage = {
-            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+            { type = "bool", alias = "FlagB", configKey = "FlagB", default = false },
         },
-        ui = {},
         apply = function() end,
         revert = function() end,
-    }, { Enabled = false, DebugMode = false, EnabledFlag = false })
+    }, { Enabled = false, DebugMode = false, FlagB = false }, {
+        DrawTab = function() end,
+    })
 
     local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run({ "Biome", "Run Director" })
+    discovery.run({ "Biome", "God Pool" })
 
-    lu.assertEquals(#discovery.unifiedTabOrder, 2)
-    lu.assertEquals(discovery.unifiedTabOrder[1].kind, "special")
-    lu.assertEquals(discovery.unifiedTabOrder[1].entry._tabLabel, "Biome")
-    lu.assertEquals(discovery.unifiedTabOrder[2].kind, "category")
-    lu.assertEquals(discovery.unifiedTabOrder[2].entry.key, "Run Director")
+    lu.assertEquals(#discovery.tabOrder, 2)
+    lu.assertEquals(discovery.tabOrder[1].id, "BiomeControl")
+    lu.assertEquals(discovery.tabOrder[2].id, "GodPool")
 end

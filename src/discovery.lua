@@ -12,6 +12,11 @@
 --- @return table discovery Discovery object with `run`, state accessors, and discovered entry lists.
 function Framework.createDiscovery(packId, config, lib)
     local Discovery = {}
+    local contractWarn = lib.logging.warn
+    local warnIf = lib.logging.warnIf
+    local inferShape = lib.mutation.inferShape
+    local mutatesRunData = lib.mutation.mutatesRunData
+    local setEnabled = lib.mutation.setEnabled
 
     local function GetStore(mod)
         return type(mod.store) == "table" and mod.store or nil
@@ -31,9 +36,9 @@ function Framework.createDiscovery(packId, config, lib)
     end
 
     local function SetEntryEnabled(entry, enabled)
-        local ok, err = lib.setDefinitionEnabled(entry.definition, GetStore(entry.mod), enabled)
+        local ok, err = setEnabled(entry.definition, GetStore(entry.mod), enabled)
         if not ok then
-            lib.contractWarn(packId,
+            contractWarn(packId,
                 "%s %s failed: %s", entry.modName, enabled and "enable" or "disable", err)
         end
         return ok, err
@@ -68,8 +73,8 @@ function Framework.createDiscovery(packId, config, lib)
     Discovery.tabOrder = {}              -- ordered list of module entries for the sidebar
 
     --- Discover all modules for this pack.
-    --- @param categoryOrder table|nil Ordered list of module labels to pin first in the sidebar.
-    function Discovery.run(categoryOrder)
+    --- @param moduleOrder table|nil Ordered list of module labels to pin first in the sidebar.
+    function Discovery.run(moduleOrder)
         Discovery.modules = {}
         Discovery.modulesById = {}
         Discovery.modulesWithQuickContent = {}
@@ -101,13 +106,13 @@ function Framework.createDiscovery(packId, config, lib)
             if namespace == "_v" then
                 duplicateNamespaces[namespace] = true
                 table.sort(entries)
-                lib.contractWarn(packId,
+                contractWarn(packId,
                     "reserved hash namespace '%s' is used by: %s; skipping all conflicting entries",
                     tostring(namespace), table.concat(entries, ", "))
             elseif #entries > 1 then
                 duplicateNamespaces[namespace] = true
                 table.sort(entries)
-                lib.contractWarn(packId,
+                contractWarn(packId,
                     "duplicate hash namespace '%s' across entries: %s; skipping all conflicting entries",
                     tostring(namespace), table.concat(entries, ", "))
             end
@@ -117,15 +122,15 @@ function Framework.createDiscovery(packId, config, lib)
             local modName = entry.modName
             local mod = entry.mod
             local def = entry.def
-            local inferredMutationShape, mutationInfo = lib.inferMutationShape(def)
+            local inferredMutationShape, mutationInfo = inferShape(def)
             local hasLifecycle = mutationInfo.hasManual or mutationInfo.hasPatch
-            local lifecycleRequired = lib.affectsRunData(def)
+            local lifecycleRequired = mutatesRunData(def)
             local store = GetStore(mod)
             local hasDrawTab = type(mod.DrawTab) == "function"
             local hasQuickContent = type(mod.DrawQuickContent) == "function"
 
-            if lib.affectsRunData(def) and not inferredMutationShape then
-                lib.contractWarn(packId,
+            if mutatesRunData(def) and not inferredMutationShape then
+                contractWarn(packId,
                     "%s: affectsRunData=true but module exposes neither patchPlan nor apply/revert",
                     modName)
             end
@@ -133,14 +138,14 @@ function Framework.createDiscovery(packId, config, lib)
             if duplicateNamespaces[def.id] then
                 -- Already warned once for the full collision set above.
             elseif not def.id or not def.name or (lifecycleRequired and not hasLifecycle) then
-                lib.contractWarn(packId,
+                contractWarn(packId,
                     "Skipping %s: missing id/name or lifecycle (patchPlan/apply/revert)", modName)
             elseif type(def.storage) ~= "table" then
-                lib.contractWarn(packId, "Skipping %s: missing definition.storage", modName)
+                contractWarn(packId, "Skipping %s: missing definition.storage", modName)
             elseif not store or type(store.read) ~= "function" or type(store.write) ~= "function" then
-                lib.contractWarn(packId, "%s: module is missing public.store", modName)
+                contractWarn(packId, "%s: module is missing public.store", modName)
             elseif not hasDrawTab then
-                lib.contractWarn(packId,
+                contractWarn(packId,
                     "%s: coordinated modules must expose DrawTab under the lean framework contract",
                     modName)
             else
@@ -166,7 +171,7 @@ function Framework.createDiscovery(packId, config, lib)
             if labelCount[label] > 1 then
                 labelIndex[label] = (labelIndex[label] or 0) + 1
                 entry._tabLabel = label .. " (" .. labelIndex[label] .. ")"
-                lib.warn(packId, config.DebugMode,
+                warnIf(packId, config.DebugMode,
                     "%s: shortName '%s' is shared by multiple modules. Rendering as '%s'.",
                     entry.modName, label, entry._tabLabel)
             else
@@ -182,8 +187,8 @@ function Framework.createDiscovery(packId, config, lib)
         end
 
         local placed = {}
-        if type(categoryOrder) == "table" then
-            for _, name in ipairs(categoryOrder) do
+        if type(moduleOrder) == "table" then
+            for _, name in ipairs(moduleOrder) do
                 if type(name) == "string" and moduleByLabel[name] then
                     local entry = moduleByLabel[name]
                     if not placed[entry.id] then
@@ -191,8 +196,8 @@ function Framework.createDiscovery(packId, config, lib)
                         table.insert(Discovery.tabOrder, entry)
                     end
                 elseif type(name) == "string" then
-                    lib.warn(packId, config.DebugMode,
-                        "categoryOrder contains unknown module label '%s'; entry ignored", name)
+                    warnIf(packId, config.DebugMode,
+                        "moduleOrder contains unknown module label '%s'; entry ignored", name)
                 end
             end
         end

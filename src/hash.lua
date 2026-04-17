@@ -1,7 +1,16 @@
 function Framework.createHash(discovery, config, lib, packId)
     local HASH_VERSION = 1
     local Hash = {}
-    local StorageTypes = lib.StorageTypes
+    local contractWarn = lib.logging.warn
+    local warnIf = lib.logging.warnIf
+    local getStorageAliases = lib.storage.getAliases
+    local getPackWidth = lib.storage.getPackWidth
+    local writeBitsValue = lib.storage.writePackedBits
+    local readBitsValue = lib.storage.readPackedBits
+    local getStorageRoots = lib.storage.getRoots
+    local valuesEqual = lib.storage.valuesEqual
+    local encodeHashValue = lib.storage.toHash
+    local decodeHashValue = lib.storage.fromHash
 
     local function ReadPersisted(mod, key)
         return mod.store.read(key)
@@ -30,7 +39,7 @@ function Framework.createHash(discovery, config, lib, packId)
     end
 
     local function BuildHashGroups(storage, hashGroupsDecl)
-        local aliasNodes = lib.getStorageAliases(storage)
+        local aliasNodes = getStorageAliases(storage)
         local groups = {}
         local groupedAliases = {}
         local seenKeys = {}
@@ -38,7 +47,7 @@ function Framework.createHash(discovery, config, lib, packId)
         for groupIndex, groupDecl in ipairs(hashGroupsDecl) do
             local key = type(groupDecl.key) == "string" and groupDecl.key or ("#" .. groupIndex)
             if seenKeys[key] then
-                lib.contractWarn(packId, "hashGroups: duplicate group key '%s' at index %d; group will be skipped", key, groupIndex)
+                contractWarn(packId, "hashGroups: duplicate group key '%s' at index %d; group will be skipped", key, groupIndex)
                 goto continue
             end
             seenKeys[key] = true
@@ -49,30 +58,30 @@ function Framework.createHash(discovery, config, lib, packId)
             for _, alias in ipairs(groupDecl) do
                 local node = aliasNodes[alias]
                 if not node then
-                    lib.contractWarn(packId, "hashGroups: unknown alias '%s' in group '%s'", alias, key)
+                    contractWarn(packId, "hashGroups: unknown alias '%s' in group '%s'", alias, key)
                     valid = false
                     break
                 end
                 if node._isBitAlias then
-                    lib.contractWarn(packId, "hashGroups: alias '%s' in group '%s' is a packed child alias; only root storage aliases are supported", alias, key)
+                    contractWarn(packId, "hashGroups: alias '%s' in group '%s' is a packed child alias; only root storage aliases are supported", alias, key)
                     valid = false
                     break
                 end
                 if node._lifetime == "transient" then
-                    lib.contractWarn(packId,
+                    contractWarn(packId,
                         "hashGroups: alias '%s' in group '%s' is transient; only persisted root aliases are supported",
                         alias, key)
                     valid = false
                     break
                 end
-                local width = lib.getPackWidth(node)
+                local width = getPackWidth(node)
                 if not width then
-                    lib.contractWarn(packId, "hashGroups: alias '%s' in group '%s' cannot be packed (no derivable width)", alias, key)
+                    contractWarn(packId, "hashGroups: alias '%s' in group '%s' cannot be packed (no derivable width)", alias, key)
                     valid = false
                     break
                 end
                 if offset + width > 32 then
-                    lib.contractWarn(packId, "hashGroups: group '%s' exceeds 32 bits at alias '%s'", key, alias)
+                    contractWarn(packId, "hashGroups: group '%s' exceeds 32 bits at alias '%s'", key, alias)
                     valid = false
                     break
                 end
@@ -84,7 +93,7 @@ function Framework.createHash(discovery, config, lib, packId)
                 local packedDefault = 0
                 for _, member in ipairs(members) do
                     local encoded = EncodeGroupMemberValue(member.node, member.node.default)
-                    packedDefault = lib.writeBitsValue(packedDefault, member.offset, member.width, encoded)
+                    packedDefault = writeBitsValue(packedDefault, member.offset, member.width, encoded)
                 end
                 table.insert(groups, { key = key, members = members, packedDefault = packedDefault })
                 for _, member in ipairs(members) do
@@ -131,7 +140,7 @@ function Framework.createHash(discovery, config, lib, packId)
         if type(entry.storage) ~= "table" then
             return {}
         end
-        return lib.getStorageRoots(entry.storage)
+        return getStorageRoots(entry.storage)
     end
 
     local function ReloadManagedUiState()
@@ -193,12 +202,12 @@ function Framework.createHash(discovery, config, lib, packId)
     end
 
     local function FailApplyHash(snapshot, err)
-        lib.contractWarn(packId,
+        contractWarn(packId,
             "ApplyConfigHash failed; restoring previous state: %s",
             tostring(err))
         local rollbackOk, rollbackErr = RestoreApplySnapshot(snapshot)
         if not rollbackOk then
-            lib.contractWarn(packId,
+            contractWarn(packId,
                 "ApplyConfigHash rollback incomplete: %s",
                 tostring(rollbackErr))
         end
@@ -275,25 +284,25 @@ function Framework.createHash(discovery, config, lib, packId)
     end
 
     local function EncodeValue(root, value, entryLabel)
-        local storageType = StorageTypes[root.type]
-        if not storageType then
-            lib.contractWarn(packId,
+        local encoded = encodeHashValue(root, value)
+        if encoded == nil then
+            contractWarn(packId,
                 "GetConfigHash: skipping %s '%s' with unknown storage type '%s'",
                 entryLabel, tostring(root.alias), tostring(root.type))
             return nil
         end
-        return storageType.toHash(root, value)
+        return encoded
     end
 
     local function DecodeValue(root, str, entryLabel)
-        local storageType = StorageTypes[root.type]
-        if not storageType then
-            lib.contractWarn(packId,
+        local decoded = decodeHashValue(root, str)
+        if decoded == nil then
+            contractWarn(packId,
                 "ApplyConfigHash: defaulting %s '%s' with unknown storage type '%s'",
                 entryLabel, tostring(root.alias), tostring(root.type))
             return root.default
         end
-        return storageType.fromHash(root, str)
+        return decoded
     end
 
     function Hash.GetConfigHash(source)
@@ -322,7 +331,7 @@ function Framework.createHash(discovery, config, lib, packId)
                     if encoded ~= EncodeGroupMemberValue(member.node, member.node.default) then
                         isDefault = false
                     end
-                    packedValue = lib.writeBitsValue(packedValue, member.offset, member.width, encoded)
+                    packedValue = writeBitsValue(packedValue, member.offset, member.width, encoded)
                 end
                 if not isDefault then
                     kv[m.id .. "." .. group.key] = Hash.EncodeBase62(packedValue)
@@ -332,7 +341,7 @@ function Framework.createHash(discovery, config, lib, packId)
             for _, root in ipairs(GetRootStorage(m)) do
                 if not meta.groupedAliases[root.alias] then
                     local current = ReadPersisted(m.mod, root.alias)
-                    if not lib.valuesEqual(root, current, root.default) then
+                    if not valuesEqual(root, current, root.default) then
                         local encoded = EncodeValue(root, current, "storage root")
                         if encoded ~= nil then
                             kv[m.id .. "." .. root.alias] = encoded
@@ -349,20 +358,20 @@ function Framework.createHash(discovery, config, lib, packId)
 
     function Hash.ApplyConfigHash(hash)
         if hash == nil or hash == "" then
-            lib.warn(packId, config.DebugMode, "ApplyConfigHash: empty hash")
+            warnIf(packId, config.DebugMode, "ApplyConfigHash: empty hash")
             return false
         end
 
         local kv = Deserialize(hash)
         if kv["_v"] == nil then
-            lib.warn(packId, config.DebugMode,
+            warnIf(packId, config.DebugMode,
                 "ApplyConfigHash: unrecognized format (missing version key)")
             return false
         end
 
         local version = tonumber(kv["_v"]) or 1
         if version > HASH_VERSION then
-            lib.contractWarn(packId,
+            contractWarn(packId,
                 "ApplyConfigHash: hash version %d is newer than supported (%d)",
                 version, HASH_VERSION)
         end
@@ -386,7 +395,7 @@ function Framework.createHash(discovery, config, lib, packId)
                     if stored ~= nil then
                         local packedValue = Hash.DecodeBase62(stored) or group.packedDefault
                         for _, member in ipairs(group.members) do
-                            local encoded = lib.readBitsValue(packedValue, member.offset, member.width)
+                            local encoded = readBitsValue(packedValue, member.offset, member.width)
                             WritePersisted(m.mod, member.alias, DecodeGroupMemberValue(member.node, encoded))
                         end
                     else

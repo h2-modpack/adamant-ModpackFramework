@@ -2,91 +2,62 @@
 
 This document defines the compatibility contract for Framework hashing and profile storage.
 
-If a change can alter how a module is identified, how a field is keyed, how a default is
-interpreted, or how a value is serialized, treat it as ABI work, not cleanup.
+If a change alters:
+- how a module is identified
+- how a persisted storage field is keyed
+- how defaults are interpreted
+- how a value is serialized
+
+treat it as ABI work, not cleanup.
 
 ## Scope
 
 This applies to:
-
 - shared hashes created by Framework
 - coordinator profile slots stored in Chalk config
-- regular modules
-- special modules
+- discovered coordinated modules
 
-It does not describe the full UI contract. It only covers the serialized identity and value
-encoding surface that must stay stable after release.
+It does not describe the full UI contract.
+It only covers serialized identity and value encoding.
 
 ## Canonical Format
 
 Framework encodes config state into a canonical key-value string:
 
 ```text
-_v=1|ModId=1|ModId.configKey=value|adamant-SpecialName.configKey=value
+_v=1|ModuleId=1|ModuleId.alias=value
 ```
 
-Properties of the format:
-
+Properties:
 - `_v` is the hash format version and must be present
-- keys are sorted alphabetically before the final string is produced
+- keys are sorted alphabetically before final serialization
 - only non-default values are encoded
 - unknown keys are ignored on decode
-- missing keys decode to their current defaults
+- missing keys decode to current defaults
 
-The hash string is used both for:
-
-- portable sharing between users
+The same string is used for:
+- portable sharing
 - local coordinator profile slots
-
-That means compatibility mistakes affect both imports and saved local presets.
-
-## Hash Groups
-
-Framework also supports optional `definition.hashGroups` for compressing multiple small root storage
-values into a single base62 token in the hash surface.
-
-This is a hash-size optimization only. It does not change persisted Chalk storage.
-
-Supported members:
-- root `bool`
-- root `int`
-- root `packedInt` when the root has a derivable pack width
-
-Not supported:
-- packed child aliases inside a `packedInt`
-- transient root aliases declared with `lifetime = "transient"`
-
-Reason:
-- packed child aliases are already subfields of a packed root
-- grouping them again at the hash layer creates overlapping ownership semantics
-
-So the intended usage is:
-- group independent small roots together
-- do not group children of an already-packed root
 
 ## Frozen ABI Surface
 
 Treat the following as frozen after release unless you are doing deliberate compatibility work:
-
-- regular `definition.id`
-- storage root `alias` (for both regular and special modules)
-- special module `modName`
+- `definition.id`
+- persisted storage root `alias`
 - storage `default`
 - storage type `toHash(...)`
 - storage type `fromHash(...)`
-- `definition.hashGroups` keys, membership, and member order when used
+- `definition.hashGroups` keys, membership, and member order
 
-These are not cosmetic details. They are the wire format.
-
-`alias` is the hash key. `configKey` is the Chalk persistence path. If you declare an explicit `alias`, `configKey` can change freely without affecting hashes or saved profiles. If `alias` is omitted, it defaults to the stringified `configKey`, which means `configKey` is implicitly frozen for that root.
+These are the wire format.
 
 ## Why Each One Matters
 
 ### `definition.id`
 
-Regular module enable state is encoded under the module id.
+Module enable state is encoded under the module id.
 
-If you rename:
+Changing:
 
 ```lua
 definition.id = "OldName"
@@ -98,64 +69,34 @@ to:
 definition.id = "NewName"
 ```
 
-then old hashes and old profile entries no longer target the same module key space.
+moves the module into a new hash namespace.
 
 ### Storage root `alias`
 
-Storage root values are encoded under:
+Storage values are encoded under:
 
 ```text
-ModId.alias=value
+ModuleId.alias=value
 ```
 
-`alias` is the hash key. If a root omits `alias`, it defaults to the stringified `configKey`, so `configKey` is effectively the hash key in that case.
+`alias` is the hash key.
+`configKey` is the Chalk persistence path.
 
-If you declare an explicit `alias`, you can rename `configKey` freely — the hash key is unchanged. If you did not declare an explicit `alias`, renaming `configKey` breaks old hashes and saved profile entries for that root unless you add compatibility handling.
-
-### Special `modName`
-
-Special-module state is encoded under the special module name:
-
-```text
-adamant-SpecialName.configKey=value
-```
-
-Changing `modName` is equivalent to changing a namespace prefix for every special field.
-
-### Special storage root `alias`
-
-Special module storage values are encoded under:
-
-```text
-adamant-SpecialName.alias=value
-```
-
-The same alias/configKey rules apply: explicit `alias` decouples the hash key from the Chalk path; omitted `alias` means `configKey` is the hash key and is implicitly frozen.
+If `alias` is omitted, it defaults to the stringified `configKey`, which means `configKey` becomes the hash key and is implicitly frozen.
 
 ### `default`
 
 Framework only encodes non-default values.
 
-That means changing a default is a compatibility change even if the field name stays the same.
-
-Example:
-
-- old default: `false`
-- new default: `true`
-- old hash omitted the field because it matched `false`
-
-After the default changes, decoding that old hash will now produce `true` unless the old value was
-explicitly encoded. This is not a neutral cleanup.
+Changing a default is a compatibility change even if the field name stays the same.
 
 ### `toHash(...)` / `fromHash(...)`
 
 Field type serialization is part of the wire format.
 
 Changing:
-
 - accepted strings
 - normalization rules
-- delimiter behavior
 - numeric formatting
 - fallback behavior
 
@@ -168,161 +109,48 @@ When a module declares hash groups, the group surface becomes part of the wire f
 Compatibility-sensitive parts are:
 - group key
 - which root aliases belong to the group
-- the order of members inside the group
+- member order inside the group
+
+## Hash Groups
+
+`definition.hashGroups` compresses multiple small persisted root values into one base62 token.
+
+Supported members:
+- root `bool`
+- root `int`
+- root `packedInt` with derivable pack width
+
+Not supported:
+- packed child aliases
+- transient root aliases
 
 Reason:
-- Framework encodes grouped values under `ModuleId.groupKey`
-- member order determines bit offsets inside the packed base62 payload
-- moving a root into or out of a group changes whether it is encoded under its own alias key or under the group key
-
-So hash groups are not just a size optimization after release. They are part of the serialized ABI once shipped.
-
-## Compatibility Classes
-
-### Safe internal changes
-
-These are usually fine:
-
-- refactoring UI code
-- renaming local Lua variables
-- moving functions between files
-- changing how store access is implemented internally
-- caching or performance optimizations that do not change encoded identity or value semantics
-
-### Public interface changes
-
-These are contract changes, but not necessarily hash ABI changes:
-
-- renaming `DrawTab`
-- renaming `DrawQuickContent`
-- changing standalone helper signatures
-- changing `public.store` shape
-
-These can break Framework or module integration, but they are not the same as serialized ABI.
-
-### ABI changes
-
-These require compatibility planning:
-
-- renaming module ids or schema keys
-- changing defaults
-- changing value encoding
-- changing special `modName`
-- changing hash group key, membership, or member order
+- packed child aliases already belong to a packed root
+- transient state is intentionally not part of portable/shared config state
 
 ## Current Compatibility Behavior
 
-Framework currently provides only limited compatibility behavior:
-
+Framework currently provides limited compatibility behavior:
 - hash format version check on decode
 - unknown keys are ignored
 - missing keys fall back to defaults
-- invalid dropdown/radio values fall back to defaults
-- invalid/unknown storage types warn and degrade safely rather than crashing
-- saved coordinator profiles are audited at `Framework.init(...)` and warn on unknown field keys
-  inside known module/special namespaces, which helps catch likely renames
+- saved coordinator profiles are audited at `Framework.init(...)` and warn on unknown field keys inside known module namespaces
 
 Framework does not automatically preserve compatibility for:
-
 - renamed module ids
-- renamed `configKey` values
-- renamed `modName`
+- renamed aliases
 - changed defaults
 - changed encoding semantics
+- changed hash group layout
 
 Those are author-owned compatibility tasks.
 
-## `_hashKey` and Rename Safety
-
-Do not overstate `_hashKey`.
-
-`_hashKey` is a cached runtime key used by Framework for regular-module hashing. It can support
-intentional compatibility handling in narrowly controlled cases, but it is not a general rename
-system and it does not solve every rename problem across regular modules, special schemas, module
-ids, and special `modName`.
-
-Policy:
-
-- do not treat renames as free
-- do not assume the current system already has a universal rename layer
-
 ## Recommended Rules
 
-### 1. Freeze ids and keys after first release
-
-Once a module is shipped publicly:
-
+Once a module is publicly shipped:
 - do not rename `definition.id`
-- do not rename storage root `alias`
-- do not casually rename `configKey` when `alias` was omitted
-- do not rename special `modName`
+- do not rename persisted storage root `alias`
+- do not casually change defaults
 - do not casually change `definition.hashGroups`
 
-unless you are intentionally doing compatibility work.
-
-### 2. Treat default changes as migrations
-
-If you change a field default:
-
-- assume old hashes may decode differently
-- note it in changelog/release notes
-- verify impact on shared hashes and saved profiles
-
-### 3. Treat storage type serialization as versioned behavior
-
-If you change `toHash(...)` or `fromHash(...)`:
-
-- assume the wire format changed
-- test old hashes explicitly
-- consider whether a format version bump is required
-
-### 4. Add compatibility deliberately, not implicitly
-
-If you need to preserve old data:
-
-- add explicit decode compatibility handling
-- document it
-- add tests for old and new forms
-
-Do not rely on accidental fallback behavior.
-
-## When to Bump `_v`
-
-Consider a hash format version bump when the global decode rules change in a way that old hashes
-cannot be interpreted safely under the new parser.
-
-Examples:
-
-- changing the top-level delimiter format
-- changing how module key namespaces are parsed
-- changing the meaning of the overall hash envelope
-
-Do not use `_v` as a substitute for every module-level compatibility decision. Many compatibility
-changes are module- or field-level and should be handled there.
-
-## Testing Expectations for ABI Changes
-
-If you intentionally make an ABI-affecting change, test all of:
-
-1. old hash -> new code
-2. old saved profile -> new code
-3. new hash -> new code
-4. unknown-key tolerance still works
-
-At minimum, confirm:
-
-- unchanged modules still round-trip identically
-- intended compatibility paths decode to the expected current values
-- no unrelated module keys are affected
-
-## Practical Author Checklist
-
-Before changing a released module, ask:
-
-1. Am I changing `definition.id`, `modName`, a storage root `alias`, `default`, `toHash`, or `fromHash`?
-2. If I'm changing `configKey` only — did I declare an explicit `alias`? If yes, the hash is unaffected. If no, this is an ABI change.
-3. If yes to 1, what happens to old hashes and old saved profiles?
-4. Is this a harmless internal refactor, or am I actually changing the wire format?
-5. Do I need explicit compatibility handling and tests?
-
-If you cannot answer those clearly, do not merge the change as "cleanup."
+If you must change one of these, handle it as compatibility work with an explicit migration plan.

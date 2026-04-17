@@ -60,9 +60,9 @@ function TestHashStorage:testRegularAndSpecialStorageRoundTrip()
                 Count = 7,
             },
         },
-    }, {
         {
-            modName = "BiomeControl",
+            id = "BiomeControl",
+            name = "Biome Control",
             enabled = true,
             storage = {
                 { type = "string", alias = "Mode", configKey = "Mode", default = "Vanilla" },
@@ -70,6 +70,7 @@ function TestHashStorage:testRegularAndSpecialStorageRoundTrip()
             values = {
                 Mode = "Chaos",
             },
+            DrawTab = function() end,
         },
     })
     local hash = makeHash(discovery)
@@ -82,19 +83,19 @@ function TestHashStorage:testRegularAndSpecialStorageRoundTrip()
     lu.assertStrContains(canonical, "BiomeControl.Mode=Chaos")
 
     local module = discovery.modulesById.GodPool
-    local special = discovery.specials[1]
+    local biome = discovery.modulesById.BiomeControl
     module.mod.store.write("Enabled", false)
     module.mod.store.write("EnabledFlag", false)
     module.mod.store.write("Count", 3)
-    special.mod.store.write("Enabled", false)
-    special.mod.store.write("Mode", "Vanilla")
+    biome.mod.store.write("Enabled", false)
+    biome.mod.store.write("Mode", "Vanilla")
 
     lu.assertTrue(hash.ApplyConfigHash(canonical))
     lu.assertTrue(module.mod.store.read("Enabled"))
     lu.assertTrue(module.mod.store.read("EnabledFlag"))
     lu.assertEquals(module.mod.store.read("Count"), 7)
-    lu.assertTrue(special.mod.store.read("Enabled"))
-    lu.assertEquals(special.mod.store.read("Mode"), "Chaos")
+    lu.assertTrue(biome.mod.store.read("Enabled"))
+    lu.assertEquals(biome.mod.store.read("Mode"), "Chaos")
 end
 
 function TestHashStorage:testFingerprintChangesWithConfig()
