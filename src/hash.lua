@@ -107,7 +107,6 @@ function Framework.createHash(discovery, config, lib, packId)
     end
 
     local moduleHashMeta = {}
-    local specialHashMeta = {}
 
     local function EnsureEntryHashMeta(cache, entry)
         local meta = cache[entry]
@@ -136,14 +135,8 @@ function Framework.createHash(discovery, config, lib, packId)
     end
 
     local function ReloadManagedUiState()
-        for _, m in ipairs(discovery.modulesWithUi) do
-            local uiState = m.mod.store and m.mod.store.uiState
-            if uiState and uiState.reloadFromConfig then
-                uiState.reloadFromConfig()
-            end
-        end
-        for _, special in ipairs(discovery.specials) do
-            local uiState = special.uiState or (special.mod.store and special.mod.store.uiState)
+        for _, m in ipairs(discovery.modules) do
+            local uiState = m.uiState or (m.mod.store and m.mod.store.uiState)
             if uiState and uiState.reloadFromConfig then
                 uiState.reloadFromConfig()
             end
@@ -154,8 +147,6 @@ function Framework.createHash(discovery, config, lib, packId)
         local snapshot = {
             moduleEnabled = {},
             moduleStorage = {},
-            specialEnabled = {},
-            specialStorage = {},
         }
 
         for _, m in ipairs(discovery.modules) do
@@ -168,18 +159,6 @@ function Framework.createHash(discovery, config, lib, packId)
                 })
             end
             snapshot.moduleStorage[m] = roots
-        end
-
-        for _, special in ipairs(discovery.specials) do
-            snapshot.specialEnabled[special] = discovery.isSpecialEnabled(special)
-            local roots = {}
-            for _, root in ipairs(GetRootStorage(special)) do
-                table.insert(roots, {
-                    alias = root.alias,
-                    value = ClonePersistedValue(ReadPersisted(special.mod, root.alias)),
-                })
-            end
-            snapshot.specialStorage[special] = roots
         end
 
         return snapshot
@@ -195,13 +174,6 @@ function Framework.createHash(discovery, config, lib, packId)
             end
         end
 
-        for _, special in ipairs(discovery.specials) do
-            local roots = snapshot.specialStorage[special] or {}
-            for _, entry in ipairs(roots) do
-                WritePersisted(special.mod, entry.alias, ClonePersistedValue(entry.value))
-            end
-        end
-
         ReloadManagedUiState()
 
         for _, m in ipairs(discovery.modules) do
@@ -210,16 +182,6 @@ function Framework.createHash(discovery, config, lib, packId)
                 local ok, err = discovery.setModuleEnabled(m, previousEnabled)
                 if ok == false then
                     table.insert(rollbackErrors, string.format("%s: %s", tostring(m.modName or m.id), tostring(err)))
-                end
-            end
-        end
-
-        for _, special in ipairs(discovery.specials) do
-            local previousEnabled = snapshot.specialEnabled[special]
-            if previousEnabled then
-                local ok, err = discovery.setSpecialEnabled(special, previousEnabled)
-                if ok == false then
-                    table.insert(rollbackErrors, string.format("%s: %s", tostring(special.modName), tostring(err)))
                 end
             end
         end
@@ -380,48 +342,6 @@ function Framework.createHash(discovery, config, lib, packId)
             end
         end
 
-        for _, special in ipairs(discovery.specials) do
-            local enabled
-            if source then
-                enabled = source.specials and source.specials[special.modName]
-            else
-                enabled = discovery.isSpecialEnabled(special)
-            end
-            if enabled == nil then enabled = false end
-            if enabled then
-                kv[special.modName] = "1"
-            end
-
-            local meta = EnsureEntryHashMeta(specialHashMeta, special)
-            for _, group in ipairs(meta.groups) do
-                local packedValue = 0
-                local isDefault = true
-                for _, member in ipairs(group.members) do
-                    local value = ReadPersisted(special.mod, member.alias)
-                    local encoded = EncodeGroupMemberValue(member.node, value)
-                    if encoded ~= EncodeGroupMemberValue(member.node, member.node.default) then
-                        isDefault = false
-                    end
-                    packedValue = lib.writeBitsValue(packedValue, member.offset, member.width, encoded)
-                end
-                if not isDefault then
-                    kv[special.modName .. "." .. group.key] = Hash.EncodeBase62(packedValue)
-                end
-            end
-
-            for _, root in ipairs(GetRootStorage(special)) do
-                if not meta.groupedAliases[root.alias] then
-                    local current = ReadPersisted(special.mod, root.alias)
-                    if not lib.valuesEqual(root, current, root.default) then
-                        local encoded = EncodeValue(root, current, "storage root")
-                        if encoded ~= nil then
-                            kv[special.modName .. "." .. root.alias] = encoded
-                        end
-                    end
-                end
-            end
-        end
-
         local payload = Serialize(kv)
         local canonical = "_v=" .. HASH_VERSION .. (payload ~= "" and "|" .. payload or "")
         return canonical, Fingerprint(canonical)
@@ -449,8 +369,6 @@ function Framework.createHash(discovery, config, lib, packId)
 
         local snapshot = CaptureApplySnapshot()
         local moduleTargets = {}
-        local specialTargets = {}
-
         for _, m in ipairs(discovery.modules) do
             local stored = kv[m.id]
             if stored ~= nil then
@@ -490,37 +408,6 @@ function Framework.createHash(discovery, config, lib, packId)
                 end
             end
 
-            for _, special in ipairs(discovery.specials) do
-                local storedEnabled = kv[special.modName]
-                specialTargets[special] = storedEnabled == "1"
-
-                local meta = EnsureEntryHashMeta(specialHashMeta, special)
-                for _, group in ipairs(meta.groups) do
-                    local stored = kv[special.modName .. "." .. group.key]
-                    if stored ~= nil then
-                        local packedValue = Hash.DecodeBase62(stored) or group.packedDefault
-                        for _, member in ipairs(group.members) do
-                            local encoded = lib.readBitsValue(packedValue, member.offset, member.width)
-                            WritePersisted(special.mod, member.alias, DecodeGroupMemberValue(member.node, encoded))
-                        end
-                    else
-                        for _, member in ipairs(group.members) do
-                            WritePersisted(special.mod, member.alias, member.node.default)
-                        end
-                    end
-                end
-
-                for _, root in ipairs(GetRootStorage(special)) do
-                    if not meta.groupedAliases[root.alias] then
-                        local stored = kv[special.modName .. "." .. root.alias]
-                        if stored ~= nil then
-                            WritePersisted(special.mod, root.alias, DecodeValue(root, stored, "storage root"))
-                        else
-                            WritePersisted(special.mod, root.alias, root.default)
-                        end
-                    end
-                end
-            end
         end, debug.traceback)
         if not okWrite then
             return FailApplyHash(snapshot, writeErr)
@@ -530,13 +417,6 @@ function Framework.createHash(discovery, config, lib, packId)
 
         for _, m in ipairs(discovery.modules) do
             local ok, err = discovery.setModuleEnabled(m, moduleTargets[m])
-            if ok == false then
-                return FailApplyHash(snapshot, err)
-            end
-        end
-
-        for _, special in ipairs(discovery.specials) do
-            local ok, err = discovery.setSpecialEnabled(special, specialTargets[special])
             if ok == false then
                 return FailApplyHash(snapshot, err)
             end

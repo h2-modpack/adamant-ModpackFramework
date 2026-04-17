@@ -240,7 +240,7 @@ function TestDiscovery:testUnifiedTabOrderRespectsCategoryOrderAcrossCategoriesA
     }, { Enabled = false, DebugMode = false, EnabledFlag = false })
 
     local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run(nil, nil, { "Biome", "Run Director" })
+    discovery.run({ "Biome", "Run Director" })
 
     lu.assertEquals(#discovery.unifiedTabOrder, 2)
     lu.assertEquals(discovery.unifiedTabOrder[1].kind, "special")
