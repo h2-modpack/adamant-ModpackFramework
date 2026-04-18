@@ -135,25 +135,25 @@ function Framework.createDiscovery(packId, config, lib)
                     modName)
             end
 
-            if duplicateNamespaces[def.id] then
-                -- Already warned once for the full collision set above.
-            elseif not def.id or not def.name or (lifecycleRequired and not hasLifecycle) then
-                contractWarn(packId,
-                    "Skipping %s: missing id/name or lifecycle (patchPlan/apply/revert)", modName)
-            elseif type(def.storage) ~= "table" then
-                contractWarn(packId, "Skipping %s: missing definition.storage", modName)
-            elseif not store or type(store.read) ~= "function" or type(store.write) ~= "function" then
-                contractWarn(packId, "%s: module is missing public.store", modName)
-            elseif not hasDrawTab then
-                contractWarn(packId,
-                    "%s: coordinated modules must expose DrawTab under the lean framework contract",
-                    modName)
-            else
-                local discovered = BuildEntry(entry)
-                table.insert(Discovery.modules, discovered)
-                Discovery.modulesById[def.id] = discovered
-                if hasQuickContent then
-                    table.insert(Discovery.modulesWithQuickContent, discovered)
+            if not duplicateNamespaces[def.id] then
+                if not def.id or not def.name or (lifecycleRequired and not hasLifecycle) then
+                    contractWarn(packId,
+                        "Skipping %s: missing id/name or lifecycle (patchPlan/apply/revert)", modName)
+                elseif type(def.storage) ~= "table" then
+                    contractWarn(packId, "Skipping %s: missing definition.storage", modName)
+                elseif not store or type(store.read) ~= "function" or type(store.write) ~= "function" then
+                    contractWarn(packId, "%s: module is missing public.store", modName)
+                elseif not hasDrawTab then
+                    contractWarn(packId,
+                        "%s: coordinated modules must expose DrawTab under the lean framework contract",
+                        modName)
+                else
+                    local discovered = BuildEntry(entry)
+                    table.insert(Discovery.modules, discovered)
+                    Discovery.modulesById[def.id] = discovered
+                    if hasQuickContent then
+                        table.insert(Discovery.modulesWithQuickContent, discovered)
+                    end
                 end
             end
         end
