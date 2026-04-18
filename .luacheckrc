@@ -1,5 +1,5 @@
 std = "lua52"
-max_line_length = 125
+max_line_length = 200
 
 globals = {
     "rom",

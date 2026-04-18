@@ -9,7 +9,7 @@
 function Framework.createTheme()
     local ui                 = rom.ImGui
     local uiCol              = rom.ImGuiCol
-    local unpackColor        = table.unpack or unpack
+    local unpackColor        = table.unpack
 
     -- -------------------------------------------------------------------------
     -- COLORS
