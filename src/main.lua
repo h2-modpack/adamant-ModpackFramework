@@ -42,6 +42,8 @@ local function ValidateInitParams(params)
         "Framework.init: windowTitle must be a non-empty string")
     assert(type(params.config) == "table", "Framework.init: config must be a table")
     assert(type(params.def) == "table", "Framework.init: def must be a table")
+    assert(params.hideHashMarker == nil or type(params.hideHashMarker) == "boolean",
+        "Framework.init: hideHashMarker must be a boolean when provided")
     assert(type(params.config.ModEnabled) == "boolean",
         "Framework.init: config.ModEnabled must be a boolean")
     assert(type(params.config.DebugMode) == "boolean",
@@ -136,7 +138,8 @@ function Framework.init(params)
 
     AuditSavedProfiles(params.packId, params.config.Profiles, discovery, lib)
 
-    local hud = Framework.createHud(params.packId, packIndex, hash, theme, params.config, params.modutil)
+    local hud = Framework.createHud(params.packId, packIndex, hash, theme, params.config, params.modutil,
+        params.hideHashMarker == true)
     local ui = Framework.createUI(discovery, hud, theme, params.def, params.config, lib, params.packId,
         params.windowTitle)
 

@@ -15,8 +15,9 @@
 --- @param theme table Theme object returned by `Framework.createTheme(...)`.
 --- @param config table Coordinator config table containing `ModEnabled`.
 --- @param modutil table ModUtil mod reference used for the HUD hook registration.
+--- @param hideHashMarker boolean|nil Optional pack-level flag to suppress the HUD fingerprint marker.
 --- @return table hud HUD object exposing marker/hash update helpers.
-function Framework.createHud(packId, packIndex, hash, theme, config, modutil)
+function Framework.createHud(packId, packIndex, hash, theme, config, modutil, hideHashMarker)
     assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
         "Framework.createHud: game HUD globals are not ready; call Framework.init after game load")
 
@@ -33,30 +34,34 @@ function Framework.createHud(packId, packIndex, hash, theme, config, modutil)
     local displayedHash = nil
     local hashDirty = false
     local hashDirtyAt = nil
+    local markerHidden = hideHashMarker == true
 
-    ScreenData.HUD.ComponentData[componentName] = {
-        RightOffset = 20,
-        Y = 250 + (packIndex - 1) * HUD_LINE_HEIGHT,
-        TextArgs = {
-            Text = "",
-            Font = "MonospaceTypewriterBold",
-            FontSize = 18,
-            Color = theme.colors.text,
-            ShadowRed = 0.1,
-            ShadowBlue = 0.1,
-            ShadowGreen = 0.1,
-            OutlineColor = { 0.113, 0.113, 0.113, 1 },
-            OutlineThickness = 2,
-            ShadowAlpha = 1.0,
-            ShadowBlur = 1,
-            ShadowOffset = { 0, 4 },
-            Justification = "Right",
-            VerticalJustification = "Top",
-            DataProperties = { OpacityWithOwner = true },
-        },
-    }
+    if not markerHidden then
+        ScreenData.HUD.ComponentData[componentName] = {
+            RightOffset = 20,
+            Y = 250 + (packIndex - 1) * HUD_LINE_HEIGHT,
+            TextArgs = {
+                Text = "",
+                Font = "MonospaceTypewriterBold",
+                FontSize = 18,
+                Color = theme.colors.text,
+                ShadowRed = 0.1,
+                ShadowBlue = 0.1,
+                ShadowGreen = 0.1,
+                OutlineColor = { 0.113, 0.113, 0.113, 1 },
+                OutlineThickness = 2,
+                ShadowAlpha = 1.0,
+                ShadowBlur = 1,
+                ShadowOffset = { 0, 4 },
+                Justification = "Right",
+                VerticalJustification = "Top",
+                DataProperties = { OpacityWithOwner = true },
+            },
+        }
+    end
 
     local function UpdateModMark()
+        if markerHidden then return end
         if not HUDScreen or not HUDScreen.Components[componentName] then return end
         if currentHash == displayedHash then return end
 
@@ -70,7 +75,7 @@ function Framework.createHud(packId, packIndex, hash, theme, config, modutil)
 
     modutil.mod.Path.Wrap("ShowHealthUI", function(base, args)
         base(args)
-        if config.ModEnabled then
+        if not markerHidden and config.ModEnabled then
             displayedHash = nil
             UpdateModMark()
         end
