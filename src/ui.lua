@@ -17,6 +17,8 @@
 --- @return table ui UI object exposing `{ renderWindow, addMenuBar }`.
 function Framework.createUI(discovery, hud, theme, def, config, lib, packId, windowTitle)
     local ui                 = rom.ImGui
+    local DEFAULT_WINDOW_WIDTH = 1280
+    local DEFAULT_WINDOW_HEIGHT = 840
     local contractWarn       = lib.logging.warn
     local mutatesRunData     = lib.mutation.mutatesRunData
     local applyDefinition    = lib.mutation.apply
@@ -721,11 +723,21 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     -- =============================================================================
 
     local _showModWindow = false
+    local _didSeedWindowSize = false
+
+    local function SeedWindowSize()
+        if _didSeedWindowSize then
+            return
+        end
+        ui.SetNextWindowSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, rom.ImGuiCond.FirstUseEver)
+        _didSeedWindowSize = true
+    end
 
     local function renderWindow()
         hud.refreshHashIfIdle()
         if _showModWindow then
             PushTheme()
+            SeedWindowSize()
             local shouldDraw, open = ui.Begin(windowTitle, true)
             if shouldDraw then
                 DrawMainWindow()
