@@ -151,6 +151,61 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         FinishUiChange(entry.definition, enabled)
     end
 
+    local function GetModulesStatus(moduleIds)
+        local total = 0
+        local enabledCount = 0
+
+        for _, moduleId in ipairs(moduleIds or {}) do
+            local entry = discovery.modulesById[moduleId]
+            if entry then
+                total = total + 1
+                if staging.modules[moduleId] then
+                    enabledCount = enabledCount + 1
+                end
+            end
+        end
+
+        if total == 0 then
+            return "Unavailable", colors.textDisabled, false
+        end
+        if enabledCount == 0 then
+            return "Disabled", colors.warning, true
+        end
+        if enabledCount == total then
+            return "Enabled", colors.success, true
+        end
+        return string.format("Mixed (%d/%d)", enabledCount, total), colors.info, true
+    end
+
+    local function SetModulesEnabled(moduleIds, enabled)
+        local changed = false
+        local needsRunData = false
+
+        for _, moduleId in ipairs(moduleIds or {}) do
+            local entry = discovery.modulesById[moduleId]
+            if entry and staging.modules[moduleId] ~= enabled then
+                local ok = discovery.setEntryEnabled(entry, enabled)
+                if ok then
+                    staging.modules[moduleId] = enabled
+                    changed = true
+                    if mutatesRunData(entry.definition) and enabled then
+                        needsRunData = true
+                    end
+                end
+            end
+        end
+
+        if not changed then
+            return
+        end
+
+        if needsRunData then
+            rom.game.SetupRunData()
+        end
+        InvalidateHash()
+        hud.markHashDirty()
+    end
+
     local function OnUiStateFlushed(definition, enabled)
         FinishUiChange(definition, enabled)
     end
@@ -236,6 +291,8 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         colors          = colors,
         theme           = theme,
         drawColoredText = DrawColoredText,
+        getModulesStatus = GetModulesStatus,
+        setModulesEnabled = SetModulesEnabled,
     }
 
     local defaultProfiles = def.defaultProfiles
@@ -596,13 +653,11 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         DrawColoredText(colors.info, "Per-Module Debug")
         ui.Spacing()
 
-        if #discovery.modules > 0 then
-            for _, entry in ipairs(discovery.modules) do
-                local val, chg = ui.Checkbox(entry._debugLabel, staging.debug[entry.id])
-                if chg then
-                    staging.debug[entry.id] = val
-                    discovery.setDebugEnabled(entry, val)
-                end
+        for _, entry in ipairs(discovery.modules) do
+            local val, chg = ui.Checkbox(entry._debugLabel, staging.debug[entry.id])
+            if chg then
+                staging.debug[entry.id] = val
+                discovery.setDebugEnabled(entry, val)
             end
         end
     end
@@ -656,8 +711,6 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             DrawDev()
         elseif moduleByTabLabel[selectedTab] then
             DrawModuleTab(moduleByTabLabel[selectedTab])
-        else
-            -- no-op
         end
 
         ui.EndChild()
