@@ -18,15 +18,10 @@ function TestAuditProfiles:testKnownStorageKeysProduceNoWarnings()
                 { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
             },
         },
-    }, {
-        {
-            modName = "SpecialBiome",
-            storage = {
-                { type = "string", alias = "Mode", configKey = "Mode", default = "Vanilla" },
-            },
-        },
     })
 
+    -- SpecialBiome is not a discovered module; its hash keys are an unknown namespace and
+    -- should be silently ignored (not installed vs. renamed are indistinguishable).
     Framework.auditSavedProfiles("test-pack", {
         { Name = "Known", Hash = "_v=1|GodPool=1|GodPool.EnabledFlag=1|SpecialBiome=1|SpecialBiome.Mode=Chaos", Tooltip = "" },
     }, discovery, lib)

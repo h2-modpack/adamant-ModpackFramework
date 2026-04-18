@@ -1,21 +1,27 @@
 # Contributing to adamant-ModpackFramework
 
-`adamant-ModpackFramework` owns coordinator orchestration: discovery, hashing, HUD, and the shared UI. Treat its runtime behavior and warnings as public coordinator contract.
+`adamant-ModpackFramework` owns coordinator orchestration:
+- discovery
+- hashing
+- HUD
+- the shared coordinator UI
+
+Treat its runtime behavior and warnings as public coordinator contract.
 
 ## Read This First
 
-- [README.md](README.md) for package overview
-- [COORDINATOR_GUIDE.md](COORDINATOR_GUIDE.md) for the coordinator/runtime contract
-- [QUICK_SETUP.md](QUICK_SETUP.md) for the Quick Setup surface
-- [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md) for hash/profile compatibility policy
-- [ModpackLib README.md](https://github.com/h2-modpack/adamant-ModpackLib/blob/main/README.md) for module-side lifecycle expectations
+- [README.md](README.md)
+- [COORDINATOR_GUIDE.md](COORDINATOR_GUIDE.md)
+- [QUICK_SETUP.md](QUICK_SETUP.md)
+- [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md)
 
 ## Contribution Rules
 
-- Keep Framework docs aligned with the live coordinator contract and the template repo.
-- Prefer explicit contract warnings over silent skips for skip-causing failures.
-- Batch operations may be best-effort, but major framework-owned operations should rollback when practical.
+- Keep docs aligned with the live lean framework contract.
+- Prefer explicit contract warnings over silent skips.
 - Treat hash/profile ABI changes as compatibility work, not refactoring.
+- Do not reintroduce grouped-category or quick-node concepts unless the runtime actually supports them again.
+- Keep Framework focused on coordinator orchestration, not module UI abstraction.
 
 ## Validation
 

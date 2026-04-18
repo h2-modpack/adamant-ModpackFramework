@@ -9,7 +9,7 @@ The coordinator owns:
 - Chalk config
 - default profiles
 - GUI registration
-- any coordinator-specific quick-setup content
+- any coordinator-specific Quick Setup content
 
 Framework owns:
 - discovery
@@ -38,11 +38,9 @@ end
 modutil.once_loaded.game(function()
     rom.gui.add_imgui(Framework.getRenderer(PACK_ID))
     rom.gui.add_to_menu_bar(Framework.getMenuBar(PACK_ID))
-    loader.load(init, init)
+    loader.load(init)
 end)
 ```
-
-Use `loader.load(init, init)` unless you have a specific one-time-only registration reason to split `on_ready` and `on_reload`.
 
 ## `Framework.init(params)`
 
@@ -63,12 +61,12 @@ Required:
 - `defaultProfiles`
 
 Optional `def` fields:
-- `groupStyle`
-- `groupStyleDefault`
-- `categoryOrder` — ordered list of category and/or special names to pin first in the sidebar. Any mix of categories and specials is supported. Entries not in the list are appended alphabetically after the pinned ones. Unknown entries are warned and ignored.
-- `renderQuickSetup(ctx)` — coordinator-owned Quick Setup content. See [QUICK_SETUP.md](QUICK_SETUP.md).
+- `moduleOrder`
+  Ordered list of module labels to pin first in the sidebar. Unknown entries are warned and ignored.
+- `renderQuickSetup(ctx)`
+  Coordinator-owned Quick Setup content. See [QUICK_SETUP.md](QUICK_SETUP.md).
 
-## Discovery
+## Discovery Contract
 
 Framework discovers modules by:
 
@@ -76,81 +74,81 @@ Framework discovers modules by:
 public.definition.modpack = PACK_ID
 ```
 
-Regular modules:
-- `definition.special` absent or false
-- discovered into category/subgroup tabs
-- use `definition.id` as the Framework hash namespace
-- hosted Quick Setup comes from `definition.ui` nodes marked `quick = true`
-- `definition.selectQuickUi(...)` may filter those quick candidates at render time
+Each discovered coordinated module must expose:
+- `definition.id`
+- `definition.name`
+- `definition.storage`
+- public `store`
+- public `DrawTab`
 
-Special modules:
-- `definition.special = true`
-- discovered into dedicated sidebar tabs
-- use `modName` as the Framework hash namespace
-- ignore `definition.category`, `definition.subgroup`, and `definition.selectQuickUi`
-- Quick Setup comes from `DrawQuickContent`, not quick widget collection
-- tab rendering comes from `DrawTab`, or falls back to `definition.ui` when present
+`DrawQuickContent` is optional.
 
 Lifecycle shape is inferred from:
 - `patchPlan`
 - `apply/revert`
 - or both
 
+Framework skips modules that are missing:
+- `definition.storage`
+- public `store`
+- public `DrawTab`
+- required lifecycle for `affectsRunData = true`
+
+## Window Model
+
+Framework now renders:
+- one sidebar tab per discovered module
+- Quick Setup
+- Profiles
+- Dev
+
+There is no category/subgroup grouping anymore.
+There is no special-module split anymore.
+
+Module tabs are simple:
+- Framework renders the enable checkbox
+- Framework calls `entry.mod.DrawTab(ui, entry.uiState)` when enabled
+- if `uiState` is dirty after draw, Framework commits it through `lib.host.commitState(...)`
+
+## Quick Setup
+
+Quick Setup renders in this order:
+1. coordinator-owned content from `def.renderQuickSetup(ctx)`
+2. each discovered module with `DrawQuickContent`
+
+There is no quick-node discovery from `definition.ui`.
+There is no `selectQuickUi` path anymore.
+
+See [QUICK_SETUP.md](QUICK_SETUP.md).
+
 ## Hash and Profiles
 
-Hash format is canonical key-value encoding.
+Hash/profile behavior is built on:
+- module enable state
+- validated persisted storage roots
+- optional `definition.hashGroups`
 
-Properties:
-- only non-default values are encoded
-- keys are sorted for stable output
-- field serialization is delegated to storage types
-- optional module `definition.hashGroups` can compress multiple small root storage values into one base62 token per group
-
-Profile load behavior:
-- writes decoded config values
+Profile load:
+- writes decoded persisted values
 - reloads managed `uiState`
-- applies enabled/runtime state
-- rolls the whole operation back on later failure
+- reapplies enabled/runtime state
+- rolls the operation back on failure
 
-Compatibility-sensitive surface is documented in [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md).
+Compatibility-sensitive details are documented in [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md).
 
 ## Runtime Transactions
 
-Framework now owns transaction boundaries for the major public operations:
-
+Framework-owned operations are transactional when practical:
 - per-entry enable/disable
-- managed `uiState` commit
 - coordinator master `ModEnabled` toggle
+- managed `uiState` commit
 - profile/hash load
 
-These paths either:
+The intended outcome is:
 - commit the new state
 - or restore the previous persisted/runtime state and warn
 
-Smaller bespoke batch operations may still be best-effort unless explicitly hardened.
-
-## UI Model
-
-Framework keeps its own staging only for Framework-owned state:
-- pack `ModEnabled`
-- module enabled states
-- special enabled states
-- debug toggles
-- profile editing state
-
-Module-owned managed values live in `public.store.uiState`.
-
-Framework renders module-managed state through:
-- `lib.runUiStatePass(...)`
-- `lib.commitUiState(...)`
-
-Quick Setup has its own surface and behavior contract. See [QUICK_SETUP.md](QUICK_SETUP.md).
-
 ## Debug and Warnings
-
-Warning split:
-- `lib.warn(...)`: debug-gated framework hygiene diagnostics
-- `lib.contractWarn(...)`: always-on contract or compatibility warnings
 
 Framework debug:
 - `config.DebugMode`
@@ -158,8 +156,12 @@ Framework debug:
 Lib debug:
 - `lib.config.DebugMode`
 
+Framework warnings use:
+- `lib.logging.warn(...)`
+- `lib.logging.warnIf(...)`
+
 ## Related Docs
 
-- [ModpackLib README.md](https://github.com/h2-modpack/adamant-ModpackLib/blob/main/README.md)
+- [README.md](README.md)
 - [QUICK_SETUP.md](QUICK_SETUP.md)
 - [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md)

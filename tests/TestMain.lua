@@ -92,7 +92,6 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
             modName = "Alpha",
             id = "Alpha",
             name = "Alpha",
-            category = "General",
             enabled = true,
             storage = {},
             apply = function()
@@ -106,7 +105,6 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
             modName = "Bravo",
             id = "Bravo",
             name = "Bravo",
-            category = "General",
             enabled = true,
             storage = {},
             apply = function()
@@ -177,7 +175,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
     lu.assertStrContains(warnings[2], "[test-pack] Enable Mod toggle failed; restoring previous runtime state")
 end
 
-function TestMain:testQuickSetupCanFilterQuickCandidatesByDefinitionSelector()
+function TestMain:testQuickSetupRendersModuleQuickContent()
     local previousImGui = rom.ImGui
     local checkboxLabels = {}
 
@@ -238,26 +236,18 @@ function TestMain:testQuickSetupCanFilterQuickCandidatesByDefinitionSelector()
             modName = "Alpha",
             id = "Alpha",
             name = "Alpha",
-            category = "General",
             enabled = true,
             storage = {
                 { type = "bool", alias = "FlagA", configKey = "FlagA", default = false },
-                { type = "bool", alias = "FlagB", configKey = "FlagB", default = false },
             },
-            ui = {
-                { type = "checkbox", binds = { value = "FlagA" }, label = "Quick A", quick = true },
-                { type = "checkbox", binds = { value = "FlagB" }, label = "Quick B", quick = true },
-            },
-            selectQuickUi = function()
-                return { "value=FlagB" }
+            DrawTab = function() end,
+            DrawQuickContent = function(ui)
+                ui.Checkbox("Quick B", false)
             end,
             apply = function() end,
             revert = function() end,
         },
     })
-    discovery.unifiedTabOrder = {
-        { kind = "category", entry = { key = "General", label = "General" } },
-    }
 
     local hud = {
         setModMarker = noop,
@@ -298,7 +288,6 @@ function TestMain:testQuickSetupCanFilterQuickCandidatesByDefinitionSelector()
     local joined = table.concat(checkboxLabels, "\n")
     lu.assertStrContains(joined, "Enable Mod")
     lu.assertStrContains(joined, "Quick B")
-    lu.assertNotStrContains(joined, "Quick A")
 end
 
 function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears()

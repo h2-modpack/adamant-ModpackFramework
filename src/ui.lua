@@ -17,10 +17,16 @@
 --- @return table ui UI object exposing `{ renderWindow, addMenuBar }`.
 function Framework.createUI(discovery, hud, theme, def, config, lib, packId, windowTitle)
     local ui                 = rom.ImGui
+    local contractWarn       = lib.logging.warn
+    local mutatesRunData     = lib.mutation.mutatesRunData
+    local applyDefinition    = lib.mutation.apply
+    local revertDefinition   = lib.mutation.revert
+    local commitState        = lib.host.commitState
+    local auditAndResyncState = lib.host.auditAndResyncState
 
     -- Unpack theme for convenient access
     local colors             = theme.colors
-    local ImGuiTreeNodeFlags = theme.ImGuiTreeNodeFlags
+
     local SIDEBAR_RATIO      = theme.SIDEBAR_RATIO
     local FIELD_MEDIUM       = theme.FIELD_MEDIUM
     local FIELD_NARROW       = theme.FIELD_NARROW
@@ -31,23 +37,16 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local function DrawColoredText(color, text)
         ui.TextColored(color[1], color[2], color[3], color[4], text)
     end
-    local function PushTextColor(color)
-        ui.PushStyleColor(rom.ImGuiCol.Text, color[1], color[2], color[3], color[4])
-    end
-
     -- =============================================================================
     -- STAGING TABLE (performance cache — avoids Chalk reads in render loop)
     -- =============================================================================
     -- Plain Lua tables mirroring each module's Chalk config.
     -- UI reads/writes go through staging. Chalk is only touched in event handlers.
 
-    local _EMPTY_OPTS = {} -- sentinel to avoid `or {}` alloc in DrawCheckboxGroup
-
     local staging = {
         ModEnabled = config.ModEnabled == true, -- snapshot once
         modules    = {},                        -- [module.id] = bool
-        specials   = {},                        -- [special.modName] = bool (enabled state)
-        debug      = {},                        -- [module.id or special.modName] = bool (DebugMode per entry)
+        debug      = {},                        -- [module.id] = bool (DebugMode per entry)
     }
 
     -- Profile staging: plain copies of config.Profiles
@@ -57,32 +56,14 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local function SnapshotToStaging()
         staging.ModEnabled = config.ModEnabled == true
 
-        -- Boolean modules
+        -- Grouped modules
         for _, m in ipairs(discovery.modules) do
-            staging.modules[m.id] = discovery.isModuleEnabled(m)
-        end
-
-        -- Managed UI state for regular modules
-        for _, m in ipairs(discovery.modulesWithUi) do
+            staging.modules[m.id] = discovery.isEntryEnabled(m)
+            staging.debug[m.id] = discovery.isDebugEnabled(m)
             local uiState = m.mod.store and m.mod.store.uiState
             if uiState and uiState.reloadFromConfig then
                 uiState.reloadFromConfig()
             end
-        end
-
-        -- Special modules
-        for _, special in ipairs(discovery.specials) do
-            staging.specials[special.modName] = discovery.isSpecialEnabled(special)
-            staging.debug[special.modName] = discovery.isDebugEnabled(special)
-            local uiState = special.uiState
-            if uiState and uiState.reloadFromConfig then
-                uiState.reloadFromConfig()
-            end
-        end
-
-        -- Per-module debug states
-        for _, m in ipairs(discovery.modules) do
-            staging.debug[m.id] = discovery.isDebugEnabled(m)
         end
 
         -- Profiles
@@ -117,9 +98,6 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local importFeedback = nil
     local importFeedbackColor = nil
     local importFeedbackTime = nil
-    local categoryStatusCache = {}
-    local categoryStatusDirty = {}
-
     local FEEDBACK_DURATION = 2.0
     local function SetImportFeedback(text, color)
         importFeedback = text
@@ -130,16 +108,6 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local function InvalidateHash()
         cachedHash = nil
         cachedFingerprint = nil
-    end
-
-    local function InvalidateCategoryStatus(category)
-        if category then
-            categoryStatusDirty[category] = true
-            return
-        end
-        for key in pairs(categoryStatusCache) do
-            categoryStatusDirty[key] = true
-        end
     end
 
     local function GetCachedHash()
@@ -166,25 +134,21 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     -- TOGGLE HELPERS (event handlers — OK to touch Chalk here)
     -- =============================================================================
 
-    local function FinishUiChange(definition, enabled, category)
-        if lib.affectsRunData(definition) and enabled then
-            SetupRunData()
+    local function FinishUiChange(definition, enabled)
+        if mutatesRunData(definition) and enabled then
+            rom.game.SetupRunData()
         end
         InvalidateHash()
-        if category then
-            InvalidateCategoryStatus(category)
-        end
         hud.markHashDirty()
     end
 
-    local function ToggleEntry(entry, enabled, stagingBucket, stagingKey, category)
-        local setter = entry.definition.special and discovery.setSpecialEnabled or discovery.setModuleEnabled
-        local ok = setter(entry, enabled)
+    local function ToggleEntry(entry, enabled, stagingBucket, stagingKey)
+        local ok = discovery.setEntryEnabled(entry, enabled)
         if not ok then
             return
         end
         stagingBucket[stagingKey] = enabled
-        FinishUiChange(entry.definition, enabled, category)
+        FinishUiChange(entry.definition, enabled)
     end
 
     local function OnUiStateFlushed(definition, enabled)
@@ -196,12 +160,12 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local function SetEntryRuntimeState(entry, state)
         local ok, err
         if state then
-            ok, err = lib.applyDefinition(entry.definition, entry.mod.store)
+            ok, err = applyDefinition(entry.definition, entry.mod.store)
         else
-            ok, err = lib.revertDefinition(entry.definition, entry.mod.store)
+            ok, err = revertDefinition(entry.definition, entry.mod.store)
         end
         if not ok then
-            lib.contractWarn(packId,
+            contractWarn(packId,
                 "%s %s failed: %s", entry.modName or "unknown", state and "apply" or "revert", err)
         end
         return ok, err
@@ -220,7 +184,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             end
         end
         if #rollbackErrors > 0 then
-            lib.contractWarn(packId,
+            contractWarn(packId,
                 "Enable Mod rollback incomplete: %s",
                 table.concat(rollbackErrors, "; "))
         end
@@ -238,7 +202,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             if staging.modules[m.id] then
                 local ok, err = SetEntryRuntimeState(m, state)
                 if not ok then
-                    lib.contractWarn(packId,
+                    contractWarn(packId,
                         "Enable Mod toggle failed; restoring previous runtime state")
                     RollBackTouchedEntries(touched, previousState)
                     return false, err
@@ -247,22 +211,9 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             end
         end
 
-        for _, special in ipairs(discovery.specials) do
-            if staging.specials[special.modName] then
-                local ok, err = SetEntryRuntimeState(special, state)
-                if not ok then
-                    lib.contractWarn(packId,
-                        "Enable Mod toggle failed; restoring previous runtime state")
-                    RollBackTouchedEntries(touched, previousState)
-                    return false, err
-                end
-                table.insert(touched, special)
-            end
-        end
-
         staging.ModEnabled = state
         config.ModEnabled = state
-        SetupRunData()
+        rom.game.SetupRunData()
         hud.setModMarker(state)
         return true, nil
     end
@@ -270,10 +221,9 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     --- Load a profile hash: decode, apply to all module configs, re-snapshot.
     local function LoadProfile(profileHash)
         if hud.applyConfigHash(profileHash) then
-            SetupRunData()
+            rom.game.SetupRunData()
             SnapshotToStaging()
             InvalidateHash()
-            InvalidateCategoryStatus()
             slotLabelsDirty = true
             hud.updateHash()
             return true
@@ -281,86 +231,11 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         return false
     end
 
-    local function GetCategoryStatus(category)
-        if categoryStatusDirty[category] ~= true and categoryStatusCache[category] then
-            local cached = categoryStatusCache[category]
-            return cached.text, cached.color, cached.hasEntries
-        end
-
-        local modules = discovery.byCategory[category] or {}
-        if #modules == 0 then
-            categoryStatusCache[category] = {
-                text = "N/A",
-                color = colors.textDisabled,
-                hasEntries = false,
-            }
-            categoryStatusDirty[category] = false
-            return "N/A", colors.textDisabled, false
-        end
-
-        local hasEnabled = false
-        local hasDisabled = false
-        for _, m in ipairs(modules) do
-            if staging.modules[m.id] then hasEnabled = true else hasDisabled = true end
-        end
-
-        if hasEnabled and not hasDisabled then
-            categoryStatusCache[category] = {
-                text = "All Enabled",
-                color = colors.success,
-                hasEntries = true,
-            }
-            categoryStatusDirty[category] = false
-            return "All Enabled", colors.success, true
-        end
-        if hasDisabled and not hasEnabled then
-            categoryStatusCache[category] = {
-                text = "All Disabled",
-                color = colors.error,
-                hasEntries = true,
-            }
-            categoryStatusDirty[category] = false
-            return "All Disabled", colors.error, true
-        end
-        categoryStatusCache[category] = {
-            text = "Mixed Configuration",
-            color = colors.mixed,
-            hasEntries = true,
-        }
-        categoryStatusDirty[category] = false
-        return "Mixed Configuration", colors.mixed, true
-    end
-
-    local function SetCategoryEnabled(category, flag)
-        local modules = discovery.byCategory[category] or {}
-        local touchedRunData = false
-        for _, m in ipairs(modules) do
-            local ok = discovery.setModuleEnabled(m, flag)
-            if ok then
-                staging.modules[m.id] = flag
-            end
-            if ok and lib.affectsRunData(m.definition) then
-                touchedRunData = true
-            end
-        end
-        if touchedRunData then
-            SetupRunData()
-        end
-        InvalidateHash()
-        InvalidateCategoryStatus(category)
-        hud.markHashDirty()
-    end
-
     local quickSetupContext = {
-        ui                = ui,
-        colors            = colors,
-        theme             = theme,
-        drawColoredText   = DrawColoredText,
-        getCategoryStatus = GetCategoryStatus,
-        setCategoryEnabled = SetCategoryEnabled,
-        getCategoryModules = function(category)
-            return discovery.byCategory[category] or {}
-        end,
+        ui              = ui,
+        colors          = colors,
+        theme           = theme,
+        drawColoredText = DrawColoredText,
     }
 
     local defaultProfiles = def.defaultProfiles
@@ -369,68 +244,26 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     -- GENERIC TAB CONTENT RENDERER
     -- =============================================================================
 
-    local function DrawGroupItems(group, winW)
-        for _, itemData in ipairs(group.Items) do
-            local m = discovery.modulesById[itemData.Key]
-            if m then
-                local currentVal = staging.modules[m.id] or false
-                local val, chg = ui.Checkbox(itemData.Name, currentVal)
-                if chg then
-                    ToggleEntry(m, val, staging.modules, m.id, m.category)
-                end
-                if ui.IsItemHovered() and itemData.Tooltip and itemData.Tooltip ~= "" then
-                    ui.SetTooltip(itemData.Tooltip)
-                end
+    local function CommitEntryUiState(entry, enabled)
+        local uiState = entry.uiState
+        if not uiState or not uiState.isDirty or not uiState.isDirty() then
+            return
+        end
 
-                if currentVal and type(m.ui) == "table" and #m.ui > 0 then
-                    ui.Indent()
-                    local uiState = m.mod.store and m.mod.store.uiState
-                    lib.runUiStatePass({
-                        name = m.name or m.id,
-                        imgui = ui,
-                        uiState = uiState,
-                        commit = function(state)
-                            return lib.commitUiState(m.definition, m.mod.store, state)
-                        end,
-                        draw = function()
-                            lib.drawUiTree(ui, m.ui, uiState, winW * FIELD_MEDIUM, m.definition.customTypes)
-                        end,
-                        onFlushed = function()
-                            OnUiStateFlushed(m.definition, staging.modules[m.id])
-                        end,
-                    })
-                    ui.Unindent()
-                end
-            end
+        local ok = commitState(entry.definition, entry.mod.store, uiState)
+        if ok then
+            OnUiStateFlushed(entry.definition, enabled)
         end
     end
 
-    local function DrawCheckboxGroup(layoutData)
-        local winW = ui.GetWindowWidth()
-        for _, group in ipairs(layoutData) do
-            local style = group.style
-            -- "collapsing" : collapsing header (default)
-            -- "separator"  : labeled section header (non-collapsing) + separator line
-            -- "flat"       : items rendered directly, no label
-            if style == "collapsing" or not (style == "separator" or style == "flat") then
-                PushTextColor(colors.info)
-                local open = ui.CollapsingHeader(group.Header, ImGuiTreeNodeFlags.DefaultOpen)
-                ui.PopStyleColor()
-                if open then
-                    ui.Indent()
-                    DrawGroupItems(group, winW)
-                    ui.Unindent()
-                end
-            elseif style == "separator" then
-                DrawColoredText(colors.info, group.Header)
-                ui.Separator()
-                DrawGroupItems(group, winW)
-            else
-                -- "flat" or "auto" with single item
-                DrawGroupItems(group, winW)
-            end
-            ui.Spacing()
+    local function DrawEntryBody(entry, enabled)
+        if not enabled or type(entry.mod.DrawTab) ~= "function" then
+            return
         end
+
+        entry.mod.DrawTab(ui, entry.uiState)
+
+        CommitEntryUiState(entry, enabled)
     end
 
     -- =============================================================================
@@ -440,32 +273,17 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local selectedTab = "Quick Setup"
 
     local cachedTabList = nil
-    local cachedQuickList = nil  -- ordered list of { kind="special"|"regular", entry=... }
-    local specialQuickPassOpts = {}
-    local specialTabPassOpts = {}
-
-    -- Build a lookup from category key -> modules with quick UI nodes in that category.
-    local quickModulesByCategory = {}
-    for _, m in ipairs(discovery.modulesWithQuickUi) do
-        local cat = m.category
-        quickModulesByCategory[cat] = quickModulesByCategory[cat] or {}
-        table.insert(quickModulesByCategory[cat], m)
-    end
+    local cachedQuickList = nil  -- ordered list of modules with DrawQuickContent
 
     local function BuildTabList()
         if cachedTabList then return cachedTabList end
         cachedTabList = { "Quick Setup" }
         cachedQuickList = {}
 
-        for _, item in ipairs(discovery.unifiedTabOrder or {}) do
-            if item.kind == "category" then
-                table.insert(cachedTabList, item.entry.label)
-                for _, m in ipairs(quickModulesByCategory[item.entry.key] or {}) do
-                    table.insert(cachedQuickList, { kind = "regular", entry = m })
-                end
-            else
-                table.insert(cachedTabList, item.entry._tabLabel)
-                table.insert(cachedQuickList, { kind = "special", entry = item.entry })
+        for _, entry in ipairs(discovery.tabOrder or {}) do
+            table.insert(cachedTabList, entry._tabLabel)
+            if type(entry.mod.DrawQuickContent) == "function" then
+                table.insert(cachedQuickList, entry)
             end
         end
 
@@ -474,47 +292,19 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         return cachedTabList
     end
 
-    local function BuildSpecialPassOpts(special)
-        return {
-            name = special.definition.name or special.modName,
-            imgui = ui,
-            uiState = special.uiState,
-            theme = theme,
-            commit = function(state)
-                return lib.commitUiState(special.definition, special.mod.store, state)
-            end,
-            beforeDraw = nil,
-            draw = nil,
-            afterDraw = nil,
-            onFlushed = function()
-                OnUiStateFlushed(special.definition, staging.specials[special.modName])
-            end,
-        }
-    end
-
     local function AuditAndResyncAllUiState()
-        for _, m in ipairs(discovery.modulesWithUi) do
+        for _, m in ipairs(discovery.modules) do
             local uiState = m.mod.store and m.mod.store.uiState
             if uiState then
-                lib.auditAndResyncUiState(m.name or m.id or m.modName, uiState)
-            end
-        end
-        for _, special in ipairs(discovery.specials) do
-            local uiState = special.uiState
-            if uiState then
-                lib.auditAndResyncUiState(special.definition.name or special.modName, uiState)
+                auditAndResyncState(m.name or m.id or m.modName, uiState)
             end
         end
         SnapshotToStaging()
     end
 
-    -- Build lookup: tab label -> special entry
-    local specialByTabLabel = {}
-
-    for _, special in ipairs(discovery.specials) do
-        specialByTabLabel[special._tabLabel] = special
-        specialQuickPassOpts[special.modName] = BuildSpecialPassOpts(special)
-        specialTabPassOpts[special.modName] = BuildSpecialPassOpts(special)
+    local moduleByTabLabel = {}
+    for _, entry in ipairs(discovery.modules) do
+        moduleByTabLabel[entry._tabLabel] = entry
     end
 
     -- =============================================================================
@@ -569,111 +359,32 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             def.renderQuickSetup(quickSetupContext)
         end
 
-        local function SelectQuickNodes(module)
-            local quickNodes = module.quickUi or {}
-            local selector = module.definition and module.definition.selectQuickUi
-            if type(selector) ~= "function" then
-                return quickNodes
-            end
-
-            local selected = selector(module.mod.store, module.mod.store and module.mod.store.uiState, quickNodes)
-            if selected == nil then
-                return quickNodes
-            end
-
-            local selectedSet = {}
-            if type(selected) == "string" then
-                selectedSet[selected] = true
-            elseif type(selected) == "table" then
-                for key, value in pairs(selected) do
-                    if type(key) == "number" then
-                        if type(value) == "string" and value ~= "" then
-                            selectedSet[value] = true
-                        end
-                    elseif value == true then
-                        selectedSet[tostring(key)] = true
-                    end
-                end
-            else
-                return quickNodes
-            end
-
-            local filtered = {}
-            for _, node in ipairs(quickNodes) do
-                local quickId = lib.getQuickUiNodeId(node)
-                if quickId and selectedSet[quickId] then
-                    table.insert(filtered, node)
-                end
-            end
-            return filtered
-        end
-
-        for _, item in ipairs(cachedQuickList or {}) do
-            if item.kind == "special" then
-                local special = item.entry
-                if staging.specials[special.modName] and special.mod.DrawQuickContent then
-                    ui.Separator()
-                    ui.Spacing()
-                    local passOpts = specialQuickPassOpts[special.modName]
-                    passOpts.beforeDraw = special.mod.BeforeDrawQuickContent
-                    passOpts.draw = passOpts.draw or special.mod.DrawQuickContent
-                    passOpts.afterDraw = special.mod.AfterDrawQuickContent
-                    lib.runUiStatePass(passOpts)
-                end
-            else
-                local m = item.entry
-                if staging.modules[m.id] then
-                    ui.Separator()
-                    ui.Spacing()
-                    DrawColoredText(colors.info, m.name or m.id)
-                    ui.Spacing()
-                    local uiState = m.mod.store and m.mod.store.uiState
-                    lib.runUiStatePass({
-                        name = m.name or m.id,
-                        imgui = ui,
-                        uiState = uiState,
-                        commit = function(state)
-                            return lib.commitUiState(m.definition, m.mod.store, state)
-                        end,
-                        draw = function()
-                            for _, node in ipairs(SelectQuickNodes(m)) do
-                                lib.drawUiNode(ui, node, uiState, winW * FIELD_MEDIUM, m.definition.customTypes)
-                            end
-                        end,
-                        onFlushed = function()
-                            OnUiStateFlushed(m.definition, staging.modules[m.id])
-                        end,
-                    })
-                end
+        for _, entry in ipairs(cachedQuickList or {}) do
+            if staging.modules[entry.id] and entry.mod.DrawQuickContent then
+                ui.Separator()
+                ui.Spacing()
+                DrawColoredText(colors.info, entry.name or entry.id)
+                ui.Spacing()
+                entry.mod.DrawQuickContent(ui, entry.uiState)
+                CommitEntryUiState(entry, staging.modules[entry.id])
             end
         end
     end
 
-    local function DrawSpecialTab(special)
-        -- Enable checkbox (standardized by Framework)
-        local enabled = staging.specials[special.modName] or false
-        local val, chg = ui.Checkbox(special._enableLabel, enabled)
+    local function DrawModuleTab(entry)
+        local enabled = staging.modules[entry.id] or false
+        local val, chg = ui.Checkbox(entry._enableLabel, enabled)
         if chg then
-            ToggleEntry(special, val, staging.specials, special.modName)
+            ToggleEntry(entry, val, staging.modules, entry.id)
         end
-        if ui.IsItemHovered() and special.definition.tooltip then
-            ui.SetTooltip(special.definition.tooltip)
+        if ui.IsItemHovered() and entry.definition.tooltip then
+            ui.SetTooltip(entry.definition.tooltip)
         end
 
         if not enabled then return end
 
         ui.Spacing()
-
-        -- Delegate tab content to the module or fall back to definition.ui
-        if special.mod.DrawTab or (type(special.ui) == "table" and #special.ui > 0) then
-            local passOpts = specialTabPassOpts[special.modName]
-            passOpts.beforeDraw = special.mod.BeforeDrawTab
-            passOpts.draw = passOpts.draw or special.mod.DrawTab or function(ui)
-                lib.drawUiTree(ui, special.ui, special.uiState, ui.GetWindowWidth() * FIELD_MEDIUM, special.definition.customTypes)
-            end
-            passOpts.afterDraw = special.mod.AfterDrawTab
-            lib.runUiStatePass(passOpts)
-        end
+        DrawEntryBody(entry, enabled)
     end
 
     local function DrawProfiles()
@@ -885,54 +596,15 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         DrawColoredText(colors.info, "Per-Module Debug")
         ui.Spacing()
 
-        -- Regular modules grouped by category (same order as sidebar)
-        for _, cat in ipairs(discovery.categories) do
-            local modules = discovery.byCategory[cat.key] or {}
-            if #modules > 0 then
-                PushTextColor(colors.info)
-                local open = ui.CollapsingHeader(cat.label, ImGuiTreeNodeFlags.DefaultOpen)
-                ui.PopStyleColor()
-                if open then
-                    ui.Indent()
-                    for _, m in ipairs(modules) do
-                        local val, chg = ui.Checkbox(m._debugLabel, staging.debug[m.id])
-                        if chg then
-                            staging.debug[m.id] = val
-                            discovery.setDebugEnabled(m, val)
-                        end
-                    end
-                    ui.Unindent()
-                    ui.Spacing()
+        if #discovery.modules > 0 then
+            for _, entry in ipairs(discovery.modules) do
+                local val, chg = ui.Checkbox(entry._debugLabel, staging.debug[entry.id])
+                if chg then
+                    staging.debug[entry.id] = val
+                    discovery.setDebugEnabled(entry, val)
                 end
             end
         end
-
-        -- Special modules
-        if #discovery.specials > 0 then
-            PushTextColor(colors.info)
-            local open = ui.CollapsingHeader("Specials", ImGuiTreeNodeFlags.DefaultOpen)
-            ui.PopStyleColor()
-            if open then
-                ui.Indent()
-                for _, special in ipairs(discovery.specials) do
-                    local val, chg = ui.Checkbox(special._debugLabel, staging.debug[special.modName])
-                    if chg then
-                        staging.debug[special.modName] = val
-                        discovery.setDebugEnabled(special, val)
-                    end
-                end
-                ui.Unindent()
-            end
-        end
-    end
-
-    -- =============================================================================
-    -- CATEGORY LABEL LOOKUP
-    -- =============================================================================
-
-    local categoryKeyByLabel = {}
-    for _, cat in ipairs(discovery.categories) do
-        categoryKeyByLabel[cat.label] = cat.key
     end
 
     -- =============================================================================
@@ -982,15 +654,10 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             DrawProfiles()
         elseif selectedTab == "Dev" then
             DrawDev()
-        elseif specialByTabLabel[selectedTab] then
-            -- Special module tab
-            DrawSpecialTab(specialByTabLabel[selectedTab])
+        elseif moduleByTabLabel[selectedTab] then
+            DrawModuleTab(moduleByTabLabel[selectedTab])
         else
-            -- Dynamic category tab
-            local catKey = categoryKeyByLabel[selectedTab]
-            if catKey and discovery.categoryLayouts[catKey] then
-                DrawCheckboxGroup(discovery.categoryLayouts[catKey])
-            end
+            -- no-op
         end
 
         ui.EndChild()
