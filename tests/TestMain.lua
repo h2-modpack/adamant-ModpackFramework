@@ -92,7 +92,6 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
             modName = "Alpha",
             id = "Alpha",
             name = "Alpha",
-            category = "General",
             enabled = true,
             storage = {},
             apply = function()
@@ -106,7 +105,6 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
             modName = "Bravo",
             id = "Bravo",
             name = "Bravo",
-            category = "General",
             enabled = true,
             storage = {},
             apply = function()

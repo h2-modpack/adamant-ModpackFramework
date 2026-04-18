@@ -120,16 +120,13 @@ local function makePersistedConfig(storage, overrides)
     return persisted
 end
 
-function MockDiscovery.create(moduleDefs, specialDefs)
+function MockDiscovery.create(moduleDefs)
     moduleDefs = moduleDefs or {}
-    specialDefs = specialDefs or {}
 
     local discovery = {
         modules = {},
         modulesById = {},
-        modulesWithUi = {},
         modulesWithQuickContent = {},
-        specials = {},
         tabOrder = {},
     }
 
@@ -164,7 +161,6 @@ function MockDiscovery.create(moduleDefs, specialDefs)
             definition = definition,
             id = definition.id,
             name = definition.name,
-            category = definition.category,
             default = definition.default,
             storage = definition.storage,
         }
@@ -172,9 +168,6 @@ function MockDiscovery.create(moduleDefs, specialDefs)
         table.insert(discovery.modules, module)
         discovery.modulesById[module.id] = module
 
-        if type(module.mod.DrawTab) == "function" then
-            table.insert(discovery.modulesWithUi, module)
-        end
         if type(module.mod.DrawQuickContent) == "function" then
             table.insert(discovery.modulesWithQuickContent, module)
         end
@@ -183,46 +176,8 @@ function MockDiscovery.create(moduleDefs, specialDefs)
         table.insert(discovery.tabOrder, module)
     end
 
-    local function addSpecial(def)
-        local persisted = makePersistedConfig(def.storage, def.values)
-        persisted.Enabled = def.enabled == true
-        persisted.DebugMode = def.debug == true
-
-        local definition = {
-            modpack = def.modpack or "test-pack",
-            id = def.id or def.modName,
-            name = def.name or def.modName,
-            shortName = def.shortName,
-            storage = def.storage or {},
-            hashGroups = def.hashGroups,
-            affectsRunData = def.affectsRunData == true,
-            apply = def.apply,
-            revert = def.revert,
-            patchPlan = def.patchPlan,
-        }
-        local store = lib.store.create(persisted, definition)
-        local special = {
-            modName = def.modName,
-            mod = {
-                store = store,
-                definition = definition,
-                DrawTab = def.DrawTab,
-                DrawQuickContent = def.DrawQuickContent,
-            },
-            definition = definition,
-            storage = definition.storage,
-            ui = definition.ui,
-            uiState = store.uiState,
-            _tabLabel = definition.shortName or definition.name,
-        }
-        table.insert(discovery.specials, special)
-    end
-
     for _, def in ipairs(moduleDefs) do
         addModule(def)
-    end
-    for _, def in ipairs(specialDefs) do
-        addSpecial(def)
     end
 
     function discovery.isModuleEnabled(module)
@@ -247,14 +202,6 @@ function MockDiscovery.create(moduleDefs, specialDefs)
 
     function discovery.setStorageValue(module, aliasOrKey, value)
         module.mod.store.write(aliasOrKey, value)
-    end
-
-    function discovery.isSpecialEnabled(special)
-        return special.mod.store.read("Enabled") == true
-    end
-
-    function discovery.setSpecialEnabled(special, enabled)
-        return lib.mutation.setEnabled(special.definition, special.mod.store, enabled)
     end
 
     function discovery.isDebugEnabled(entry)

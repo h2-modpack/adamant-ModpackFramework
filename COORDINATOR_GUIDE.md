@@ -38,11 +38,9 @@ end
 modutil.once_loaded.game(function()
     rom.gui.add_imgui(Framework.getRenderer(PACK_ID))
     rom.gui.add_to_menu_bar(Framework.getMenuBar(PACK_ID))
-    loader.load(init, init)
+    loader.load(init)
 end)
 ```
-
-Use `loader.load(init, init)` unless you have a specific reload reason to split setup paths.
 
 ## `Framework.init(params)`
 

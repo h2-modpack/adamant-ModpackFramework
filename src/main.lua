@@ -65,8 +65,6 @@ local function ValidateInitParams(params)
         profile.Hash = profile.Hash or ""
         profile.Tooltip = profile.Tooltip or ""
     end
-
-
 end
 
 --- Scan saved profiles against the current discovered key surface.
@@ -105,7 +103,7 @@ local function AuditSavedProfiles(packId, profiles, discovery, lib)
                         local moduleFields = knownModules[namespace]
                         if moduleFields and not moduleFields[field] then
                             lib.logging.warn(packId,
-                                "Profile '%s': unrecognized key '%s.%s' â€” possible rename or removed option",
+                                "Profile '%s': unrecognized key '%s.%s' - possible rename or removed option",
                                 profileLabel, namespace, field)
                         end
                     end
