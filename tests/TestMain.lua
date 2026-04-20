@@ -135,7 +135,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
         end,
     }
 
-    local theme = Framework.createTheme()
+    local theme = Framework.createTheme(lib)
     local def = {
         NUM_PROFILES = 1,
         defaultProfiles = {
@@ -265,7 +265,7 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
         end,
     }
 
-    local theme = Framework.createTheme()
+    local theme = Framework.createTheme(lib)
     local def = {
         NUM_PROFILES = 1,
         defaultProfiles = {
