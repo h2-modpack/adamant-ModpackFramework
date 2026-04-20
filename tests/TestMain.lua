@@ -28,7 +28,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
     local function noop() end
 
     rom.ImGui = {
-        Begin = function() return true end,
+        Begin = function() return true, true end,
         End = noop,
         SetNextWindowSize = noop,
         MenuItem = function() return true end,
@@ -183,7 +183,7 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
     local function noop() end
 
     rom.ImGui = {
-        Begin = function() return true end,
+        Begin = function() return true, true end,
         End = noop,
         SetNextWindowSize = noop,
         MenuItem = function() return true end,
