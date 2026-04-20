@@ -78,11 +78,9 @@ Each discovered coordinated module must expose:
 - `definition.id`
 - `definition.name`
 - `definition.storage`
-- public `store`
-- public `session`
-- public `DrawTab`
+- public `host`
 
-`DrawQuickContent` is optional.
+`host.drawQuickContent(...)` is optional.
 
 Lifecycle shape is inferred from:
 - `patchPlan`
@@ -91,9 +89,8 @@ Lifecycle shape is inferred from:
 
 Framework skips modules that are missing:
 - `definition.storage`
-- public `store`
-- public `session`
-- public `DrawTab`
+- public `host`
+- host draw support
 - required lifecycle for `affectsRunData = true`
 
 ## Window Model
@@ -109,14 +106,14 @@ There is no special-module split anymore.
 
 Module tabs are simple:
 - Framework renders the enable checkbox
-- Framework calls `entry.mod.DrawTab(ui, entry.session)` when enabled
-- if `session` is dirty after draw, Framework commits it through `lib.lifecycle.commitSession(...)`
+- Framework calls `entry.host.drawTab(ui)` when enabled
+- if staged state is dirty after draw, Framework commits it through `entry.host.commitIfDirty()`
 
 ## Quick Setup
 
 Quick Setup renders in this order:
 1. coordinator-owned content from `def.renderQuickSetup(ctx)`
-2. each discovered module with `DrawQuickContent`
+2. each discovered module whose `host.hasQuickContent()` is true
 
 There is no quick-node discovery from `definition.ui`.
 There is no `selectQuickUi` path anymore.
@@ -131,8 +128,8 @@ Hash/profile behavior is built on:
 - optional `definition.hashGroups`
 
 Profile load:
-- stages decoded persisted values through each module `session`
-- flushes managed sessions to config
+- stages decoded persisted values through each module host/session plumbing
+- flushes staged managed values to config
 - reapplies enabled/runtime state
 - rolls the operation back on failure
 

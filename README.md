@@ -10,15 +10,15 @@ Framework now owns:
 
 Framework does not define module UI shapes anymore.
 Under the current contract, each discovered coordinated module renders itself through:
-- `DrawTab(ui, session)`
-- optional `DrawQuickContent(ui, session)`
+- `host.drawTab(ui)`
+- optional `host.drawQuickContent(ui)`
 
 ## Docs
 
 - [COORDINATOR_GUIDE.md](COORDINATOR_GUIDE.md)
   Bootstrap, discovery, and the live coordinator/module contract.
 - [QUICK_SETUP.md](QUICK_SETUP.md)
-  Current Quick Setup model: coordinator quick content plus module `DrawQuickContent`.
+  Current Quick Setup model: coordinator quick content plus module host quick content.
 - [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md)
   Compatibility rules for module ids, storage aliases/defaults, and hash groups.
 - [CONTRIBUTING.md](CONTRIBUTING.md)
@@ -31,11 +31,9 @@ Discovery includes modules that expose:
 - `definition.id`
 - `definition.name`
 - `definition.storage`
-- public `store`
-- public `session`
-- public `DrawTab`
+- public `host`
 
-`DrawQuickContent` is optional.
+`host.drawQuickContent(...)` is optional.
 
 Framework sidebar behavior is now:
 - one top-level tab per discovered module

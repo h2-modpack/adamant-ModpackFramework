@@ -19,7 +19,7 @@ It is not meant to mirror full module tabs.
 Quick Setup renders in this order:
 
 1. coordinator-owned content from `def.renderQuickSetup(ctx)`
-2. each discovered module that exposes `DrawQuickContent(ui, session)`
+2. each discovered module whose `host.hasQuickContent()` is true
 
 This happens inside [`src/ui.lua`](src/ui.lua).
 
@@ -41,20 +41,30 @@ Current `ctx` fields:
 
 Keep coordinator quick content coordinator-scoped.
 If a control belongs to a module, put it in that module's `DrawQuickContent`.
+If a control belongs to a module, put it in that module's draw/host surface rather than coordinator code.
 
 ## Module Quick Content
 
 Modules participate in Quick Setup through:
 
 ```lua
-public.DrawQuickContent = function(ui, session)
+internal.DrawQuickContent = function(ui, session)
     ...
 end
+
+public.host = lib.createModuleHost({
+    definition = public.definition,
+    store = store,
+    session = session,
+    drawTab = internal.DrawTab,
+    drawQuickContent = internal.DrawQuickContent,
+})
 ```
 
 Framework behavior:
 - only enabled modules render their quick content
-- module quick content receives the module managed `session`
+- module quick content is called through `entry.host.drawQuickContent(ui)`
+- the draw callback receives the restricted author `session`
 - if the module dirty-stages persisted state during quick content, Framework commits it after draw
 
 ## What Was Removed
