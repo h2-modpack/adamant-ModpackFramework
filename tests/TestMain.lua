@@ -30,6 +30,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
     rom.ImGui = {
         Begin = function() return true end,
         End = noop,
+        SetNextWindowSize = noop,
         MenuItem = function() return true end,
         Checkbox = function(label, current)
             if label == "Enable Mod" then
@@ -184,6 +185,7 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
     rom.ImGui = {
         Begin = function() return true end,
         End = noop,
+        SetNextWindowSize = noop,
         MenuItem = function() return true end,
         Checkbox = function(label, current)
             table.insert(checkboxLabels, label)

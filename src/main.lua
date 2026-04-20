@@ -121,7 +121,7 @@ function Framework.init(params)
     local lib = rom.mods["adamant-ModpackLib"]
     ValidateInitParams(params)
 
-    lib.coordinator.register(params.packId, params.config)
+    lib.lifecycle.registerCoordinator(params.packId, params.config)
     import_as_fallback(rom.game)
 
     local packIndex = _packs[params.packId] and _packs[params.packId]._index or nil
@@ -135,6 +135,14 @@ function Framework.init(params)
     local theme = Framework.createTheme()
 
     discovery.run(params.def and params.def.moduleOrder)
+    for _, entry in ipairs(discovery.modules) do
+        local ok, err = entry.host.applyOnLoad()
+        if not ok then
+            lib.logging.warn("%s startup lifecycle failed: %s",
+                tostring(entry.name or entry.id or "module"),
+                tostring(err))
+        end
+    end
 
     AuditSavedProfiles(params.packId, params.config.Profiles, discovery, lib)
 
@@ -157,7 +165,7 @@ public.init = Framework.init
 public.getRenderer = function(packId)
     return function()
         local pack = _packs[packId]
-        if not pack or not pack.ui or type(pack.ui.renderWindow) ~= "function" then
+        if not pack or not pack.ui then
             return
         end
         pack.ui.renderWindow()
@@ -167,7 +175,7 @@ end
 public.getMenuBar = function(packId)
     return function()
         local pack = _packs[packId]
-        if not pack or not pack.ui or type(pack.ui.addMenuBar) ~= "function" then
+        if not pack or not pack.ui then
             return
         end
         pack.ui.addMenuBar()
@@ -175,20 +183,14 @@ public.getMenuBar = function(packId)
 end
 
 public.getAlwaysDrawRenderer = function(packId)
-    local wasGuiOpen = type(rom) == "table"
-        and type(rom.gui) == "table"
-        and type(rom.gui.is_open) == "function"
-        and rom.gui.is_open() == true or false
+    local wasGuiOpen = rom.gui.is_open() == true
 
     return function()
-        local isGuiOpen = type(rom) == "table"
-            and type(rom.gui) == "table"
-            and type(rom.gui.is_open) == "function"
-            and rom.gui.is_open() == true or false
+        local isGuiOpen = rom.gui.is_open() == true
 
         if wasGuiOpen and not isGuiOpen then
             local pack = _packs[packId]
-            if pack and pack.hud and type(pack.hud.flushPendingHash) == "function" then
+            if pack and pack.hud then
                 pack.hud.flushPendingHash()
             end
         end

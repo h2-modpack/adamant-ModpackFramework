@@ -2,7 +2,7 @@ local lu = require('luaunit')
 
 TestLibHost = {}
 
-function TestLibHost:testCommitStateFlushesManagedAliasState()
+function TestLibHost:testCommitSessionFlushesManagedAliasState()
     local config = { Flag = false, Enabled = false, DebugMode = false }
     local definition = {
         id = "ManagedState",
@@ -12,30 +12,22 @@ function TestLibHost:testCommitStateFlushesManagedAliasState()
         },
         affectsRunData = false,
     }
-    local store = lib.store.create(config, definition)
-    local uiState = store.uiState
+    local store, session = lib.createStore(config, definition)
 
-    uiState.set("Flag", true)
+    session.write("Flag", true)
 
-    local ok, err = lib.host.commitState(definition, store, uiState)
+    local ok, err = lib.lifecycle.commitSession(definition, store, session)
 
     lu.assertTrue(ok, tostring(err))
     lu.assertTrue(config.Flag)
-    lu.assertFalse(uiState.isDirty())
-end
-
-function TestLibHost:testCommitStateRejectsMissingUiState()
-    local ok, err = lib.host.commitState({ id = "Missing" }, { read = function() return false end }, nil)
-
-    lu.assertFalse(ok)
-    lu.assertStrContains(err, "uiState is missing transactional commit helpers")
+    lu.assertFalse(session.isDirty())
 end
 
 TestLibValidation = {}
 
 function TestLibValidation:testDuplicateStorageAliasesWarn()
     CaptureWarnings()
-    lib.storage.validate({
+    AdamantModpackLib_Internal.storage.validate({
         { type = "bool", alias = "Flag", configKey = "FlagA", default = false },
         { type = "bool", alias = "Flag", configKey = "FlagB", default = false },
     }, "DuplicateStorage")
@@ -45,3 +37,5 @@ function TestLibValidation:testDuplicateStorageAliasesWarn()
     lu.assertEquals(#warnings, 1)
     lu.assertStrContains(warnings[1], "duplicate alias 'Flag'")
 end
+
+

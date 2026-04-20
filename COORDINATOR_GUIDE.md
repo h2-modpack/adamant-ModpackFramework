@@ -79,6 +79,7 @@ Each discovered coordinated module must expose:
 - `definition.name`
 - `definition.storage`
 - public `store`
+- public `session`
 - public `DrawTab`
 
 `DrawQuickContent` is optional.
@@ -91,6 +92,7 @@ Lifecycle shape is inferred from:
 Framework skips modules that are missing:
 - `definition.storage`
 - public `store`
+- public `session`
 - public `DrawTab`
 - required lifecycle for `affectsRunData = true`
 
@@ -107,8 +109,8 @@ There is no special-module split anymore.
 
 Module tabs are simple:
 - Framework renders the enable checkbox
-- Framework calls `entry.mod.DrawTab(ui, entry.uiState)` when enabled
-- if `uiState` is dirty after draw, Framework commits it through `lib.host.commitState(...)`
+- Framework calls `entry.mod.DrawTab(ui, entry.session)` when enabled
+- if `session` is dirty after draw, Framework commits it through `lib.lifecycle.commitSession(...)`
 
 ## Quick Setup
 
@@ -129,8 +131,8 @@ Hash/profile behavior is built on:
 - optional `definition.hashGroups`
 
 Profile load:
-- writes decoded persisted values
-- reloads managed `uiState`
+- stages decoded persisted values through each module `session`
+- flushes managed sessions to config
 - reapplies enabled/runtime state
 - rolls the operation back on failure
 
@@ -141,7 +143,7 @@ Compatibility-sensitive details are documented in [HASH_PROFILE_ABI.md](HASH_PRO
 Framework-owned operations are transactional when practical:
 - per-entry enable/disable
 - coordinator master `ModEnabled` toggle
-- managed `uiState` commit
+- managed `session` commit
 - profile/hash load
 
 The intended outcome is:
@@ -165,3 +167,4 @@ Framework warnings use:
 - [README.md](README.md)
 - [QUICK_SETUP.md](QUICK_SETUP.md)
 - [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md)
+

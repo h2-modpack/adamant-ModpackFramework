@@ -21,6 +21,9 @@ rom = {
         SetupRunData = function() end,
     },
     ImGui = {},
+    ImGuiCond = {
+        FirstUseEver = 1,
+    },
     ImGuiCol = {
         Text = 1,
         TextDisabled = 2,
@@ -57,6 +60,17 @@ rom.mods['SGG_Modding-ENVY'] = {
 
 rom.mods['SGG_Modding-Chalk'] = {
     auto = function() return { DebugMode = false } end,
+}
+
+rom.mods['SGG_Modding-ModUtil'] = {
+    once_loaded = {
+        game = function() end,
+    },
+    mod = {
+        Path = {
+            Wrap = function() end,
+        },
+    },
 }
 
 import = function(path)
@@ -149,15 +163,21 @@ function MockDiscovery.create(moduleDefs)
             shortName = def.shortName,
             tooltip = def.tooltip,
         }
-        local store = lib.store.create(persisted, definition)
+        local store, session = lib.createStore(persisted, definition)
+        local host = lib.createModuleHost({
+            definition = definition,
+            store = store,
+            session = session,
+            drawTab = def.DrawTab,
+            drawQuickContent = def.DrawQuickContent,
+        })
         local module = {
             modName = def.modName or ("adamant-" .. def.id),
             mod = {
-                store = store,
                 definition = definition,
-                DrawTab = def.DrawTab,
-                DrawQuickContent = def.DrawQuickContent,
+                host = host,
             },
+            host = host,
             definition = definition,
             id = definition.id,
             name = definition.name,
@@ -168,7 +188,7 @@ function MockDiscovery.create(moduleDefs)
         table.insert(discovery.modules, module)
         discovery.modulesById[module.id] = module
 
-        if type(module.mod.DrawQuickContent) == "function" then
+        if module.host.hasQuickContent() then
             table.insert(discovery.modulesWithQuickContent, module)
         end
 
@@ -181,7 +201,7 @@ function MockDiscovery.create(moduleDefs)
     end
 
     function discovery.isModuleEnabled(module)
-        return module.mod.store.read("Enabled") == true
+        return module.host.read("Enabled") == true
     end
 
     function discovery.isEntryEnabled(entry)
@@ -189,7 +209,7 @@ function MockDiscovery.create(moduleDefs)
     end
 
     function discovery.setModuleEnabled(module, enabled)
-        return lib.mutation.setEnabled(module.definition, module.mod.store, enabled)
+        return module.host.setEnabled(enabled)
     end
 
     function discovery.setEntryEnabled(entry, enabled)
@@ -197,20 +217,22 @@ function MockDiscovery.create(moduleDefs)
     end
 
     function discovery.getStorageValue(module, aliasOrKey)
-        return module.mod.store.read(aliasOrKey)
+        return module.host.read(aliasOrKey)
     end
 
     function discovery.setStorageValue(module, aliasOrKey, value)
-        module.mod.store.write(aliasOrKey, value)
+        return module.host.writeAndFlush(aliasOrKey, value)
     end
 
     function discovery.isDebugEnabled(entry)
-        return entry.mod.store.read("DebugMode") == true
+        return entry.host.read("DebugMode") == true
     end
 
     function discovery.setDebugEnabled(entry, value)
-        entry.mod.store.write("DebugMode", value)
+        entry.host.setDebugMode(value)
     end
 
     return discovery
 end
+
+

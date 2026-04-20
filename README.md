@@ -10,8 +10,8 @@ Framework now owns:
 
 Framework does not define module UI shapes anymore.
 Under the current contract, each discovered coordinated module renders itself through:
-- `DrawTab(ui, uiState)`
-- optional `DrawQuickContent(ui, uiState)`
+- `DrawTab(ui, session)`
+- optional `DrawQuickContent(ui, session)`
 
 ## Docs
 
@@ -32,6 +32,7 @@ Discovery includes modules that expose:
 - `definition.name`
 - `definition.storage`
 - public `store`
+- public `session`
 - public `DrawTab`
 
 `DrawQuickContent` is optional.

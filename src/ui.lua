@@ -20,11 +20,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local DEFAULT_WINDOW_WIDTH = 1280
     local DEFAULT_WINDOW_HEIGHT = 840
     local contractWarn       = lib.logging.warn
-    local mutatesRunData     = lib.mutation.mutatesRunData
-    local applyDefinition    = lib.mutation.apply
-    local revertDefinition   = lib.mutation.revert
-    local commitState        = lib.host.commitState
-    local auditAndResyncState = lib.host.auditAndResyncState
+    local mutatesRunData     = lib.lifecycle.mutatesRunData
 
     -- Unpack theme for convenient access
     local colors             = theme.colors
@@ -62,10 +58,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         for _, m in ipairs(discovery.modules) do
             staging.modules[m.id] = discovery.isEntryEnabled(m)
             staging.debug[m.id] = discovery.isDebugEnabled(m)
-            local uiState = m.mod.store and m.mod.store.uiState
-            if uiState and uiState.reloadFromConfig then
-                uiState.reloadFromConfig()
-            end
+            m.host.reloadFromConfig()
         end
 
         -- Profiles
@@ -208,7 +201,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         hud.markHashDirty()
     end
 
-    local function OnUiStateFlushed(definition, enabled)
+    local function OnSessionFlushed(definition, enabled)
         FinishUiChange(definition, enabled)
     end
 
@@ -217,9 +210,9 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local function SetEntryRuntimeState(entry, state)
         local ok, err
         if state then
-            ok, err = applyDefinition(entry.definition, entry.mod.store)
+            ok, err = entry.host.applyMutation()
         else
-            ok, err = revertDefinition(entry.definition, entry.mod.store)
+            ok, err = entry.host.revertMutation()
         end
         if not ok then
             contractWarn(packId,
@@ -303,26 +296,21 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     -- GENERIC TAB CONTENT RENDERER
     -- =============================================================================
 
-    local function CommitEntryUiState(entry, enabled)
-        local uiState = entry.uiState
-        if not uiState or not uiState.isDirty or not uiState.isDirty() then
-            return
-        end
-
-        local ok = commitState(entry.definition, entry.mod.store, uiState)
+    local function CommitEntrySession(entry, enabled)
+        local ok = entry.host.commitIfDirty()
         if ok then
-            OnUiStateFlushed(entry.definition, enabled)
+            OnSessionFlushed(entry.definition, enabled)
         end
     end
 
     local function DrawEntryBody(entry, enabled)
-        if not enabled or type(entry.mod.DrawTab) ~= "function" then
+        if not enabled or not entry.host.hasDrawTab() then
             return
         end
 
-        entry.mod.DrawTab(ui, entry.uiState)
+        entry.host.drawTab(ui)
 
-        CommitEntryUiState(entry, enabled)
+        CommitEntrySession(entry, enabled)
     end
 
     -- =============================================================================
@@ -341,7 +329,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
 
         for _, entry in ipairs(discovery.tabOrder or {}) do
             table.insert(cachedTabList, entry._tabLabel)
-            if type(entry.mod.DrawQuickContent) == "function" then
+            if entry.host.hasQuickContent() then
                 table.insert(cachedQuickList, entry)
             end
         end
@@ -351,12 +339,9 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         return cachedTabList
     end
 
-    local function AuditAndResyncAllUiState()
+    local function ResyncAllSessions()
         for _, m in ipairs(discovery.modules) do
-            local uiState = m.mod.store and m.mod.store.uiState
-            if uiState then
-                auditAndResyncState(m.name or m.id or m.modName, uiState)
-            end
+            m.host.resync()
         end
         SnapshotToStaging()
     end
@@ -419,13 +404,13 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         end
 
         for _, entry in ipairs(cachedQuickList or {}) do
-            if staging.modules[entry.id] and entry.mod.DrawQuickContent then
+            if staging.modules[entry.id] and entry.host.hasQuickContent() then
                 ui.Separator()
                 ui.Spacing()
                 DrawColoredText(colors.info, entry.name or entry.id)
                 ui.Spacing()
-                entry.mod.DrawQuickContent(ui, entry.uiState)
-                CommitEntryUiState(entry, staging.modules[entry.id])
+                entry.host.drawQuickContent(ui)
+                CommitEntrySession(entry, staging.modules[entry.id])
             end
         end
     end
@@ -648,8 +633,8 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             "Print lib-internal diagnostic warnings (schema errors, unknown field types). Shared across all packs.")
         end
 
-        if ui.Button("Audit + Resync UI State") then
-            AuditAndResyncAllUiState()
+        if ui.Button("Resync Sessions") then
+            ResyncAllSessions()
         end
 
         DrawColoredText(colors.info, "Per-Module Debug")

@@ -14,29 +14,22 @@ function Framework.createDiscovery(packId, config, lib)
     local Discovery = {}
     local contractWarn = lib.logging.warn
     local warnIf = lib.logging.warnIf
-    local inferShape = lib.mutation.inferShape
-    local mutatesRunData = lib.mutation.mutatesRunData
-    local setEnabled = lib.mutation.setEnabled
-
-    local function GetStore(mod)
-        return type(mod.store) == "table" and mod.store or nil
+    local inferMutation = lib.lifecycle.inferMutation
+    local mutatesRunData = lib.lifecycle.mutatesRunData
+    local function GetHost(mod)
+        return type(mod.host) == "table" and mod.host or nil
     end
 
-    local function ReadPersisted(mod, key)
-        return GetStore(mod).read(key)
+    local function ReadPersisted(entry, key)
+        return entry.host.read(key)
     end
 
-    local function WritePersisted(mod, key, value)
-        GetStore(mod).write(key, value)
-    end
-
-    local function GetUiState(mod)
-        local store = GetStore(mod)
-        return store and store.uiState or nil
+    local function WriteStagedAndFlush(entry, key, value)
+        return entry.host.writeAndFlush(key, value)
     end
 
     local function SetEntryEnabled(entry, enabled)
-        local ok, err = setEnabled(entry.definition, GetStore(entry.mod), enabled)
+        local ok, err = entry.host.setEnabled(enabled)
         if not ok then
             contractWarn(packId,
                 "%s %s failed: %s", entry.modName, enabled and "enable" or "disable", err)
@@ -48,10 +41,12 @@ function Framework.createDiscovery(packId, config, lib)
         local def = entry.def
         local mod = entry.mod
         local modName = entry.modName
+        local host = GetHost(mod)
 
         return {
             modName = modName,
             mod = mod,
+            host = host,
             definition = def,
             id = def.id,
             name = def.name,
@@ -59,7 +54,6 @@ function Framework.createDiscovery(packId, config, lib)
             tooltip = def.tooltip or "",
             default = def.default,
             storage = def.storage,
-            uiState = GetUiState(mod),
             _enableLabel = "Enable " .. tostring(def.name),
             _debugLabel = tostring(def.name or def.id or modName)
                 .. "##" .. tostring(def.id or modName),
@@ -122,12 +116,12 @@ function Framework.createDiscovery(packId, config, lib)
             local modName = entry.modName
             local mod = entry.mod
             local def = entry.def
-            local inferredMutationShape, mutationInfo = inferShape(def)
+            local inferredMutationShape, mutationInfo = inferMutation(def)
             local hasLifecycle = mutationInfo.hasManual or mutationInfo.hasPatch
             local lifecycleRequired = mutatesRunData(def)
-            local store = GetStore(mod)
-            local hasDrawTab = type(mod.DrawTab) == "function"
-            local hasQuickContent = type(mod.DrawQuickContent) == "function"
+            local host = GetHost(mod)
+            local hasDrawTab = host and host.hasDrawTab() == true
+            local hasQuickContent = host and host.hasQuickContent() == true
 
             if mutatesRunData(def) and not inferredMutationShape then
                 contractWarn(packId,
@@ -141,11 +135,11 @@ function Framework.createDiscovery(packId, config, lib)
                         "Skipping %s: missing id/name or lifecycle (patchPlan/apply/revert)", modName)
                 elseif type(def.storage) ~= "table" then
                     contractWarn(packId, "Skipping %s: missing definition.storage", modName)
-                elseif not store or type(store.read) ~= "function" or type(store.write) ~= "function" then
-                    contractWarn(packId, "%s: module is missing public.store", modName)
+                elseif not host then
+                    contractWarn(packId, "%s: module is missing public.host", modName)
                 elseif not hasDrawTab then
                     contractWarn(packId,
-                        "%s: coordinated modules must expose DrawTab under the lean framework contract",
+                        "%s: coordinated modules must expose host.drawTab under the lean framework contract",
                         modName)
                 else
                     local discovered = BuildEntry(entry)
@@ -210,7 +204,7 @@ function Framework.createDiscovery(packId, config, lib)
     end
 
     function Discovery.isEntryEnabled(entry)
-        return ReadPersisted(entry.mod, "Enabled") == true
+        return ReadPersisted(entry, "Enabled") == true
     end
 
     function Discovery.setEntryEnabled(entry, enabled)
@@ -218,11 +212,11 @@ function Framework.createDiscovery(packId, config, lib)
     end
 
     function Discovery.getStorageValue(entry, aliasOrKey)
-        return ReadPersisted(entry.mod, aliasOrKey)
+        return ReadPersisted(entry, aliasOrKey)
     end
 
     function Discovery.setStorageValue(entry, aliasOrKey, value)
-        WritePersisted(entry.mod, aliasOrKey, value)
+        return WriteStagedAndFlush(entry, aliasOrKey, value)
     end
 
     function Discovery.isModuleEnabled(module)
@@ -234,12 +228,14 @@ function Framework.createDiscovery(packId, config, lib)
     end
 
     function Discovery.isDebugEnabled(entry)
-        return ReadPersisted(entry.mod, "DebugMode") == true
+        return ReadPersisted(entry, "DebugMode") == true
     end
 
     function Discovery.setDebugEnabled(entry, val)
-        WritePersisted(entry.mod, "DebugMode", val)
+        entry.host.setDebugMode(val)
     end
 
     return Discovery
 end
+
+

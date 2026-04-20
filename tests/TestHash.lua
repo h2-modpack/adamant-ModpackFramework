@@ -84,18 +84,18 @@ function TestHashStorage:testRegularAndSpecialStorageRoundTrip()
 
     local module = discovery.modulesById.GodPool
     local biome = discovery.modulesById.BiomeControl
-    module.mod.store.write("Enabled", false)
-    module.mod.store.write("EnabledFlag", false)
-    module.mod.store.write("Count", 3)
-    biome.mod.store.write("Enabled", false)
-    biome.mod.store.write("Mode", "Vanilla")
+    discovery.setModuleEnabled(module, false)
+    module.host.writeAndFlush("EnabledFlag", false)
+    module.host.writeAndFlush("Count", 3)
+    discovery.setModuleEnabled(biome, false)
+    biome.host.writeAndFlush("Mode", "Vanilla")
 
     lu.assertTrue(hash.ApplyConfigHash(canonical))
-    lu.assertTrue(module.mod.store.read("Enabled"))
-    lu.assertTrue(module.mod.store.read("EnabledFlag"))
-    lu.assertEquals(module.mod.store.read("Count"), 7)
-    lu.assertTrue(biome.mod.store.read("Enabled"))
-    lu.assertEquals(biome.mod.store.read("Mode"), "Chaos")
+    lu.assertTrue(module.host.read("Enabled"))
+    lu.assertTrue(module.host.read("EnabledFlag"))
+    lu.assertEquals(module.host.read("Count"), 7)
+    lu.assertTrue(biome.host.read("Enabled"))
+    lu.assertEquals(biome.host.read("Mode"), "Chaos")
 end
 
 function TestHashStorage:testFingerprintChangesWithConfig()
@@ -113,7 +113,7 @@ function TestHashStorage:testFingerprintChangesWithConfig()
     local hash = makeHash(discovery)
     local canonicalA, fingerprintA = hash.GetConfigHash()
 
-    discovery.modulesById.GodPool.mod.store.write("EnabledFlag", true)
+    discovery.modulesById.GodPool.host.writeAndFlush("EnabledFlag", true)
     local canonicalB, fingerprintB = hash.GetConfigHash()
 
     lu.assertNotEquals(canonicalA, canonicalB)
@@ -147,8 +147,8 @@ function TestHashStorage:testApplyConfigHashRollsBackWhenEnableFails()
     local ok = hash.ApplyConfigHash("_v=1|GodPool=1|GodPool.EnabledFlag=1")
 
     lu.assertFalse(ok)
-    lu.assertFalse(module.mod.store.read("Enabled"))
-    lu.assertFalse(module.mod.store.read("EnabledFlag"))
+    lu.assertFalse(module.host.read("Enabled"))
+    lu.assertFalse(module.host.read("EnabledFlag"))
     lu.assertEquals(applyCalls, 1)
     lu.assertEquals(revertCalls, 0)
 end
@@ -232,7 +232,7 @@ function TestHashStorage:testTransientRootsAreExcludedFromHash()
         },
     })
 
-    discovery.modulesById.GodPool.mod.store.uiState.set("FilterText", "Apollo")
+    discovery.modulesById.GodPool.host.stage("FilterText", "Apollo")
     local canonical = makeHash(discovery).GetConfigHash()
 
     lu.assertStrContains(canonical, "GodPool.EnabledFlag=1")

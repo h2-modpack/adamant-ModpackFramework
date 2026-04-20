@@ -19,7 +19,7 @@ It is not meant to mirror full module tabs.
 Quick Setup renders in this order:
 
 1. coordinator-owned content from `def.renderQuickSetup(ctx)`
-2. each discovered module that exposes `DrawQuickContent(ui, uiState)`
+2. each discovered module that exposes `DrawQuickContent(ui, session)`
 
 This happens inside [`src/ui.lua`](src/ui.lua).
 
@@ -40,21 +40,21 @@ Current `ctx` fields:
 - `drawColoredText`
 
 Keep coordinator quick content coordinator-scoped.
-If a control belongs to a module, put it in that module’s `DrawQuickContent`.
+If a control belongs to a module, put it in that module's `DrawQuickContent`.
 
 ## Module Quick Content
 
 Modules participate in Quick Setup through:
 
 ```lua
-public.DrawQuickContent = function(ui, uiState)
+public.DrawQuickContent = function(ui, session)
     ...
 end
 ```
 
 Framework behavior:
 - only enabled modules render their quick content
-- module quick content receives the module managed `uiState`
+- module quick content receives the module managed `session`
 - if the module dirty-stages persisted state during quick content, Framework commits it after draw
 
 ## What Was Removed

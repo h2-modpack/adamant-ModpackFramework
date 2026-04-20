@@ -3,21 +3,27 @@ function Framework.createHash(discovery, config, lib, packId)
     local Hash = {}
     local contractWarn = lib.logging.warn
     local warnIf = lib.logging.warnIf
-    local getStorageAliases = lib.storage.getAliases
-    local getPackWidth = lib.storage.getPackWidth
-    local writeBitsValue = lib.storage.writePackedBits
-    local readBitsValue = lib.storage.readPackedBits
-    local getStorageRoots = lib.storage.getRoots
-    local valuesEqual = lib.storage.valuesEqual
-    local encodeHashValue = lib.storage.toHash
-    local decodeHashValue = lib.storage.fromHash
+    local getStorageAliases = lib.hashing.getAliases
+    local getPackWidth = lib.hashing.getPackWidth
+    local writeBitsValue = lib.hashing.writePackedBits
+    local readBitsValue = lib.hashing.readPackedBits
+    local getStorageRoots = lib.hashing.getRoots
+    local valuesEqual = lib.hashing.valuesEqual
+    local encodeHashValue = lib.hashing.toHash
+    local decodeHashValue = lib.hashing.fromHash
 
-    local function ReadPersisted(mod, key)
-        return mod.store.read(key)
+    local function ReadPersisted(entry, key)
+        return entry.host.read(key)
     end
 
-    local function WritePersisted(mod, key, value)
-        mod.store.write(key, value)
+    local function StagePersisted(entry, key, value)
+        entry.host.stage(key, value)
+    end
+
+    local function FlushManagedSessions()
+        for _, m in ipairs(discovery.modules) do
+            m.host.flush()
+        end
     end
 
     local function EncodeGroupMemberValue(node, value)
@@ -108,7 +114,7 @@ function Framework.createHash(discovery, config, lib, packId)
 
     local function GetEntryHashMeta(entry)
         local storage = entry.storage
-        local definition = entry.mod and entry.mod.definition
+        local definition = entry.definition
         if not storage or not definition or type(definition.hashGroups) ~= "table" then
             return {}, {}
         end
@@ -143,12 +149,9 @@ function Framework.createHash(discovery, config, lib, packId)
         return getStorageRoots(entry.storage)
     end
 
-    local function ReloadManagedUiState()
+    local function ReloadManagedSession()
         for _, m in ipairs(discovery.modules) do
-            local uiState = m.uiState or (m.mod.store and m.mod.store.uiState)
-            if uiState and uiState.reloadFromConfig then
-                uiState.reloadFromConfig()
-            end
+            m.host.reloadFromConfig()
         end
     end
 
@@ -164,7 +167,7 @@ function Framework.createHash(discovery, config, lib, packId)
             for _, root in ipairs(GetRootStorage(m)) do
                 table.insert(roots, {
                     alias = root.alias,
-                    value = ClonePersistedValue(ReadPersisted(m.mod, root.alias)),
+                    value = ClonePersistedValue(ReadPersisted(m, root.alias)),
                 })
             end
             snapshot.moduleStorage[m] = roots
@@ -179,19 +182,17 @@ function Framework.createHash(discovery, config, lib, packId)
         for _, m in ipairs(discovery.modules) do
             local roots = snapshot.moduleStorage[m] or {}
             for _, entry in ipairs(roots) do
-                WritePersisted(m.mod, entry.alias, ClonePersistedValue(entry.value))
+                StagePersisted(m, entry.alias, ClonePersistedValue(entry.value))
             end
         end
 
-        ReloadManagedUiState()
+        FlushManagedSessions()
 
         for _, m in ipairs(discovery.modules) do
             local previousEnabled = snapshot.moduleEnabled[m]
-            if previousEnabled then
-                local ok, err = discovery.setModuleEnabled(m, previousEnabled)
-                if ok == false then
-                    table.insert(rollbackErrors, string.format("%s: %s", tostring(m.modName or m.id), tostring(err)))
-                end
+            local ok, err = discovery.setModuleEnabled(m, previousEnabled)
+            if ok == false then
+                table.insert(rollbackErrors, string.format("%s: %s", tostring(m.modName or m.id), tostring(err)))
             end
         end
 
@@ -326,7 +327,7 @@ function Framework.createHash(discovery, config, lib, packId)
                 local packedValue = 0
                 local isDefault = true
                 for _, member in ipairs(group.members) do
-                    local value = ReadPersisted(m.mod, member.alias)
+                    local value = ReadPersisted(m, member.alias)
                     local encoded = EncodeGroupMemberValue(member.node, value)
                     if encoded ~= EncodeGroupMemberValue(member.node, member.node.default) then
                         isDefault = false
@@ -340,7 +341,7 @@ function Framework.createHash(discovery, config, lib, packId)
 
             for _, root in ipairs(GetRootStorage(m)) do
                 if not meta.groupedAliases[root.alias] then
-                    local current = ReadPersisted(m.mod, root.alias)
+                    local current = ReadPersisted(m, root.alias)
                     if not valuesEqual(root, current, root.default) then
                         local encoded = EncodeValue(root, current, "storage root")
                         if encoded ~= nil then
@@ -396,11 +397,11 @@ function Framework.createHash(discovery, config, lib, packId)
                         local packedValue = Hash.DecodeBase62(stored) or group.packedDefault
                         for _, member in ipairs(group.members) do
                             local encoded = readBitsValue(packedValue, member.offset, member.width)
-                            WritePersisted(m.mod, member.alias, DecodeGroupMemberValue(member.node, encoded))
+                            StagePersisted(m, member.alias, DecodeGroupMemberValue(member.node, encoded))
                         end
                     else
                         for _, member in ipairs(group.members) do
-                            WritePersisted(m.mod, member.alias, member.node.default)
+                            StagePersisted(m, member.alias, member.node.default)
                         end
                     end
                 end
@@ -409,20 +410,22 @@ function Framework.createHash(discovery, config, lib, packId)
                     if not meta.groupedAliases[root.alias] then
                         local stored = kv[m.id .. "." .. root.alias]
                         if stored ~= nil then
-                            WritePersisted(m.mod, root.alias, DecodeValue(root, stored, "storage root"))
+                            StagePersisted(m, root.alias, DecodeValue(root, stored, "storage root"))
                         else
-                            WritePersisted(m.mod, root.alias, root.default)
+                            StagePersisted(m, root.alias, root.default)
                         end
                     end
                 end
             end
+
+            FlushManagedSessions()
 
         end, debug.traceback)
         if not okWrite then
             return FailApplyHash(snapshot, writeErr)
         end
 
-        ReloadManagedUiState()
+        ReloadManagedSession()
 
         for _, m in ipairs(discovery.modules) do
             local ok, err = discovery.setModuleEnabled(m, moduleTargets[m])
