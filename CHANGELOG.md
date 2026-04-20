@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-20
+
 Initial public release of the adamant Modpack Framework surface.
 
 ### Added
@@ -23,4 +25,5 @@ Initial public release of the adamant Modpack Framework surface.
 - this release documents the current lean coordinator/framework contract
 - framework hosting assumes modules expose `public.definition` and `public.host`
 
-[Unreleased]: https://github.com/h2-modpack/adamant-ModpackFramework/compare/HEAD
+[unreleased]: https://github.com/h2-modpack/adamant-ModpackFramework/compare/1.0.0...HEAD
+[1.0.0]: https://github.com/h2-modpack/adamant-ModpackFramework/compare/3f77c5cdfcb8803d9c5b8ef486021c3711ee074d...1.0.0
