@@ -736,7 +736,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         if _showModWindow then
             PushTheme()
             SeedWindowSize()
-            local shouldDraw, open = ui.Begin(windowTitle, true)
+            local open, shouldDraw = ui.Begin(windowTitle, _showModWindow)
             if shouldDraw then
                 DrawMainWindow()
             end
