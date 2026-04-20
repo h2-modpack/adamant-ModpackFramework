@@ -86,6 +86,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
 
     local cachedHash = nil
     local cachedFingerprint = nil
+    local runDataDirty = false
 
     local selectedProfileSlot = 1
     local selectedProfileCombo = 0
@@ -103,6 +104,18 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local function InvalidateHash()
         cachedHash = nil
         cachedFingerprint = nil
+    end
+
+    local function markRunDataDirty()
+        runDataDirty = true
+    end
+
+    local function flushPendingRunData()
+        if not runDataDirty then
+            return
+        end
+        rom.game.SetupRunData()
+        runDataDirty = false
     end
 
     local function GetCachedHash()
@@ -131,7 +144,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
 
     local function FinishUiChange(definition, enabled)
         if mutatesRunData(definition) and enabled then
-            rom.game.SetupRunData()
+            markRunDataDirty()
         end
         InvalidateHash()
         hud.markHashDirty()
@@ -195,7 +208,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         end
 
         if needsRunData then
-            rom.game.SetupRunData()
+            markRunDataDirty()
         end
         InvalidateHash()
         hud.markHashDirty()
@@ -263,7 +276,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
 
         staging.ModEnabled = state
         config.ModEnabled = state
-        rom.game.SetupRunData()
+        markRunDataDirty()
         hud.setModMarker(state)
         return true, nil
     end
@@ -271,7 +284,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     --- Load a profile hash: decode, apply to all module configs, re-snapshot.
     local function LoadProfile(profileHash)
         if hud.applyConfigHash(profileHash) then
-            rom.game.SetupRunData()
+            markRunDataDirty()
             SnapshotToStaging()
             InvalidateHash()
             slotLabelsDirty = true
@@ -297,8 +310,8 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     -- =============================================================================
 
     local function CommitEntrySession(entry, enabled)
-        local ok = entry.host.commitIfDirty()
-        if ok then
+        local ok, _, committed = entry.host.commitIfDirty()
+        if ok and committed then
             OnSessionFlushed(entry.definition, enabled)
         end
     end
@@ -729,6 +742,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             end
             ui.End()
             if open == false then
+                flushPendingRunData()
                 hud.flushPendingHash()
                 _showModWindow = false
             end
@@ -739,6 +753,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local function addMenuBar()
         if ui.MenuItem("Show Mod Menu") then
             if _showModWindow then
+                flushPendingRunData()
                 hud.flushPendingHash()
             end
             _showModWindow = not _showModWindow

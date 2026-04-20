@@ -6,10 +6,10 @@
 
 --- Create the shared theme/layout constants used by the Framework UI and HUD.
 --- @return table theme Theme object exposing colors, ImGui flags, layout ratios, and push/pop helpers.
-function Framework.createTheme()
+function Framework.createTheme(lib)
     local ui                 = rom.ImGui
     local uiCol              = rom.ImGuiCol
-    local unpackColor        = table.unpack
+    local unpackColor        = lib.imguiHelpers.unpackColor
 
     -- -------------------------------------------------------------------------
     -- COLORS
@@ -47,24 +47,7 @@ function Framework.createTheme()
     -- IMGUI FLAG CONSTANTS
     -- -------------------------------------------------------------------------
 
-    local ImGuiTreeNodeFlags = {
-        None                 = 0,
-        Selected             = 1,
-        Framed               = 2,
-        AllowOverlap         = 4,
-        NoTreePushOnOpen     = 8,
-        NoAutoOpenOnLog      = 16,
-        DefaultOpen          = 32,
-        OpenOnDoubleClick    = 64,
-        OpenOnArrow          = 128,
-        Leaf                 = 256,
-        Bullet               = 512,
-        FramePadding         = 1024,
-        SpanAvailWidth       = 2048,
-        SpanFullWidth        = 4096,
-        NavLeftJumpsBackHere = 8192,
-        CollapsingHeader     = 26, -- Framed | NoTreePushOnOpen | NoAutoOpenOnLog
-    }
+    local ImGuiTreeNodeFlags = lib.imguiHelpers.ImGuiTreeNodeFlags
 
     -- -------------------------------------------------------------------------
     -- LAYOUT PROPORTIONS

@@ -132,7 +132,7 @@ function Framework.init(params)
 
     local discovery = Framework.createDiscovery(params.packId, params.config, lib)
     local hash = Framework.createHash(discovery, params.config, lib, params.packId)
-    local theme = Framework.createTheme()
+    local theme = Framework.createTheme(lib)
 
     discovery.run(params.def and params.def.moduleOrder)
     for _, entry in ipairs(discovery.modules) do
