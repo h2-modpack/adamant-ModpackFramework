@@ -306,15 +306,7 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     local packId = "flush-pack"
     local alwaysDraw = public.getAlwaysDrawRenderer(packId)
 
-    local capturedPacks = nil
-    for index = 1, 10 do
-        local name, value = debug.getupvalue(alwaysDraw, index)
-        if name == "_packs" then
-            capturedPacks = value
-            break
-        end
-    end
-
+    local capturedPacks = AdamantModpackFramework_Internal.packs
     local previousPack = capturedPacks and capturedPacks[packId] or nil
     capturedPacks[packId] = {
         hud = {
@@ -333,4 +325,88 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     capturedPacks[packId] = previousPack
 
     lu.assertEquals(flushCalls, 1)
+end
+
+function TestMain:testRendererRebuildsWhenModuleRegistryVersionChanges()
+    local previousCreateDiscovery = Framework.createDiscovery
+    local previousCreateHash = Framework.createHash
+    local previousCreateTheme = Framework.createTheme
+    local previousCreateHud = Framework.createHud
+    local previousCreateUI = Framework.createUI
+    local previousVersionFn = lib.getModuleRegistryVersion
+
+    local packId = "registry-pack"
+    local version = 1
+    local initCount = 0
+    local renderCount = 0
+
+    lib.getModuleRegistryVersion = function(id)
+        if id == packId then
+            return version
+        end
+        return 0
+    end
+
+    Framework.createDiscovery = function()
+        return {
+            modules = {},
+            run = function() end,
+        }
+    end
+
+    Framework.createHash = function()
+        return {}
+    end
+
+    Framework.createTheme = function()
+        return { colors = {} }
+    end
+
+    Framework.createHud = function()
+        return {
+            setModMarker = function() end,
+        }
+    end
+
+    Framework.createUI = function()
+        initCount = initCount + 1
+        local currentInit = initCount
+        return {
+            renderWindow = function()
+                renderCount = renderCount + currentInit
+            end,
+            addMenuBar = function() end,
+        }
+    end
+
+    Framework.init({
+        packId = packId,
+        windowTitle = "Registry Pack",
+        config = {
+            ModEnabled = true,
+            DebugMode = false,
+            Profiles = {
+                { Name = "", Hash = "", Tooltip = "" },
+            },
+        },
+        def = {
+            NUM_PROFILES = 1,
+            defaultProfiles = {},
+        },
+    })
+
+    local render = public.getRenderer(packId)
+    render()
+    version = 2
+    render()
+
+    Framework.createDiscovery = previousCreateDiscovery
+    Framework.createHash = previousCreateHash
+    Framework.createTheme = previousCreateTheme
+    Framework.createHud = previousCreateHud
+    Framework.createUI = previousCreateUI
+    lib.getModuleRegistryVersion = previousVersionFn
+
+    lu.assertEquals(initCount, 2)
+    lu.assertEquals(renderCount, 3)
 end

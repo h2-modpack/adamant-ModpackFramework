@@ -22,6 +22,7 @@ Framework owns:
 Recommended coordinator shape:
 
 ```lua
+local Framework = rom.mods["adamant-ModpackFramework"]
 local config = chalk.auto("config.lua")
 local loader = reload.auto_single()
 
@@ -31,14 +32,14 @@ local function init()
         windowTitle = "My Modpack",
         config = config,
         def = def,
-        modutil = modutil,
     })
 end
 
 modutil.once_loaded.game(function()
     rom.gui.add_imgui(Framework.getRenderer(PACK_ID))
+    rom.gui.add_always_draw_imgui(Framework.getAlwaysDrawRenderer(PACK_ID))
     rom.gui.add_to_menu_bar(Framework.getMenuBar(PACK_ID))
-    loader.load(init)
+    loader.load(nil, init)
 end)
 ```
 
@@ -49,7 +50,6 @@ Required:
 - `windowTitle`
 - `config`
 - `def`
-- `modutil`
 
 `config` must contain:
 - `ModEnabled`
@@ -65,6 +65,10 @@ Optional `def` fields:
   Ordered list of module labels to pin first in the sidebar. Unknown entries are warned and ignored.
 - `renderQuickSetup(ctx)`
   Coordinator-owned Quick Setup content. See [QUICK_SETUP.md](QUICK_SETUP.md).
+
+Optional top-level params:
+- `hideHashMarker`
+  Suppresses the HUD hash marker while keeping the rest of the coordinator surface active.
 
 ## Discovery Contract
 
@@ -118,6 +122,14 @@ Quick content is provided by coordinator code or module hosts.
 
 See [QUICK_SETUP.md](QUICK_SETUP.md).
 
+## Reload Behavior
+
+Coordinator bootstrap normally reruns `Framework.init(...)` from the reload body.
+
+Framework keeps the pack session current by rebuilding from the stored init params when:
+- the coordinator reloads
+- a coordinated module publishes a refreshed host for the same `packId`
+
 ## Hash and Profiles
 
 Hash/profile behavior is built on:
@@ -162,4 +174,3 @@ Framework warnings use:
 - [README.md](README.md)
 - [QUICK_SETUP.md](QUICK_SETUP.md)
 - [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md)
-

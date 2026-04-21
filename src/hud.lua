@@ -14,10 +14,10 @@
 --- @param hash table Hash subsystem returned by `Framework.createHash(...)`.
 --- @param theme table Theme object returned by `Framework.createTheme(...)`.
 --- @param config table Coordinator config table containing `ModEnabled`.
---- @param modutil table ModUtil mod reference used for the HUD hook registration.
+--- @param lib AdamantModpackLib Shared lib used for reload-stable hook registration.
 --- @param hideHashMarker boolean|nil Optional pack-level flag to suppress the HUD fingerprint marker.
 --- @return table hud HUD object exposing marker/hash update helpers.
-function Framework.createHud(packId, packIndex, hash, theme, config, modutil, hideHashMarker)
+function Framework.createHud(packId, packIndex, hash, theme, config, lib, hideHashMarker)
     assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
         "Framework.createHud: game HUD globals are not ready; call Framework.init after game load")
 
@@ -73,7 +73,7 @@ function Framework.createHud(packId, packIndex, hash, theme, config, modutil, hi
         displayedHash = currentHash
     end
 
-    modutil.mod.Path.Wrap("ShowHealthUI", function(base, args)
+    lib.hooks.Wrap(AdamantModpackFramework_Internal, "ShowHealthUI", "hud:" .. packId, function(base, args)
         base(args)
         if not markerHidden and config.ModEnabled then
             displayedHash = nil

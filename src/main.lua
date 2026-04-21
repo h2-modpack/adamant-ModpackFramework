@@ -24,6 +24,11 @@ mods["SGG_Modding-ENVY"].auto()
 
 ---@diagnostic disable: lowercase-global
 Framework = {}
+AdamantModpackFramework_Internal = AdamantModpackFramework_Internal or {}
+local internal = AdamantModpackFramework_Internal
+internal.packs = internal.packs or {}
+internal.packList = internal.packList or {}
+internal.frameworkGeneration = (internal.frameworkGeneration or 0) + 1
 
 import "ui_theme.lua"
 import "discovery.lua"
@@ -31,8 +36,9 @@ import "hash.lua"
 import "hud.lua"
 import "ui.lua"
 
-local _packs = {}
-local _packList = {}
+local _packs = internal.packs
+local _packList = internal.packList
+local _frameworkGeneration = internal.frameworkGeneration
 
 local function ValidateInitParams(params)
     assert(type(params) == "table", "Framework.init: params must be a table")
@@ -117,6 +123,16 @@ end
 
 Framework.auditSavedProfiles = AuditSavedProfiles
 
+local function RememberInitParams(params)
+    return {
+        packId = params.packId,
+        windowTitle = params.windowTitle,
+        config = params.config,
+        def = params.def,
+        hideHashMarker = params.hideHashMarker,
+    }
+end
+
 function Framework.init(params)
     local lib = rom.mods["adamant-ModpackLib"]
     ValidateInitParams(params)
@@ -146,12 +162,21 @@ function Framework.init(params)
 
     AuditSavedProfiles(params.packId, params.config.Profiles, discovery, lib)
 
-    local hud = Framework.createHud(params.packId, packIndex, hash, theme, params.config, params.modutil,
+    local hud = Framework.createHud(params.packId, packIndex, hash, theme, params.config, lib,
         params.hideHashMarker == true)
     local ui = Framework.createUI(discovery, hud, theme, params.def, params.config, lib, params.packId,
         params.windowTitle)
 
-    _packs[params.packId] = { discovery = discovery, hash = hash, hud = hud, ui = ui, _index = packIndex }
+    _packs[params.packId] = {
+        discovery = discovery,
+        hash = hash,
+        hud = hud,
+        ui = ui,
+        initParams = RememberInitParams(params),
+        frameworkGeneration = _frameworkGeneration,
+        moduleRegistryVersion = lib.getModuleRegistryVersion(params.packId),
+        _index = packIndex,
+    }
 
     if params.config.ModEnabled then
         hud.setModMarker(true)
@@ -162,9 +187,28 @@ end
 
 public.init = Framework.init
 
+local function EnsurePackCurrent(packId)
+    local pack = _packs[packId]
+    if not pack or not pack.initParams then
+        return pack
+    end
+
+    local lib = rom.mods["adamant-ModpackLib"]
+    if not lib or type(lib.getModuleRegistryVersion) ~= "function" then
+        return pack
+    end
+
+    local currentVersion = lib.getModuleRegistryVersion(packId)
+    if currentVersion ~= pack.moduleRegistryVersion or pack.frameworkGeneration ~= _frameworkGeneration then
+        return Framework.init(pack.initParams)
+    end
+
+    return pack
+end
+
 public.getRenderer = function(packId)
     return function()
-        local pack = _packs[packId]
+        local pack = EnsurePackCurrent(packId)
         if not pack or not pack.ui then
             return
         end
@@ -174,7 +218,7 @@ end
 
 public.getMenuBar = function(packId)
     return function()
-        local pack = _packs[packId]
+        local pack = EnsurePackCurrent(packId)
         if not pack or not pack.ui then
             return
         end
@@ -186,10 +230,10 @@ public.getAlwaysDrawRenderer = function(packId)
     local wasGuiOpen = rom.gui.is_open() == true
 
     return function()
+        local pack = EnsurePackCurrent(packId)
         local isGuiOpen = rom.gui.is_open() == true
 
         if wasGuiOpen and not isGuiOpen then
-            local pack = _packs[packId]
             if pack and pack.hud then
                 pack.hud.flushPendingHash()
             end

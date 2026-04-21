@@ -1,10 +1,17 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
+### Changed
+
+- Framework pack state now persists on `AdamantModpackFramework_Internal`
+- coordinated packs rebuild themselves when Framework reloads or when a coordinated module republishes its host
+- HUD fingerprint wrapping now uses Lib's reload-stable hook registration instead of raw ModUtil wrapping
+- coordinator docs now show the supported bootstrap contract:
+  - `loader.load(nil, init)`
+  - `rom.gui.add_always_draw_imgui(Framework.getAlwaysDrawRenderer(...))`
+  - optional `hideHashMarker`
 
 ## [1.0.0] - 2026-04-20
 

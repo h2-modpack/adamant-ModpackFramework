@@ -52,6 +52,8 @@ public.host = lib.createModuleHost({
     definition = public.definition,
     store = store,
     session = session,
+    hookOwner = internal,
+    registerHooks = internal.RegisterHooks,
     drawTab = internal.DrawTab,
     drawQuickContent = internal.DrawQuickContent,
 })
