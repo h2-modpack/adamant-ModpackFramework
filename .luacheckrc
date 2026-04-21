@@ -7,6 +7,7 @@ globals = {
     "Framework",
     "_PLUGIN",
     "ScreenData",
+    "AdamantModpackFramework_Internal"
 }
 
 read_globals = {
