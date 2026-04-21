@@ -9,6 +9,7 @@ local function resetMods()
             auto = function() return { DebugMode = false } end,
         },
         ['adamant-ModpackLib'] = lib,
+        ['adamant-ModpackFramework'] = public,
     }
 end
 
@@ -172,4 +173,3 @@ function TestDiscovery:testTabOrderPinsKnownLabelsFirst()
     lu.assertEquals(discovery.tabOrder[1].id, "BiomeControl")
     lu.assertEquals(discovery.tabOrder[2].id, "GodPool")
 end
-

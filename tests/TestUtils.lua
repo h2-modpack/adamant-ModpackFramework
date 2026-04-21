@@ -127,6 +127,7 @@ import = function() end
 import_as_fallback = function() end
 
 dofile("src/main.lua")
+rom.mods['adamant-ModpackFramework'] = public
 dofile("src/ui_theme.lua")
 dofile("src/discovery.lua")
 dofile("src/hash.lua")
@@ -259,5 +260,3 @@ function MockDiscovery.create(moduleDefs)
 
     return discovery
 end
-
-
