@@ -37,6 +37,33 @@ jobs:
         with:
           lfs: true
 
+      - name: Checkout Lib (test dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: h2-modpack/adamant-ModpackLib
+          path: adamant-ModpackLib
+
+      - name: Expose Lib sibling path for tests
+        run: ln -sfn "$GITHUB_WORKSPACE/adamant-ModpackLib" "$GITHUB_WORKSPACE/../adamant-ModpackLib"
+
+      - name: Setup Lua
+        uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.2"
+
+      - name: Setup Luarocks
+        uses: leafo/gh-actions-luarocks@v4
+
+      - name: Install validation tools
+        run: |
+          luarocks install luacheck
+          luarocks install luaunit
+
+      - name: Validate package sources
+        run: |
+          luacheck src/
+          lua tests/all.lua
+
       - name: Rotate unreleased section in changelog
         uses: thomaseizinger/keep-a-changelog-new-release@77ac767b2f7f6edf2ee72ab3364ed26667086f96
         with:
