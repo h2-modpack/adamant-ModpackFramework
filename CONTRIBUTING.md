@@ -17,11 +17,10 @@ Treat its runtime behavior and warnings as public coordinator contract.
 
 ## Contribution Rules
 
-- Keep docs aligned with the live lean framework contract.
+- Keep docs aligned with the supported framework contract.
 - Prefer explicit contract warnings over silent skips.
 - Treat hash/profile ABI changes as compatibility work, not refactoring.
-- Do not reintroduce grouped-category or quick-node concepts unless the runtime actually supports them again.
-- Keep Framework focused on coordinator orchestration, not module UI abstraction.
+- Keep Framework focused on coordinator orchestration. Module UI belongs to module hosts.
 
 ## Validation
 

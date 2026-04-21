@@ -1,45 +1,65 @@
 # adamant-ModpackFramework
 
-Reusable coordinator framework for adamant modpacks.
+Reusable coordinator framework for Hades II modpacks built on
+`adamant-ModpackLib`.
 
-Framework now owns:
+ModpackFramework gives a pack one shared in-game control surface. It discovers
+modules that belong to the pack, renders their tabs, coordinates quick setup,
+and handles profile/hash workflows through a single coordinator UI.
+
+It provides:
+
 - module discovery for one `packId`
-- config hashing and profile load
-- HUD fingerprint rendering
-- the shared coordinator window
+- a shared coordinator window
+- module tab ordering and rendering
+- Quick Setup aggregation
+- profile import/export and config hash loading
+- HUD fingerprint display for the active settings
+- pack-level enable/disable behavior with rollback on failure
 
-Framework does not define module UI shapes anymore.
-Under the current contract, each discovered coordinated module renders itself through:
-- `host.drawTab(ui)`
-- optional `host.drawQuickContent(ui)`
+Modules participate by exposing a Lib module host:
+
+```lua
+public.host = lib.createModuleHost({
+    definition = public.definition,
+    store = store,
+    session = session,
+    drawTab = internal.DrawTab,
+    drawQuickContent = internal.DrawQuickContent,
+})
+```
 
 ## Docs
 
 - [COORDINATOR_GUIDE.md](COORDINATOR_GUIDE.md)
-  Bootstrap, discovery, and the live coordinator/module contract.
+  Bootstrap, discovery, and coordinator/module integration.
 - [QUICK_SETUP.md](QUICK_SETUP.md)
-  Current Quick Setup model: coordinator quick content plus module host quick content.
+  How pack-level Quick Setup content is assembled.
 - [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md)
   Compatibility rules for module ids, storage aliases/defaults, and hash groups.
 - [CONTRIBUTING.md](CONTRIBUTING.md)
   Contributor expectations for framework behavior and compatibility-sensitive changes.
 
-## Current Framework Contract
+## Module Discovery
 
-Discovery includes modules that expose:
+The framework discovers modules that expose:
+
 - `definition.modpack = PACK_ID`
 - `definition.id`
 - `definition.name`
 - `definition.storage`
-- public `host`
+- `public.host`
 
-`host.drawQuickContent(...)` is optional.
+Discovered modules render through:
 
-Framework sidebar behavior is now:
+- `host.drawTab(ui)`
+- optional `host.drawQuickContent(ui)`
+
+Sidebar behavior:
+
 - one top-level tab per discovered module
 - `moduleOrder` may pin known labels first
-- no category/subgroup grouping
-- no special-module split
+- `moduleOrder` and discovered module order define the tab list
 
 ## Validation
 

@@ -1,18 +1,16 @@
 # Quick Setup
 
-This document covers the current Framework Quick Setup surface.
+This document covers the Framework Quick Setup surface.
 
 Use [README.md](README.md) as the entrypoint for Framework docs.
 
 ## What Quick Setup Is
 
-Quick Setup is the top-level framework panel for high-frequency controls.
+Quick Setup is the top-level framework panel for compact, high-frequency controls.
 
-It is meant for:
+Typical content:
 - a small coordinator-owned control surface
 - a small per-module quick surface
-
-It is not meant to mirror full module tabs.
 
 ## Render Order
 
@@ -39,9 +37,7 @@ Current `ctx` fields:
 - `theme`
 - `drawColoredText`
 
-Keep coordinator quick content coordinator-scoped.
-If a control belongs to a module, put it in that module's `DrawQuickContent`.
-If a control belongs to a module, put it in that module's draw/host surface rather than coordinator code.
+Keep coordinator quick content coordinator-scoped. Module controls belong in that module's draw/host surface.
 
 ## Module Quick Content
 
@@ -67,25 +63,14 @@ Framework behavior:
 - the draw callback receives the restricted author `session`
 - if the module dirty-stages persisted state during quick content, Framework commits it after draw
 
-## What Was Removed
-
-The old quick surface is gone:
-- no quick-node discovery from `definition.ui`
-- no `quick = true`
-- no `quickId`
-- no `selectQuickUi`
-- no special-module-only quick path
-
-Quick Setup is now immediate-mode only.
-
 ## What Belongs In Quick Setup
 
-Good Quick Setup content:
+Good fits:
 - one or two high-frequency controls
 - fast run-setup toggles
 - controls you want without opening the full module tab
 
-Bad Quick Setup content:
+Better suited for full module tabs:
 - the full module UI copied into Quick Setup
 - large audit/configuration surfaces
 - controls that only make sense in deep configuration

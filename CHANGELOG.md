@@ -20,10 +20,5 @@ Initial public release of the adamant Modpack Framework surface.
 - master pack toggle handling with transactional runtime rollback
 - shared theme, HUD, discovery, and UI factory surfaces
 
-### Notes
-
-- this release documents the current lean coordinator/framework contract
-- framework hosting assumes modules expose `public.definition` and `public.host`
-
 [unreleased]: https://github.com/h2-modpack/adamant-ModpackFramework/compare/1.0.0...HEAD
 [1.0.0]: https://github.com/h2-modpack/adamant-ModpackFramework/compare/3f77c5cdfcb8803d9c5b8ef486021c3711ee074d...1.0.0

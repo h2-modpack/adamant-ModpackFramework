@@ -95,14 +95,13 @@ Framework skips modules that are missing:
 
 ## Window Model
 
-Framework now renders:
+Framework renders:
 - one sidebar tab per discovered module
 - Quick Setup
 - Profiles
 - Dev
 
-There is no category/subgroup grouping anymore.
-There is no special-module split anymore.
+The sidebar is module-based: one tab per discovered module, in discovery order.
 
 Module tabs are simple:
 - Framework renders the enable checkbox
@@ -115,8 +114,7 @@ Quick Setup renders in this order:
 1. coordinator-owned content from `def.renderQuickSetup(ctx)`
 2. each discovered module whose `host.hasQuickContent()` is true
 
-There is no quick-node discovery from `definition.ui`.
-There is no `selectQuickUi` path anymore.
+Quick content is provided by coordinator code or module hosts.
 
 See [QUICK_SETUP.md](QUICK_SETUP.md).
 

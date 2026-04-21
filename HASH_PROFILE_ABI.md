@@ -12,13 +12,12 @@ treat it as ABI work, not cleanup.
 
 ## Scope
 
-This applies to:
+Covered data:
 - shared hashes created by Framework
 - coordinator profile slots stored in Chalk config
 - discovered coordinated modules
 
-It does not describe the full UI contract.
-It only covers serialized identity and value encoding.
+For UI and host behavior, use [README.md](README.md) and [COORDINATOR_GUIDE.md](COORDINATOR_GUIDE.md).
 
 ## Canonical Format
 
@@ -100,7 +99,7 @@ Changing:
 - numeric formatting
 - fallback behavior
 
-can change how old hashes decode or what new hashes look like.
+can change how existing hashes decode or what future hashes look like.
 
 ### `definition.hashGroups`
 
@@ -128,29 +127,27 @@ Reason:
 - packed child aliases already belong to a packed root
 - transient state is intentionally not part of portable/shared config state
 
-## Current Compatibility Behavior
+## Decode Behavior
 
-Framework currently provides limited compatibility behavior:
+Framework provides these decode guarantees:
 - hash format version check on decode
 - unknown keys are ignored
 - missing keys fall back to defaults
 - saved coordinator profiles are audited at `Framework.init(...)` and warn on unknown field keys inside known module namespaces
 
-Framework does not automatically preserve compatibility for:
+Module authors own compatibility plans for:
 - renamed module ids
 - renamed aliases
 - changed defaults
 - changed encoding semantics
 - changed hash group layout
 
-Those are author-owned compatibility tasks.
+## Shipped-Module Invariants
 
-## Recommended Rules
+Once a module is publicly shipped, the following are part of its ABI and should be treated as stable:
+- `definition.id` — identifies the module in hashes and profiles
+- persisted storage root `alias` names — identify values within a module's namespace
+- storage defaults — consumed when a persisted value is absent
+- `definition.hashGroups` layout — determines hash encoding
 
-Once a module is publicly shipped:
-- do not rename `definition.id`
-- do not rename persisted storage root `alias`
-- do not casually change defaults
-- do not casually change `definition.hashGroups`
-
-If you must change one of these, handle it as compatibility work with an explicit migration plan.
+Changing any of these is a compatibility event and requires an explicit compatibility plan.
