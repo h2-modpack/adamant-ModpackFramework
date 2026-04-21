@@ -28,6 +28,7 @@ AdamantModpackFramework_Internal = AdamantModpackFramework_Internal or {}
 local internal = AdamantModpackFramework_Internal
 internal.packs = internal.packs or {}
 internal.packList = internal.packList or {}
+internal.callbacks = internal.callbacks or {}
 internal.frameworkGeneration = (internal.frameworkGeneration or 0) + 1
 
 import "ui_theme.lua"
@@ -38,7 +39,10 @@ import "ui.lua"
 
 local _packs = internal.packs
 local _packList = internal.packList
-local _frameworkGeneration = internal.frameworkGeneration
+
+local function GetCurrentFramework()
+    return rom.mods["adamant-ModpackFramework"]
+end
 
 local function ValidateInitParams(params)
     assert(type(params) == "table", "Framework.init: params must be a table")
@@ -173,7 +177,7 @@ function Framework.init(params)
         hud = hud,
         ui = ui,
         initParams = RememberInitParams(params),
-        frameworkGeneration = _frameworkGeneration,
+        frameworkGeneration = internal.frameworkGeneration,
         moduleRegistryVersion = lib.getModuleRegistryVersion(params.packId),
         _index = packIndex,
     }
@@ -199,46 +203,76 @@ local function EnsurePackCurrent(packId)
     end
 
     local currentVersion = lib.getModuleRegistryVersion(packId)
-    if currentVersion ~= pack.moduleRegistryVersion or pack.frameworkGeneration ~= _frameworkGeneration then
-        return Framework.init(pack.initParams)
+    local currentGeneration = internal.frameworkGeneration or 0
+    if currentVersion ~= pack.moduleRegistryVersion or pack.frameworkGeneration ~= currentGeneration then
+        local framework = GetCurrentFramework()
+        local init = framework and framework.init
+        if type(init) == "function" then
+            return init(pack.initParams)
+        end
     end
 
     return pack
 end
 
-public.getRenderer = function(packId)
-    return function()
-        local pack = EnsurePackCurrent(packId)
-        if not pack or not pack.ui then
-            return
-        end
-        pack.ui.renderWindow()
+local function GetStableCallback(kind, packId, factory)
+    local callbacks = internal.callbacks
+    local key = tostring(packId)
+    local bucket = callbacks[kind]
+    if not bucket then
+        bucket = {}
+        callbacks[kind] = bucket
     end
+
+    local callback = bucket[key]
+    if callback then
+        return callback
+    end
+
+    callback = factory(packId)
+    bucket[key] = callback
+    return callback
+end
+
+public.getRenderer = function(packId)
+    return GetStableCallback("renderer", packId, function(currentPackId)
+        return function()
+            local pack = EnsurePackCurrent(currentPackId)
+            if not pack or not pack.ui then
+                return
+            end
+            pack.ui.renderWindow()
+        end
+    end)
 end
 
 public.getMenuBar = function(packId)
-    return function()
-        local pack = EnsurePackCurrent(packId)
-        if not pack or not pack.ui then
-            return
+    return GetStableCallback("menuBar", packId, function(currentPackId)
+        return function()
+            local pack = EnsurePackCurrent(currentPackId)
+            if not pack or not pack.ui then
+                return
+            end
+            pack.ui.addMenuBar()
         end
-        pack.ui.addMenuBar()
-    end
+    end)
 end
 
 public.getAlwaysDrawRenderer = function(packId)
-    local wasGuiOpen = rom.gui.is_open() == true
+    return GetStableCallback("alwaysDraw", packId, function(currentPackId)
+        local wasGuiOpen = rom.gui.is_open() == true
 
-    return function()
-        local pack = EnsurePackCurrent(packId)
-        local isGuiOpen = rom.gui.is_open() == true
+        return function()
+            local pack = EnsurePackCurrent(currentPackId)
+            local isGuiOpen = rom.gui.is_open() == true
 
-        if wasGuiOpen and not isGuiOpen then
-            if pack and pack.hud then
-                pack.hud.flushPendingHash()
+            if wasGuiOpen and not isGuiOpen then
+                if pack and pack.hud then
+                    pack.hud.flushPendingHash()
+                end
             end
-        end
 
-        wasGuiOpen = isGuiOpen
-    end
+            wasGuiOpen = isGuiOpen
+        end
+    end)
 end
