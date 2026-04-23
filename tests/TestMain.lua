@@ -296,6 +296,7 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     local previousGui = rom.gui
     local guiOpen = true
     local flushCalls = 0
+    local runDataFlushCalls = 0
 
     rom.gui = {
         is_open = function()
@@ -309,6 +310,11 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     local capturedPacks = AdamantModpackFramework_Internal.packs
     local previousPack = capturedPacks and capturedPacks[packId] or nil
     capturedPacks[packId] = {
+        ui = {
+            flushPendingRunData = function()
+                runDataFlushCalls = runDataFlushCalls + 1
+            end,
+        },
         hud = {
             flushPendingHash = function()
                 flushCalls = flushCalls + 1
@@ -325,6 +331,132 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     capturedPacks[packId] = previousPack
 
     lu.assertEquals(flushCalls, 1)
+    lu.assertEquals(runDataFlushCalls, 1)
+end
+
+function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
+    local previousImGui = rom.ImGui
+    local previousSetupRunData = rom.game.SetupRunData
+    local setupRunDataCalls = 0
+    local quickSetupRan = false
+    local revertCalls = 0
+
+    rom.game.SetupRunData = function()
+        setupRunDataCalls = setupRunDataCalls + 1
+    end
+
+    local function noop() end
+
+    rom.ImGui = {
+        Begin = function() return true, true end,
+        End = noop,
+        SetNextWindowSize = noop,
+        MenuItem = function() return true end,
+        Checkbox = function(_, current) return current, false end,
+        IsItemHovered = function() return false end,
+        SetTooltip = noop,
+        Separator = noop,
+        SameLine = noop,
+        Spacing = noop,
+        TextColored = noop,
+        GetWindowWidth = function() return 1000 end,
+        BeginChild = function() return true end,
+        EndChild = noop,
+        Selectable = function() return false end,
+        BeginCombo = function() return false end,
+        EndCombo = noop,
+        PushItemWidth = noop,
+        PopItemWidth = noop,
+        Text = noop,
+        GetCursorPosX = function() return 0 end,
+        GetCursorPosY = function() return 0 end,
+        SetCursorPos = noop,
+        SetCursorPosX = noop,
+        GetFrameHeight = function() return 20 end,
+        GetFrameHeightWithSpacing = function() return 24 end,
+        GetStyle = function()
+            return {
+                FramePadding = { x = 4, y = 3 },
+                ItemSpacing = { x = 8, y = 4 },
+            }
+        end,
+        CalcTextSize = function(text) return #(tostring(text or "")) * 8 end,
+        Button = function() return false end,
+        InputText = function(_, value) return value, false end,
+        GetClipboardText = function() return nil end,
+        SetClipboardText = noop,
+        CollapsingHeader = function() return false end,
+        Indent = noop,
+        Unindent = noop,
+        PushID = noop,
+        PopID = noop,
+        PushStyleColor = noop,
+        PopStyleColor = noop,
+    }
+
+    local discovery = MockDiscovery.create({
+        {
+            modName = "Alpha",
+            id = "Alpha",
+            name = "Alpha",
+            enabled = true,
+            affectsRunData = true,
+            storage = {},
+            apply = function() end,
+            revert = function()
+                revertCalls = revertCalls + 1
+            end,
+            DrawTab = function() end,
+        },
+    })
+
+    local hud = {
+        setModMarker = noop,
+        markHashDirty = noop,
+        refreshHashIfIdle = noop,
+        flushPendingHash = noop,
+        updateHash = noop,
+        getConfigHash = function()
+            return "hash", "fingerprint"
+        end,
+        applyConfigHash = function()
+            return true
+        end,
+    }
+
+    local theme = Framework.createTheme(lib)
+    local def = {
+        NUM_PROFILES = 1,
+        defaultProfiles = {
+            { Name = "", Hash = "", Tooltip = "" },
+        },
+        renderQuickSetup = function(ctx)
+            if not quickSetupRan then
+                quickSetupRan = true
+                ctx.setModulesEnabled({ "Alpha" }, false)
+            end
+        end,
+    }
+    local config = {
+        ModEnabled = true,
+        DebugMode = false,
+        Profiles = {
+            { Name = "", Hash = "", Tooltip = "" },
+        },
+    }
+
+    local builtUi = Framework.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
+    builtUi.addMenuBar()
+    local ok, err = pcall(builtUi.renderWindow)
+    builtUi.addMenuBar()
+
+    rom.ImGui = previousImGui
+    rom.game.SetupRunData = previousSetupRunData
+
+    lu.assertTrue(ok, tostring(err))
+    lu.assertTrue(quickSetupRan)
+    lu.assertEquals(revertCalls, 1)
+    lu.assertEquals(setupRunDataCalls, 1)
 end
 
 function TestMain:testRendererRebuildsWhenModuleRegistryVersionChanges()

@@ -267,6 +267,9 @@ public.getAlwaysDrawRenderer = function(packId)
             local isGuiOpen = rom.gui.is_open() == true
 
             if wasGuiOpen and not isGuiOpen then
+                if pack and pack.ui and type(pack.ui.flushPendingRunData) == "function" then
+                    pack.ui.flushPendingRunData()
+                end
                 if pack and pack.hud then
                     pack.hud.flushPendingHash()
                 end

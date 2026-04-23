@@ -142,8 +142,8 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     -- TOGGLE HELPERS (event handlers — OK to touch Chalk here)
     -- =============================================================================
 
-    local function FinishUiChange(definition, enabled)
-        if mutatesRunData(definition) and enabled then
+    local function FinishUiChange(definition)
+        if mutatesRunData(definition) then
             markRunDataDirty()
         end
         InvalidateHash()
@@ -156,7 +156,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             return
         end
         stagingBucket[stagingKey] = enabled
-        FinishUiChange(entry.definition, enabled)
+        FinishUiChange(entry.definition)
     end
 
     local function GetModulesStatus(moduleIds)
@@ -196,7 +196,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
                 if ok then
                     staging.modules[moduleId] = enabled
                     changed = true
-                    if mutatesRunData(entry.definition) and enabled then
+                    if mutatesRunData(entry.definition) then
                         needsRunData = true
                     end
                 end
@@ -214,8 +214,8 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         hud.markHashDirty()
     end
 
-    local function OnSessionFlushed(definition, enabled)
-        FinishUiChange(definition, enabled)
+    local function OnSessionFlushed(definition)
+        FinishUiChange(definition)
     end
 
     --- Apply enable/disable on the game side only without persisting an entry's Enabled bit.
@@ -309,10 +309,15 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     -- GENERIC TAB CONTENT RENDERER
     -- =============================================================================
 
-    local function CommitEntrySession(entry, enabled)
-        local ok, _, committed = entry.host.commitIfDirty()
+    local function CommitEntrySession(entry)
+        local ok, err, committed = entry.host.commitIfDirty()
         if ok and committed then
-            OnSessionFlushed(entry.definition, enabled)
+            OnSessionFlushed(entry.definition)
+        elseif ok == false then
+            contractWarn(packId,
+                "%s session commit failed; restored previous config where possible: %s",
+                tostring(entry.name or entry.id or entry.modName or "module"),
+                tostring(err))
         end
     end
 
@@ -323,7 +328,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
 
         entry.host.drawTab(ui)
 
-        CommitEntrySession(entry, enabled)
+        CommitEntrySession(entry)
     end
 
     -- =============================================================================
@@ -423,7 +428,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
                 DrawColoredText(colors.info, entry.name or entry.id)
                 ui.Spacing()
                 entry.host.drawQuickContent(ui)
-                CommitEntrySession(entry, staging.modules[entry.id])
+                CommitEntrySession(entry)
             end
         end
     end
@@ -760,5 +765,9 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         end
     end
 
-    return { renderWindow = renderWindow, addMenuBar = addMenuBar }
+    return {
+        renderWindow = renderWindow,
+        addMenuBar = addMenuBar,
+        flushPendingRunData = flushPendingRunData,
+    }
 end
