@@ -203,7 +203,6 @@ function MockDiscovery.create(moduleDefs)
                 definition = definition,
                 host = host,
             },
-            host = host,
             definition = definition,
             id = definition.id,
             name = definition.name,
@@ -211,10 +210,12 @@ function MockDiscovery.create(moduleDefs)
             storage = definition.storage,
         }
 
+        rom.mods[module.modName] = module.mod
+
         table.insert(discovery.modules, module)
         discovery.modulesById[module.id] = module
 
-        if module.host.hasQuickContent() then
+        if host.hasQuickContent() then
             table.insert(discovery.modulesWithQuickContent, module)
         end
 
@@ -226,36 +227,67 @@ function MockDiscovery.create(moduleDefs)
         addModule(def)
     end
 
-    function discovery.isModuleEnabled(module)
-        return module.host.read("Enabled") == true
+    function discovery.captureHostSnapshot()
+        local snapshot = {
+            hosts = {},
+        }
+
+        for _, module in ipairs(discovery.modules) do
+            local mod = rom.mods[module.modName]
+            local liveHost = type(mod) == "table" and type(mod.host) == "table" and mod.host or nil
+            snapshot.hosts[module] = liveHost or false
+        end
+
+        return snapshot
     end
 
-    function discovery.isEntryEnabled(entry)
-        return discovery.isModuleEnabled(entry)
+    function discovery.getCurrentHost(entry)
+        local mod = rom.mods[entry.modName]
+        local liveHost = type(mod) == "table" and type(mod.host) == "table" and mod.host or nil
+        return liveHost
     end
 
-    function discovery.setModuleEnabled(module, enabled)
-        return module.host.setEnabled(enabled)
+    function discovery.getSnapshotHost(entry, snapshot)
+        local host = snapshot.hosts[entry]
+        return host or nil
     end
 
-    function discovery.setEntryEnabled(entry, enabled)
-        return discovery.setModuleEnabled(entry, enabled)
+    function discovery.isModuleEnabled(module, snapshot)
+        local host = snapshot and discovery.getSnapshotHost(module, snapshot) or discovery.getCurrentHost(module)
+        return host.read("Enabled") == true
     end
 
-    function discovery.getStorageValue(module, aliasOrKey)
-        return module.host.read(aliasOrKey)
+    function discovery.isEntryEnabled(entry, snapshot)
+        return discovery.isModuleEnabled(entry, snapshot)
     end
 
-    function discovery.setStorageValue(module, aliasOrKey, value)
-        return module.host.writeAndFlush(aliasOrKey, value)
+    function discovery.setModuleEnabled(module, enabled, snapshot)
+        local host = snapshot and discovery.getSnapshotHost(module, snapshot) or discovery.getCurrentHost(module)
+        return host.setEnabled(enabled)
     end
 
-    function discovery.isDebugEnabled(entry)
-        return entry.host.read("DebugMode") == true
+    function discovery.setEntryEnabled(entry, enabled, snapshot)
+        return discovery.setModuleEnabled(entry, enabled, snapshot)
     end
 
-    function discovery.setDebugEnabled(entry, value)
-        entry.host.setDebugMode(value)
+    function discovery.getStorageValue(module, aliasOrKey, snapshot)
+        local host = snapshot and discovery.getSnapshotHost(module, snapshot) or discovery.getCurrentHost(module)
+        return host.read(aliasOrKey)
+    end
+
+    function discovery.setStorageValue(module, aliasOrKey, value, snapshot)
+        local host = snapshot and discovery.getSnapshotHost(module, snapshot) or discovery.getCurrentHost(module)
+        return host.writeAndFlush(aliasOrKey, value)
+    end
+
+    function discovery.isDebugEnabled(entry, snapshot)
+        local host = snapshot and discovery.getSnapshotHost(entry, snapshot) or discovery.getCurrentHost(entry)
+        return host.read("DebugMode") == true
+    end
+
+    function discovery.setDebugEnabled(entry, value, snapshot)
+        local host = snapshot and discovery.getSnapshotHost(entry, snapshot) or discovery.getCurrentHost(entry)
+        host.setDebugMode(value)
     end
 
     return discovery

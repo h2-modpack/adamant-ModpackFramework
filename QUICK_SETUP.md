@@ -17,7 +17,7 @@ Typical content:
 Quick Setup renders in this order:
 
 1. coordinator-owned content from `def.renderQuickSetup(ctx)`
-2. each discovered module whose `host.hasQuickContent()` is true
+2. each discovered module discovered with quick content support
 
 This happens inside [`src/ui.lua`](src/ui.lua).
 
@@ -61,7 +61,8 @@ public.host = lib.createModuleHost({
 
 Framework behavior:
 - only enabled modules render their quick content
-- module quick content is called through `entry.host.drawQuickContent(ui)`
+- Framework snapshots the current module hosts at the start of the UI operation
+- module quick content is called through that snapshot host's `drawQuickContent(ui)`
 - the draw callback receives the restricted author `session`
 - if the module dirty-stages persisted state during quick content, Framework commits it after draw
 

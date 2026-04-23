@@ -155,8 +155,10 @@ function Framework.init(params)
     local theme = Framework.createTheme(lib)
 
     discovery.run(params.def and params.def.moduleOrder)
+    local startupSnapshot = discovery.captureHostSnapshot()
     for _, entry in ipairs(discovery.modules) do
-        local ok, err = entry.host.applyOnLoad()
+        local host = discovery.getSnapshotHost(entry, startupSnapshot)
+        local ok, err = host and host.applyOnLoad()
         if not ok then
             lib.logging.warn("%s startup lifecycle failed: %s",
                 tostring(entry.name or entry.id or "module"),
@@ -178,7 +180,6 @@ function Framework.init(params)
         ui = ui,
         initParams = RememberInitParams(params),
         frameworkGeneration = internal.frameworkGeneration,
-        moduleRegistryVersion = lib.getModuleRegistryVersion(params.packId),
         _index = packIndex,
     }
 
@@ -197,14 +198,8 @@ local function EnsurePackCurrent(packId)
         return pack
     end
 
-    local lib = rom.mods["adamant-ModpackLib"]
-    if not lib or type(lib.getModuleRegistryVersion) ~= "function" then
-        return pack
-    end
-
-    local currentVersion = lib.getModuleRegistryVersion(packId)
     local currentGeneration = internal.frameworkGeneration or 0
-    if currentVersion ~= pack.moduleRegistryVersion or pack.frameworkGeneration ~= currentGeneration then
+    if pack.frameworkGeneration ~= currentGeneration then
         local framework = GetCurrentFramework()
         local init = framework and framework.init
         if type(init) == "function" then

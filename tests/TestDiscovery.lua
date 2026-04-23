@@ -66,6 +66,54 @@ function TestDiscovery:testModulesDiscoverDrawTabAndQuickContent()
     lu.assertEquals(discovery.tabOrder[1]._tabLabel, "Pool")
 end
 
+function TestDiscovery:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissing()
+    local exports = attachModule("test-GodPool", {
+        modpack = "test-pack",
+        id = "GodPool",
+        name = "God Pool",
+        storage = {
+            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+        },
+        apply = function() end,
+        revert = function() end,
+    }, { Enabled = false, DebugMode = false, EnabledFlag = false }, {
+        DrawTab = function() end,
+    })
+
+    local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
+    discovery.run()
+
+    local entry = discovery.modules[1]
+    local replacement = {
+        read = function(key)
+            if key == "Enabled" then
+                return true
+            end
+            return false
+        end,
+        writeAndFlush = function() return true end,
+        setEnabled = function() return true end,
+        setDebugMode = function() end,
+        hasDrawTab = function() return true end,
+        drawTab = function() end,
+        hasQuickContent = function() return false end,
+        drawQuickContent = function() end,
+    }
+
+    exports.host = replacement
+
+    local liveSnapshot = discovery.captureHostSnapshot()
+    lu.assertEquals(discovery.getSnapshotHost(entry, liveSnapshot), replacement)
+    lu.assertTrue(discovery.isEntryEnabled(entry, liveSnapshot))
+
+    exports.host = nil
+
+    local missingSnapshot = discovery.captureHostSnapshot()
+    lu.assertNil(discovery.getSnapshotHost(entry, missingSnapshot))
+    lu.assertEquals(#Warnings, 1)
+    lu.assertStrContains(Warnings[1], "module host is unavailable")
+end
+
 function TestDiscovery:testMissingStorageSkipsModule()
     attachModule("test-MissingStorage", {
         modpack = "test-pack",

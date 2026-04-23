@@ -35,11 +35,16 @@ local function init()
     })
 end
 
-modutil.once_loaded.game(function()
+local function registerGui()
+    local Framework = rom.mods["adamant-ModpackFramework"]
+
     rom.gui.add_imgui(Framework.getRenderer(PACK_ID))
     rom.gui.add_always_draw_imgui(Framework.getAlwaysDrawRenderer(PACK_ID))
     rom.gui.add_to_menu_bar(Framework.getMenuBar(PACK_ID))
-    loader.load(nil, init)
+end
+
+modutil.once_loaded.game(function()
+    loader.load(registerGui, init)
 end)
 ```
 
@@ -109,14 +114,15 @@ The sidebar is module-based: one tab per discovered module, in discovery order.
 
 Module tabs are simple:
 - Framework renders the enable checkbox
-- Framework calls `entry.host.drawTab(ui)` when enabled
-- if staged state is dirty after draw, Framework commits it through `entry.host.commitIfDirty()`
+- Framework snapshots the current module hosts at the start of the UI operation
+- Framework calls the selected module host's `drawTab(ui)` when enabled
+- if staged state is dirty after draw, Framework commits it through that snapshot host's `commitIfDirty()`
 
 ## Quick Setup
 
 Quick Setup renders in this order:
 1. coordinator-owned content from `def.renderQuickSetup(ctx)`
-2. each discovered module whose `host.hasQuickContent()` is true
+2. each discovered module discovered with quick content support
 
 Quick content is provided by coordinator code or module hosts.
 
@@ -126,9 +132,12 @@ See [QUICK_SETUP.md](QUICK_SETUP.md).
 
 Coordinator bootstrap normally reruns `Framework.init(...)` from the reload body.
 
-Framework keeps the pack session current by rebuilding from the stored init params when:
-- the coordinator reloads
-- a coordinated module publishes a refreshed host for the same `packId`
+Framework keeps the pack session current by rebuilding from the stored init params when the coordinator/framework layer reloads.
+
+Coordinated module behavior reloads do not rebuild the pack. Instead:
+- discovery metadata remains static for the process
+- UI and hash paths snapshot the module's current live host at the start of each operation
+- structural edits still require a full reload
 
 ## Hash and Profiles
 

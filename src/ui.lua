@@ -31,6 +31,15 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local FIELD_WIDE         = theme.FIELD_WIDE
     local PushTheme          = theme.PushTheme
     local PopTheme           = theme.PopTheme
+    local currentSnapshot    = nil
+
+    local function CaptureSnapshot()
+        return discovery.captureHostSnapshot()
+    end
+
+    local function GetSnapshotHost(entry, snapshot)
+        return discovery.getSnapshotHost(entry, snapshot or currentSnapshot)
+    end
 
     local function DrawColoredText(color, text)
         ui.TextColored(color[1], color[2], color[3], color[4], text)
@@ -52,13 +61,17 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
 
     --- Snapshot all Chalk configs into staging (called at init and after profile load).
     local function SnapshotToStaging()
+        local snapshot = CaptureSnapshot()
         staging.ModEnabled = config.ModEnabled == true
 
         -- Grouped modules
         for _, m in ipairs(discovery.modules) do
-            staging.modules[m.id] = discovery.isEntryEnabled(m)
-            staging.debug[m.id] = discovery.isDebugEnabled(m)
-            m.host.reloadFromConfig()
+            staging.modules[m.id] = discovery.isEntryEnabled(m, snapshot)
+            staging.debug[m.id] = discovery.isDebugEnabled(m, snapshot)
+            local host = GetSnapshotHost(m, snapshot)
+            if host then
+                host.reloadFromConfig()
+            end
         end
 
         -- Profiles
@@ -150,12 +163,12 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         hud.markHashDirty()
     end
 
-    local function ToggleEntry(entry, enabled, stagingBucket, stagingKey)
-        local ok = discovery.setEntryEnabled(entry, enabled)
+    local function ToggleEntry(entry, enabled, snapshot)
+        local ok = discovery.setEntryEnabled(entry, enabled, snapshot)
         if not ok then
             return
         end
-        stagingBucket[stagingKey] = enabled
+        staging.modules[entry.id] = enabled
         FinishUiChange(entry.definition)
     end
 
@@ -185,14 +198,15 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         return string.format("Mixed (%d/%d)", enabledCount, total), colors.info, true
     end
 
-    local function SetModulesEnabled(moduleIds, enabled)
+    local function SetModulesEnabled(moduleIds, enabled, snapshot)
         local changed = false
         local needsRunData = false
+        snapshot = snapshot or currentSnapshot or CaptureSnapshot()
 
         for _, moduleId in ipairs(moduleIds or {}) do
             local entry = discovery.modulesById[moduleId]
             if entry and staging.modules[moduleId] ~= enabled then
-                local ok = discovery.setEntryEnabled(entry, enabled)
+                local ok = discovery.setEntryEnabled(entry, enabled, snapshot)
                 if ok then
                     staging.modules[moduleId] = enabled
                     changed = true
@@ -214,18 +228,19 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         hud.markHashDirty()
     end
 
-    local function OnSessionFlushed(definition)
-        FinishUiChange(definition)
-    end
-
     --- Apply enable/disable on the game side only without persisting an entry's Enabled bit.
     --- Used by the coordinator master toggle to suspend/resume already-selected entries.
-    local function SetEntryRuntimeState(entry, state)
+    local function SetEntryRuntimeState(entry, state, snapshot)
+        local host = GetSnapshotHost(entry, snapshot)
+        if not host then
+            return false, "module host is unavailable"
+        end
+
         local ok, err
         if state then
-            ok, err = entry.host.applyMutation()
+            ok, err = host.applyMutation()
         else
-            ok, err = entry.host.revertMutation()
+            ok, err = host.revertMutation()
         end
         if not ok then
             contractWarn(packId,
@@ -234,11 +249,11 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         return ok, err
     end
 
-    local function RollBackTouchedEntries(touched, previousState)
+    local function RollBackTouchedEntries(touched, previousState, snapshot)
         local rollbackErrors = {}
         for i = #touched, 1, -1 do
             local rollbackEntry = touched[i]
-            local rollbackOk, rollbackErr = SetEntryRuntimeState(rollbackEntry, previousState)
+            local rollbackOk, rollbackErr = SetEntryRuntimeState(rollbackEntry, previousState, snapshot)
             if not rollbackOk then
                 table.insert(rollbackErrors,
                     string.format("%s: %s",
@@ -260,14 +275,15 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local function SetPackRuntimeState(state)
         local previousState = staging.ModEnabled == true
         local touched = {}
+        local snapshot = currentSnapshot or CaptureSnapshot()
 
         for _, m in ipairs(discovery.modules) do
             if staging.modules[m.id] then
-                local ok, err = SetEntryRuntimeState(m, state)
+                local ok, err = SetEntryRuntimeState(m, state, snapshot)
                 if not ok then
                     contractWarn(packId,
                         "Enable Mod toggle failed; restoring previous runtime state")
-                    RollBackTouchedEntries(touched, previousState)
+                    RollBackTouchedEntries(touched, previousState, snapshot)
                     return false, err
                 end
                 table.insert(touched, m)
@@ -300,7 +316,9 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         theme           = theme,
         drawColoredText = DrawColoredText,
         getModulesStatus = GetModulesStatus,
-        setModulesEnabled = SetModulesEnabled,
+        setModulesEnabled = function(moduleIds, enabled)
+            return SetModulesEnabled(moduleIds, enabled, currentSnapshot)
+        end,
     }
 
     local defaultProfiles = def.defaultProfiles
@@ -309,10 +327,15 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     -- GENERIC TAB CONTENT RENDERER
     -- =============================================================================
 
-    local function CommitEntrySession(entry)
-        local ok, err, committed = entry.host.commitIfDirty()
+    local function CommitEntrySession(entry, snapshot)
+        local host = GetSnapshotHost(entry, snapshot)
+        if not host then
+            return
+        end
+
+        local ok, err, committed = host.commitIfDirty()
         if ok and committed then
-            OnSessionFlushed(entry.definition)
+            FinishUiChange(entry.definition)
         elseif ok == false then
             contractWarn(packId,
                 "%s session commit failed; restored previous config where possible: %s",
@@ -321,14 +344,15 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         end
     end
 
-    local function DrawEntryBody(entry, enabled)
-        if not enabled or not entry.host.hasDrawTab() then
+    local function DrawEntryBody(entry, snapshot)
+        local host = GetSnapshotHost(entry, snapshot)
+        if not host then
             return
         end
 
-        entry.host.drawTab(ui)
+        host.drawTab(ui)
 
-        CommitEntrySession(entry)
+        CommitEntrySession(entry, snapshot)
     end
 
     -- =============================================================================
@@ -344,10 +368,15 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         if cachedTabList then return cachedTabList end
         cachedTabList = { "Quick Setup" }
         cachedQuickList = {}
+        local quickContentById = {}
+
+        for _, entry in ipairs(discovery.modulesWithQuickContent or {}) do
+            quickContentById[entry.id] = true
+        end
 
         for _, entry in ipairs(discovery.tabOrder or {}) do
             table.insert(cachedTabList, entry._tabLabel)
-            if entry.host.hasQuickContent() then
+            if quickContentById[entry.id] then
                 table.insert(cachedQuickList, entry)
             end
         end
@@ -358,8 +387,12 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     end
 
     local function ResyncAllSessions()
+        local snapshot = CaptureSnapshot()
         for _, m in ipairs(discovery.modules) do
-            m.host.resync()
+            local host = GetSnapshotHost(m, snapshot)
+            if host then
+                host.resync()
+            end
         end
         SnapshotToStaging()
     end
@@ -373,7 +406,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     -- TAB CONTENT DRAWERS
     -- =============================================================================
 
-    local function DrawQuickSetup()
+    local function DrawQuickSetup(snapshot)
         local winW = ui.GetWindowWidth()
 
         DrawColoredText(colors.info, "Select a profile to automatically configure the modpack:")
@@ -422,22 +455,28 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         end
 
         for _, entry in ipairs(cachedQuickList or {}) do
-            if staging.modules[entry.id] and entry.host.hasQuickContent() then
+            if staging.modules[entry.id] then
+                local host = GetSnapshotHost(entry, snapshot)
+                if not host then
+                    goto continue
+                end
+
                 ui.Separator()
                 ui.Spacing()
                 DrawColoredText(colors.info, entry.name or entry.id)
                 ui.Spacing()
-                entry.host.drawQuickContent(ui)
-                CommitEntrySession(entry)
+                host.drawQuickContent(ui)
+                CommitEntrySession(entry, snapshot)
             end
+            ::continue::
         end
     end
 
-    local function DrawModuleTab(entry)
+    local function DrawModuleTab(entry, snapshot)
         local enabled = staging.modules[entry.id] or false
         local val, chg = ui.Checkbox(entry._enableLabel, enabled)
         if chg then
-            ToggleEntry(entry, val, staging.modules, entry.id)
+            ToggleEntry(entry, val, snapshot)
         end
         if ui.IsItemHovered() and entry.definition.tooltip then
             ui.SetTooltip(entry.definition.tooltip)
@@ -446,7 +485,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         if not enabled then return end
 
         ui.Spacing()
-        DrawEntryBody(entry, enabled)
+        DrawEntryBody(entry, snapshot)
     end
 
     local function DrawProfiles()
@@ -621,7 +660,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         end
     end
 
-    local function DrawDev()
+    local function DrawDev(snapshot)
         DrawColoredText(colors.info, "Developer options for module authors and debugging.")
         ui.Spacing()
 
@@ -662,7 +701,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             local val, chg = ui.Checkbox(entry._debugLabel, staging.debug[entry.id])
             if chg then
                 staging.debug[entry.id] = val
-                discovery.setDebugEnabled(entry, val)
+                discovery.setDebugEnabled(entry, val, snapshot)
             end
         end
     end
@@ -671,7 +710,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     -- MAIN WINDOW
     -- =============================================================================
 
-    local function DrawMainWindow()
+    local function DrawMainWindow(snapshot)
         -- Read from staging, not Chalk
         local val, chg = ui.Checkbox("Enable Mod", staging.ModEnabled)
         if chg then
@@ -709,13 +748,13 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         ui.Spacing()
 
         if selectedTab == "Quick Setup" then
-            DrawQuickSetup()
+            DrawQuickSetup(snapshot)
         elseif selectedTab == "Profiles" then
             DrawProfiles()
         elseif selectedTab == "Dev" then
-            DrawDev()
+            DrawDev(snapshot)
         elseif moduleByTabLabel[selectedTab] then
-            DrawModuleTab(moduleByTabLabel[selectedTab])
+            DrawModuleTab(moduleByTabLabel[selectedTab], snapshot)
         end
 
         ui.EndChild()
@@ -743,7 +782,15 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             SeedWindowSize()
             local open, shouldDraw = ui.Begin(windowTitle, _showModWindow)
             if shouldDraw then
-                DrawMainWindow()
+                local previousSnapshot = currentSnapshot
+                currentSnapshot = CaptureSnapshot()
+                local ok, err = xpcall(function()
+                    DrawMainWindow(currentSnapshot)
+                end, debug.traceback)
+                currentSnapshot = previousSnapshot
+                if not ok then
+                    error(err)
+                end
             end
             ui.End()
             if open == false then

@@ -16,20 +16,67 @@ function Framework.createDiscovery(packId, config, lib)
     local warnIf = lib.logging.warnIf
     local inferMutation = lib.lifecycle.inferMutation
     local mutatesRunData = lib.lifecycle.mutatesRunData
-    local function GetHost(mod)
-        return type(mod.host) == "table" and mod.host or nil
+
+    local function GetLiveHost(modName)
+        local mod = rom.mods[modName]
+        return type(mod) == "table" and type(mod.host) == "table" and mod.host or nil
     end
 
-    local function ReadPersisted(entry, key)
-        return entry.host.read(key)
+    local function WarnMissingHost(entry)
+        contractWarn(packId, "%s: module host is unavailable", tostring(entry.modName or entry.id or "module"))
     end
 
-    local function WriteStagedAndFlush(entry, key, value)
-        return entry.host.writeAndFlush(key, value)
+    local function ResolveLiveHost(entry)
+        local host = GetLiveHost(entry.modName)
+        if type(host) == "table" then
+            return host
+        end
+        WarnMissingHost(entry)
+        return nil
     end
 
-    local function SetEntryEnabled(entry, enabled)
-        local ok, err = entry.host.setEnabled(enabled)
+    local function GetSnapshotHost(entry, snapshot)
+        if snapshot and snapshot.hosts then
+            local host = snapshot.hosts[entry]
+            if host ~= nil then
+                return host or nil
+            end
+        end
+
+        WarnMissingHost(entry)
+        return nil
+    end
+
+    local function GetHostForAccess(entry, snapshot)
+        if snapshot ~= nil then
+            return GetSnapshotHost(entry, snapshot)
+        end
+        return ResolveLiveHost(entry)
+    end
+
+    local function ReadPersisted(entry, key, snapshot)
+        local host = GetHostForAccess(entry, snapshot)
+        if not host then
+            return nil
+        end
+        return host.read(key)
+    end
+
+    local function WriteStagedAndFlush(entry, key, value, snapshot)
+        local host = GetHostForAccess(entry, snapshot)
+        if host then
+            return host.writeAndFlush(key, value)
+        end
+        return false
+    end
+
+    local function SetEntryEnabled(entry, enabled, snapshot)
+        local host = GetHostForAccess(entry, snapshot)
+        if not host then
+            return false, "module host is unavailable"
+        end
+
+        local ok, err = host.setEnabled(enabled)
         if not ok then
             contractWarn(packId,
                 "%s %s failed: %s", entry.modName, enabled and "enable" or "disable", err)
@@ -37,21 +84,20 @@ function Framework.createDiscovery(packId, config, lib)
         return ok, err
     end
 
-    local function BuildEntry(entry)
-        local def = entry.def
-        local mod = entry.mod
-        local modName = entry.modName
-        local host = GetHost(mod)
+    local function SetEntryDebugMode(entry, val, snapshot)
+        local host = GetHostForAccess(entry, snapshot)
+        if host then
+            host.setDebugMode(val)
+        end
+    end
 
+    local function BuildEntry(modName, def)
         return {
             modName = modName,
-            mod = mod,
-            host = host,
             definition = def,
             id = def.id,
             name = def.name,
             shortName = def.shortName,
-            tooltip = def.tooltip or "",
             default = def.default,
             storage = def.storage,
             _enableLabel = "Enable " .. tostring(def.name),
@@ -78,7 +124,7 @@ function Framework.createDiscovery(packId, config, lib)
         for modName, mod in pairs(rom.mods) do
             if type(mod) == "table" and mod.definition
                 and mod.definition.modpack and mod.definition.modpack == packId then
-                table.insert(found, { modName = modName, mod = mod, def = mod.definition })
+                table.insert(found, { modName = modName, def = mod.definition })
             end
         end
 
@@ -114,16 +160,15 @@ function Framework.createDiscovery(packId, config, lib)
 
         for _, entry in ipairs(found) do
             local modName = entry.modName
-            local mod = entry.mod
             local def = entry.def
             local inferredMutationShape, mutationInfo = inferMutation(def)
             local hasLifecycle = mutationInfo.hasManual or mutationInfo.hasPatch
             local lifecycleRequired = mutatesRunData(def)
-            local host = GetHost(mod)
+            local host = GetLiveHost(modName)
             local hasDrawTab = host and host.hasDrawTab() == true
             local hasQuickContent = host and host.hasQuickContent() == true
 
-            if mutatesRunData(def) and not inferredMutationShape then
+            if lifecycleRequired and not inferredMutationShape then
                 contractWarn(packId,
                     "%s: affectsRunData=true but module exposes neither patchPlan nor apply/revert",
                     modName)
@@ -142,7 +187,7 @@ function Framework.createDiscovery(packId, config, lib)
                         "%s: coordinated modules must expose host.drawTab under the lean framework contract",
                         modName)
                 else
-                    local discovered = BuildEntry(entry)
+                    local discovered = BuildEntry(modName, def)
                     table.insert(Discovery.modules, discovered)
                     Discovery.modulesById[def.id] = discovered
                     if hasQuickContent then
@@ -203,39 +248,57 @@ function Framework.createDiscovery(packId, config, lib)
         end
     end
 
-    function Discovery.isEntryEnabled(entry)
-        return ReadPersisted(entry, "Enabled") == true
+    function Discovery.captureHostSnapshot()
+        local snapshot = {
+            hosts = {},
+        }
+
+        for _, entry in ipairs(Discovery.modules) do
+            snapshot.hosts[entry] = ResolveLiveHost(entry) or false
+        end
+
+        return snapshot
     end
 
-    function Discovery.setEntryEnabled(entry, enabled)
-        return SetEntryEnabled(entry, enabled)
+    function Discovery.getCurrentHost(entry)
+        return ResolveLiveHost(entry)
     end
 
-    function Discovery.getStorageValue(entry, aliasOrKey)
-        return ReadPersisted(entry, aliasOrKey)
+    function Discovery.getSnapshotHost(entry, snapshot)
+        return GetSnapshotHost(entry, snapshot)
     end
 
-    function Discovery.setStorageValue(entry, aliasOrKey, value)
-        return WriteStagedAndFlush(entry, aliasOrKey, value)
+    function Discovery.isEntryEnabled(entry, snapshot)
+        return ReadPersisted(entry, "Enabled", snapshot) == true
     end
 
-    function Discovery.isModuleEnabled(module)
-        return Discovery.isEntryEnabled(module)
+    function Discovery.setEntryEnabled(entry, enabled, snapshot)
+        return SetEntryEnabled(entry, enabled, snapshot)
     end
 
-    function Discovery.setModuleEnabled(module, enabled)
-        return Discovery.setEntryEnabled(module, enabled)
+    function Discovery.getStorageValue(entry, aliasOrKey, snapshot)
+        return ReadPersisted(entry, aliasOrKey, snapshot)
     end
 
-    function Discovery.isDebugEnabled(entry)
-        return ReadPersisted(entry, "DebugMode") == true
+    function Discovery.setStorageValue(entry, aliasOrKey, value, snapshot)
+        return WriteStagedAndFlush(entry, aliasOrKey, value, snapshot)
     end
 
-    function Discovery.setDebugEnabled(entry, val)
-        entry.host.setDebugMode(val)
+    function Discovery.isModuleEnabled(module, snapshot)
+        return Discovery.isEntryEnabled(module, snapshot)
+    end
+
+    function Discovery.setModuleEnabled(module, enabled, snapshot)
+        return Discovery.setEntryEnabled(module, enabled, snapshot)
+    end
+
+    function Discovery.isDebugEnabled(entry, snapshot)
+        return ReadPersisted(entry, "DebugMode", snapshot) == true
+    end
+
+    function Discovery.setDebugEnabled(entry, val, snapshot)
+        SetEntryDebugMode(entry, val, snapshot)
     end
 
     return Discovery
 end
-
-

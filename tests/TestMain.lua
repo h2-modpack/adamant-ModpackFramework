@@ -292,6 +292,138 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
     lu.assertStrContains(joined, "Quick B")
 end
 
+function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
+    local previousImGui = rom.ImGui
+    local firstQuickRenders = 0
+    local secondQuickRenders = 0
+
+    local function noop() end
+
+    rom.ImGui = {
+        Begin = function() return true, true end,
+        End = noop,
+        SetNextWindowSize = noop,
+        MenuItem = function() return true end,
+        Checkbox = function(_, current) return current, false end,
+        IsItemHovered = function() return false end,
+        SetTooltip = noop,
+        Separator = noop,
+        SameLine = noop,
+        Spacing = noop,
+        TextColored = noop,
+        GetWindowWidth = function() return 1000 end,
+        BeginChild = function() return true end,
+        EndChild = noop,
+        Selectable = function() return false end,
+        BeginCombo = function() return false end,
+        EndCombo = noop,
+        PushItemWidth = noop,
+        PopItemWidth = noop,
+        Text = noop,
+        GetCursorPosX = function() return 0 end,
+        GetCursorPosY = function() return 0 end,
+        SetCursorPos = noop,
+        SetCursorPosX = noop,
+        GetFrameHeight = function() return 20 end,
+        GetFrameHeightWithSpacing = function() return 24 end,
+        GetStyle = function()
+            return {
+                FramePadding = { x = 4, y = 3 },
+                ItemSpacing = { x = 8, y = 4 },
+            }
+        end,
+        CalcTextSize = function(text) return #(tostring(text or "")) * 8 end,
+        Button = function() return false end,
+        InputText = function(_, value) return value, false end,
+        GetClipboardText = function() return nil end,
+        SetClipboardText = noop,
+        CollapsingHeader = function() return false end,
+        Indent = noop,
+        Unindent = noop,
+        PushID = noop,
+        PopID = noop,
+        PushStyleColor = noop,
+        PopStyleColor = noop,
+    }
+
+    local discovery = MockDiscovery.create({
+        {
+            modName = "Alpha",
+            id = "Alpha",
+            name = "Alpha",
+            enabled = true,
+            storage = {
+                { type = "bool", alias = "FlagA", configKey = "FlagA", default = false },
+            },
+            DrawTab = function() end,
+            DrawQuickContent = function()
+                firstQuickRenders = firstQuickRenders + 1
+            end,
+            apply = function() end,
+            revert = function() end,
+        },
+    })
+
+    local hud = {
+        setModMarker = noop,
+        markHashDirty = noop,
+        refreshHashIfIdle = noop,
+        flushPendingHash = noop,
+        updateHash = noop,
+        getConfigHash = function()
+            return "hash", "fingerprint"
+        end,
+        applyConfigHash = function()
+            return true
+        end,
+    }
+
+    local theme = Framework.createTheme(lib)
+    local def = {
+        NUM_PROFILES = 1,
+        defaultProfiles = {
+            { Name = "", Hash = "", Tooltip = "" },
+        },
+    }
+    local config = {
+        ModEnabled = true,
+        DebugMode = false,
+        Profiles = {
+            { Name = "", Hash = "", Tooltip = "" },
+        },
+    }
+
+    local builtUi = Framework.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
+    builtUi.addMenuBar()
+    local okFirst, errFirst = pcall(builtUi.renderWindow)
+
+    local entry = discovery.modules[1]
+    local store, session = lib.createStore({
+        Enabled = true,
+        DebugMode = false,
+        FlagA = false,
+    }, entry.definition)
+    local replacementHost = lib.createModuleHost({
+        definition = entry.definition,
+        store = store,
+        session = session,
+        drawTab = function() end,
+        drawQuickContent = function()
+            secondQuickRenders = secondQuickRenders + 1
+        end,
+    })
+    rom.mods[entry.modName].host = replacementHost
+
+    local okSecond, errSecond = pcall(builtUi.renderWindow)
+
+    rom.ImGui = previousImGui
+
+    lu.assertTrue(okFirst, tostring(errFirst))
+    lu.assertTrue(okSecond, tostring(errSecond))
+    lu.assertEquals(firstQuickRenders, 1)
+    lu.assertEquals(secondQuickRenders, 1)
+end
+
 function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears()
     local previousGui = rom.gui
     local guiOpen = true
@@ -459,30 +591,28 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
     lu.assertEquals(setupRunDataCalls, 1)
 end
 
-function TestMain:testRendererRebuildsWhenModuleRegistryVersionChanges()
+function TestMain:testRendererRebuildsWhenFrameworkGenerationChanges()
     local previousCreateDiscovery = Framework.createDiscovery
     local previousCreateHash = Framework.createHash
     local previousCreateTheme = Framework.createTheme
     local previousCreateHud = Framework.createHud
     local previousCreateUI = Framework.createUI
-    local previousVersionFn = lib.getModuleRegistryVersion
 
-    local packId = "registry-pack"
-    local version = 1
+    local packId = "generation-pack"
     local initCount = 0
     local renderCount = 0
-
-    lib.getModuleRegistryVersion = function(id)
-        if id == packId then
-            return version
-        end
-        return 0
-    end
+    local previousGeneration = AdamantModpackFramework_Internal.frameworkGeneration
 
     Framework.createDiscovery = function()
         return {
             modules = {},
             run = function() end,
+            captureHostSnapshot = function()
+                return { hosts = {} }
+            end,
+            getSnapshotHost = function()
+                return nil
+            end,
         }
     end
 
@@ -529,7 +659,7 @@ function TestMain:testRendererRebuildsWhenModuleRegistryVersionChanges()
 
     local render = public.getRenderer(packId)
     render()
-    version = 2
+    AdamantModpackFramework_Internal.frameworkGeneration = previousGeneration + 1
     render()
 
     Framework.createDiscovery = previousCreateDiscovery
@@ -537,7 +667,7 @@ function TestMain:testRendererRebuildsWhenModuleRegistryVersionChanges()
     Framework.createTheme = previousCreateTheme
     Framework.createHud = previousCreateHud
     Framework.createUI = previousCreateUI
-    lib.getModuleRegistryVersion = previousVersionFn
+    AdamantModpackFramework_Internal.frameworkGeneration = previousGeneration
 
     lu.assertEquals(initCount, 2)
     lu.assertEquals(renderCount, 3)

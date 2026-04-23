@@ -12,17 +12,35 @@ function Framework.createHash(discovery, config, lib, packId)
     local encodeHashValue = lib.hashing.toHash
     local decodeHashValue = lib.hashing.fromHash
 
-    local function ReadPersisted(entry, key)
-        return entry.host.read(key)
+    local function CaptureSnapshot()
+        return discovery.captureHostSnapshot()
     end
 
-    local function StagePersisted(entry, key, value)
-        entry.host.stage(key, value)
+    local function GetSnapshotHost(entry, snapshot)
+        return discovery.getSnapshotHost(entry, snapshot)
     end
 
-    local function FlushManagedSessions()
+    local function ReadPersisted(entry, key, snapshot)
+        local host = GetSnapshotHost(entry, snapshot)
+        if not host then
+            return nil
+        end
+        return host.read(key)
+    end
+
+    local function StagePersisted(entry, key, value, snapshot)
+        local host = GetSnapshotHost(entry, snapshot)
+        if host then
+            host.stage(key, value)
+        end
+    end
+
+    local function FlushManagedSessions(snapshot)
         for _, m in ipairs(discovery.modules) do
-            m.host.flush()
+            local host = GetSnapshotHost(m, snapshot)
+            if host then
+                host.flush()
+            end
         end
     end
 
@@ -149,48 +167,51 @@ function Framework.createHash(discovery, config, lib, packId)
         return getStorageRoots(entry.storage)
     end
 
-    local function ReloadManagedSession()
+    local function ReloadManagedSession(snapshot)
         for _, m in ipairs(discovery.modules) do
-            m.host.reloadFromConfig()
+            local host = GetSnapshotHost(m, snapshot)
+            if host then
+                host.reloadFromConfig()
+            end
         end
     end
 
-    local function CaptureApplySnapshot()
-        local snapshot = {
+    local function CaptureApplyState(hostSnapshot)
+        local state = {
             moduleEnabled = {},
             moduleStorage = {},
         }
 
         for _, m in ipairs(discovery.modules) do
-            snapshot.moduleEnabled[m] = discovery.isModuleEnabled(m)
+            state.moduleEnabled[m] = discovery.isModuleEnabled(m, hostSnapshot)
             local roots = {}
             for _, root in ipairs(GetRootStorage(m)) do
                 table.insert(roots, {
                     alias = root.alias,
-                    value = ClonePersistedValue(ReadPersisted(m, root.alias)),
+                    value = ClonePersistedValue(ReadPersisted(m, root.alias, hostSnapshot)),
                 })
             end
-            snapshot.moduleStorage[m] = roots
+            state.moduleStorage[m] = roots
         end
 
-        return snapshot
+        return state
     end
 
-    local function RestoreApplySnapshot(snapshot)
+    local function RestoreApplyState(state, snapshot)
         local rollbackErrors = {}
 
         for _, m in ipairs(discovery.modules) do
-            local roots = snapshot.moduleStorage[m] or {}
+            local roots = state.moduleStorage[m] or {}
             for _, entry in ipairs(roots) do
-                StagePersisted(m, entry.alias, ClonePersistedValue(entry.value))
+                StagePersisted(m, entry.alias, ClonePersistedValue(entry.value), snapshot)
             end
         end
 
-        FlushManagedSessions()
+        FlushManagedSessions(snapshot)
 
         for _, m in ipairs(discovery.modules) do
-            local previousEnabled = snapshot.moduleEnabled[m]
-            local ok, err = discovery.setModuleEnabled(m, previousEnabled)
+            local previousEnabled = state.moduleEnabled[m]
+            local ok, err = discovery.setModuleEnabled(m, previousEnabled, snapshot)
             if ok == false then
                 table.insert(rollbackErrors, string.format("%s: %s", tostring(m.modName or m.id), tostring(err)))
             end
@@ -202,11 +223,11 @@ function Framework.createHash(discovery, config, lib, packId)
         return true, nil
     end
 
-    local function FailApplyHash(snapshot, err)
+    local function FailApplyHash(state, err, snapshot)
         contractWarn(packId,
             "ApplyConfigHash failed; restoring previous state: %s",
             tostring(err))
-        local rollbackOk, rollbackErr = RestoreApplySnapshot(snapshot)
+        local rollbackOk, rollbackErr = RestoreApplyState(state, snapshot)
         if not rollbackOk then
             contractWarn(packId,
                 "ApplyConfigHash rollback incomplete: %s",
@@ -307,6 +328,7 @@ function Framework.createHash(discovery, config, lib, packId)
     end
 
     function Hash.GetConfigHash(source)
+        local snapshot = CaptureSnapshot()
         local kv = {}
 
         for _, m in ipairs(discovery.modules) do
@@ -314,7 +336,7 @@ function Framework.createHash(discovery, config, lib, packId)
             if source then
                 enabled = source.modules and source.modules[m.id]
             else
-                enabled = discovery.isModuleEnabled(m)
+                enabled = discovery.isModuleEnabled(m, snapshot)
             end
             if enabled == nil then enabled = false end
             local default = m.default == true
@@ -327,7 +349,7 @@ function Framework.createHash(discovery, config, lib, packId)
                 local packedValue = 0
                 local isDefault = true
                 for _, member in ipairs(group.members) do
-                    local value = ReadPersisted(m, member.alias)
+                    local value = ReadPersisted(m, member.alias, snapshot)
                     local encoded = EncodeGroupMemberValue(member.node, value)
                     if encoded ~= EncodeGroupMemberValue(member.node, member.node.default) then
                         isDefault = false
@@ -341,7 +363,7 @@ function Framework.createHash(discovery, config, lib, packId)
 
             for _, root in ipairs(GetRootStorage(m)) do
                 if not meta.groupedAliases[root.alias] then
-                    local current = ReadPersisted(m, root.alias)
+                    local current = ReadPersisted(m, root.alias, snapshot)
                     if not valuesEqual(root, current, root.default) then
                         local encoded = EncodeValue(root, current, "storage root")
                         if encoded ~= nil then
@@ -377,7 +399,8 @@ function Framework.createHash(discovery, config, lib, packId)
                 version, HASH_VERSION)
         end
 
-        local snapshot = CaptureApplySnapshot()
+        local snapshot = CaptureSnapshot()
+        local state = CaptureApplyState(snapshot)
         local moduleTargets = {}
         for _, m in ipairs(discovery.modules) do
             local stored = kv[m.id]
@@ -397,11 +420,12 @@ function Framework.createHash(discovery, config, lib, packId)
                         local packedValue = Hash.DecodeBase62(stored) or group.packedDefault
                         for _, member in ipairs(group.members) do
                             local encoded = readBitsValue(packedValue, member.offset, member.width)
-                            StagePersisted(m, member.alias, DecodeGroupMemberValue(member.node, encoded))
+                            StagePersisted(m, member.alias,
+                                DecodeGroupMemberValue(member.node, encoded), snapshot)
                         end
                     else
                         for _, member in ipairs(group.members) do
-                            StagePersisted(m, member.alias, member.node.default)
+                            StagePersisted(m, member.alias, member.node.default, snapshot)
                         end
                     end
                 end
@@ -410,27 +434,28 @@ function Framework.createHash(discovery, config, lib, packId)
                     if not meta.groupedAliases[root.alias] then
                         local stored = kv[m.id .. "." .. root.alias]
                         if stored ~= nil then
-                            StagePersisted(m, root.alias, DecodeValue(root, stored, "storage root"))
+                            StagePersisted(m, root.alias,
+                                DecodeValue(root, stored, "storage root"), snapshot)
                         else
-                            StagePersisted(m, root.alias, root.default)
+                            StagePersisted(m, root.alias, root.default, snapshot)
                         end
                     end
                 end
             end
 
-            FlushManagedSessions()
+            FlushManagedSessions(snapshot)
 
         end, debug.traceback)
         if not okWrite then
-            return FailApplyHash(snapshot, writeErr)
+            return FailApplyHash(state, writeErr, snapshot)
         end
 
-        ReloadManagedSession()
+        ReloadManagedSession(snapshot)
 
         for _, m in ipairs(discovery.modules) do
-            local ok, err = discovery.setModuleEnabled(m, moduleTargets[m])
+            local ok, err = discovery.setModuleEnabled(m, moduleTargets[m], snapshot)
             if ok == false then
-                return FailApplyHash(snapshot, err)
+                return FailApplyHash(state, err, snapshot)
             end
         end
 
