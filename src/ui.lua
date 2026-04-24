@@ -1,26 +1,25 @@
 -- =============================================================================
 -- UI: Main window, sidebar, tab rendering
 -- =============================================================================
--- All Core.* globals replaced with closed-over factory parameters.
--- Registration (add_imgui / add_to_menu_bar) is handled by Framework.init —
+-- Registration (add_imgui / add_to_menu_bar) is handled by the coordinator;
 -- this factory only returns { renderWindow, addMenuBar }.
 
+local internal = AdamantModpackFramework_Internal
+
 --- Create the main ImGui UI subsystem for one coordinator pack.
---- @param discovery table Discovery object returned by `Framework.createDiscovery(...)`.
---- @param hud table HUD object returned by `Framework.createHud(...)`.
---- @param theme table Theme object returned by `Framework.createTheme(...)`.
+--- @param discovery table Discovery object.
+--- @param hud table HUD object.
+--- @param theme table Theme object.
 --- @param def table Coordinator definition table containing profile and layout metadata.
 --- @param config table Coordinator config table.
 --- @param lib table Adamant Modpack Lib export.
 --- @param packId string Pack identifier used in warnings.
 --- @param windowTitle string Window title shown in the mod menu.
 --- @return table ui UI object exposing `{ renderWindow, addMenuBar }`.
-function Framework.createUI(discovery, hud, theme, def, config, lib, packId, windowTitle)
+function internal.createUI(discovery, hud, theme, def, config, lib, packId, windowTitle)
     local ui                 = rom.ImGui
     local DEFAULT_WINDOW_WIDTH = 1280
     local DEFAULT_WINDOW_HEIGHT = 840
-    local contractWarn       = lib.logging.warn
-    local mutatesRunData     = lib.lifecycle.mutatesRunData
 
     -- Unpack theme for convenient access
     local colors             = theme.colors
@@ -56,8 +55,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         debug      = {},                        -- [module.id] = bool (DebugMode per entry)
     }
 
-    -- Profile staging: plain copies of config.Profiles
-    local profileStaging = {}
+    local profiles = nil
 
     --- Snapshot all Chalk configs into staging (called at init and after profile load).
     local function SnapshotToStaging()
@@ -73,287 +71,70 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
                 host.reloadFromConfig()
             end
         end
-
-        -- Profiles
-        for i, p in ipairs(config.Profiles) do
-            profileStaging[i] = {
-                Name    = p.Name or "",
-                Hash    = p.Hash or "",
-                Tooltip = p.Tooltip or "",
-            }
+        if profiles then
+            profiles.snapshot()
         end
     end
 
     -- Initialize staging from current configs
     SnapshotToStaging()
 
-    -- =============================================================================
-    -- CACHED DISPLAY DATA (rebuilt on dirty flag, never per-frame)
-    -- =============================================================================
-
-    local NUM_PROFILES = def.NUM_PROFILES
-
-    local slotLabels = {}
-    local slotOccupied = {}
-    local slotLabelsDirty = true
-
-    local cachedHash = nil
-    local cachedFingerprint = nil
-    local runDataDirty = false
-
-    local selectedProfileSlot = 1
-    local selectedProfileCombo = 0
-    local importHashBuffer = ""
-    local importFeedback = nil
-    local importFeedbackColor = nil
-    local importFeedbackTime = nil
-    local FEEDBACK_DURATION = 2.0
-    local function SetImportFeedback(text, color)
-        importFeedback = text
-        importFeedbackColor = color
-        importFeedbackTime = os.clock()
-    end
-
-    local function InvalidateHash()
-        cachedHash = nil
-        cachedFingerprint = nil
-    end
-
-    local function markRunDataDirty()
-        runDataDirty = true
-    end
-
-    local function flushPendingRunData()
-        if not runDataDirty then
-            return
-        end
-        rom.game.SetupRunData()
-        runDataDirty = false
-    end
-
-    local function GetCachedHash()
-        if not cachedHash then
-            cachedHash, cachedFingerprint = hud.getConfigHash(staging)
-        end
-        return cachedHash, cachedFingerprint
-    end
-
-    local function RebuildSlotLabels()
-        for i, p in ipairs(profileStaging) do
-            local hasName = p.Name ~= ""
-            slotOccupied[i] = hasName
-            if hasName then
-                slotLabels[i] = i .. ": " .. p.Name
-            else
-                slotLabels[i] = i .. ": (empty)"
-            end
-        end
-        slotLabelsDirty = false
-    end
-
-    -- =============================================================================
-    -- TOGGLE HELPERS (event handlers — OK to touch Chalk here)
-    -- =============================================================================
-
-    local function FinishUiChange(definition)
-        if mutatesRunData(definition) then
-            markRunDataDirty()
-        end
-        InvalidateHash()
-        hud.markHashDirty()
-    end
-
-    local function ToggleEntry(entry, enabled, snapshot)
-        local ok = discovery.setEntryEnabled(entry, enabled, snapshot)
-        if not ok then
-            return
-        end
-        staging.modules[entry.id] = enabled
-        FinishUiChange(entry.definition)
-    end
-
-    local function GetModulesStatus(moduleIds)
-        local total = 0
-        local enabledCount = 0
-
-        for _, moduleId in ipairs(moduleIds or {}) do
-            local entry = discovery.modulesById[moduleId]
-            if entry then
-                total = total + 1
-                if staging.modules[moduleId] then
-                    enabledCount = enabledCount + 1
-                end
-            end
-        end
-
-        if total == 0 then
-            return "Unavailable", colors.textDisabled, false
-        end
-        if enabledCount == 0 then
-            return "Disabled", colors.warning, true
-        end
-        if enabledCount == total then
-            return "Enabled", colors.success, true
-        end
-        return string.format("Mixed (%d/%d)", enabledCount, total), colors.info, true
-    end
-
-    local function SetModulesEnabled(moduleIds, enabled, snapshot)
-        local changed = false
-        local needsRunData = false
-        snapshot = snapshot or currentSnapshot or CaptureSnapshot()
-
-        for _, moduleId in ipairs(moduleIds or {}) do
-            local entry = discovery.modulesById[moduleId]
-            if entry and staging.modules[moduleId] ~= enabled then
-                local ok = discovery.setEntryEnabled(entry, enabled, snapshot)
-                if ok then
-                    staging.modules[moduleId] = enabled
-                    changed = true
-                    if mutatesRunData(entry.definition) then
-                        needsRunData = true
-                    end
-                end
-            end
-        end
-
-        if not changed then
-            return
-        end
-
-        if needsRunData then
-            markRunDataDirty()
-        end
-        InvalidateHash()
-        hud.markHashDirty()
-    end
-
-    --- Apply enable/disable on the game side only without persisting an entry's Enabled bit.
-    --- Used by the coordinator master toggle to suspend/resume already-selected entries.
-    local function SetEntryRuntimeState(entry, state, snapshot)
-        local host = GetSnapshotHost(entry, snapshot)
-        if not host then
-            return false, "module host is unavailable"
-        end
-
-        local ok, err
-        if state then
-            ok, err = host.applyMutation()
-        else
-            ok, err = host.revertMutation()
-        end
-        if not ok then
-            contractWarn(packId,
-                "%s %s failed: %s", entry.modName or "unknown", state and "apply" or "revert", err)
-        end
-        return ok, err
-    end
-
-    local function RollBackTouchedEntries(touched, previousState, snapshot)
-        local rollbackErrors = {}
-        for i = #touched, 1, -1 do
-            local rollbackEntry = touched[i]
-            local rollbackOk, rollbackErr = SetEntryRuntimeState(rollbackEntry, previousState, snapshot)
-            if not rollbackOk then
-                table.insert(rollbackErrors,
-                    string.format("%s: %s",
-                        tostring(rollbackEntry.modName or rollbackEntry.id or "unknown"),
-                        tostring(rollbackErr)))
-            end
-        end
-        if #rollbackErrors > 0 then
-            contractWarn(packId,
-                "Enable Mod rollback incomplete: %s",
-                table.concat(rollbackErrors, "; "))
-        end
-    end
-
-    --- Apply the coordinator master toggle transactionally across all selected entries.
-    --- On failure, already-touched entries are restored to the previous pack runtime state.
-    --- @param state boolean
-    --- @return boolean, string|nil
-    local function SetPackRuntimeState(state)
-        local previousState = staging.ModEnabled == true
-        local touched = {}
-        local snapshot = currentSnapshot or CaptureSnapshot()
-
-        for _, m in ipairs(discovery.modules) do
-            if staging.modules[m.id] then
-                local ok, err = SetEntryRuntimeState(m, state, snapshot)
-                if not ok then
-                    contractWarn(packId,
-                        "Enable Mod toggle failed; restoring previous runtime state")
-                    RollBackTouchedEntries(touched, previousState, snapshot)
-                    return false, err
-                end
-                table.insert(touched, m)
-            end
-        end
-
-        staging.ModEnabled = state
-        config.ModEnabled = state
-        markRunDataDirty()
-        hud.setModMarker(state)
-        return true, nil
-    end
-
-    --- Load a profile hash: decode, apply to all module configs, re-snapshot.
-    local function LoadProfile(profileHash)
-        if hud.applyConfigHash(profileHash) then
-            markRunDataDirty()
-            SnapshotToStaging()
-            InvalidateHash()
-            slotLabelsDirty = true
-            hud.updateHash()
-            return true
-        end
-        return false
-    end
-
-    local quickSetupContext = {
-        ui              = ui,
-        colors          = colors,
-        theme           = theme,
-        drawColoredText = DrawColoredText,
-        getModulesStatus = GetModulesStatus,
-        setModulesEnabled = function(moduleIds, enabled)
-            return SetModulesEnabled(moduleIds, enabled, currentSnapshot)
+    local runtime = internal.createUIRuntime({
+        discovery = discovery,
+        hud = hud,
+        config = config,
+        lib = lib,
+        packId = packId,
+        colors = colors,
+        staging = staging,
+        captureSnapshot = CaptureSnapshot,
+        getSnapshotHost = GetSnapshotHost,
+        getCurrentSnapshot = function()
+            return currentSnapshot
         end,
-    }
+        snapshotToStaging = SnapshotToStaging,
+        onProfileLoaded = function()
+            if profiles then
+                profiles.markSlotLabelsDirty()
+            end
+        end,
+    })
 
-    local defaultProfiles = def.defaultProfiles
+    profiles = internal.createUIProfiles({
+        ui = ui,
+        config = config,
+        def = def,
+        colors = colors,
+        drawColoredText = DrawColoredText,
+        getCachedHash = runtime.getCachedHash,
+        loadProfile = runtime.loadProfile,
+        fieldMedium = FIELD_MEDIUM,
+        fieldNarrow = FIELD_NARROW,
+        fieldWide = FIELD_WIDE,
+    })
 
-    -- =============================================================================
-    -- GENERIC TAB CONTENT RENDERER
-    -- =============================================================================
+    local quickSetup = internal.createUIQuickSetup({
+        ui = ui,
+        def = def,
+        profiles = profiles,
+        staging = staging,
+        discovery = discovery,
+        runtime = runtime,
+        getSnapshotHost = GetSnapshotHost,
+        drawColoredText = DrawColoredText,
+        colors = colors,
+        theme = theme,
+        getCurrentSnapshot = function()
+            return currentSnapshot
+        end,
+    })
 
-    local function CommitEntrySession(entry, snapshot)
-        local host = GetSnapshotHost(entry, snapshot)
-        if not host then
-            return
-        end
-
-        local ok, err, committed = host.commitIfDirty()
-        if ok and committed then
-            FinishUiChange(entry.definition)
-        elseif ok == false then
-            contractWarn(packId,
-                "%s session commit failed; restored previous config where possible: %s",
-                tostring(entry.name or entry.id or entry.modName or "module"),
-                tostring(err))
-        end
-    end
-
-    local function DrawEntryBody(entry, snapshot)
-        local host = GetSnapshotHost(entry, snapshot)
-        if not host then
-            return
-        end
-
-        host.drawTab(ui)
-
-        CommitEntrySession(entry, snapshot)
-    end
+    local moduleTabs = internal.createUIModuleTabs({
+        ui = ui,
+        staging = staging,
+        runtime = runtime,
+        getSnapshotHost = GetSnapshotHost,
+    })
 
     -- =============================================================================
     -- SIDE TAB DEFINITIONS
@@ -386,324 +167,20 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         return cachedTabList
     end
 
-    local function ResyncAllSessions()
-        local snapshot = CaptureSnapshot()
-        for _, m in ipairs(discovery.modules) do
-            local host = GetSnapshotHost(m, snapshot)
-            if host then
-                host.resync()
-            end
-        end
-        SnapshotToStaging()
-    end
+    local dev = internal.createUIDev({
+        ui = ui,
+        config = config,
+        lib = lib,
+        colors = colors,
+        discovery = discovery,
+        staging = staging,
+        drawColoredText = DrawColoredText,
+        resyncAllSessions = runtime.resyncAllSessions,
+    })
 
     local moduleByTabLabel = {}
     for _, entry in ipairs(discovery.modules) do
         moduleByTabLabel[entry._tabLabel] = entry
-    end
-
-    -- =============================================================================
-    -- TAB CONTENT DRAWERS
-    -- =============================================================================
-
-    local function DrawQuickSetup(snapshot)
-        local winW = ui.GetWindowWidth()
-
-        DrawColoredText(colors.info, "Select a profile to automatically configure the modpack:")
-        ui.Spacing()
-
-        if slotLabelsDirty then RebuildSlotLabels() end
-
-        local comboPreview = "Select..."
-        if selectedProfileCombo > 0 and selectedProfileCombo <= NUM_PROFILES and slotOccupied[selectedProfileCombo] then
-            comboPreview = slotLabels[selectedProfileCombo]
-        end
-
-        ui.PushItemWidth(winW * FIELD_MEDIUM)
-        if ui.BeginCombo("Profile", comboPreview) then
-            for i = 1, NUM_PROFILES do
-                if slotOccupied[i] then
-                    ui.PushID(i)
-                    if ui.Selectable(slotLabels[i], i == selectedProfileCombo) then
-                        selectedProfileCombo = i
-                    end
-                    if ui.IsItemHovered() then
-                        local tip = profileStaging[i].Tooltip
-                        if tip ~= "" then ui.SetTooltip(tip) end
-                    end
-                    ui.PopID()
-                end
-            end
-            ui.EndCombo()
-        end
-        ui.PopItemWidth()
-
-        ui.SameLine()
-        local sel = selectedProfileCombo
-        if sel > 0 and sel <= NUM_PROFILES then
-            local h = profileStaging[sel].Hash
-            if h ~= "" then
-                if ui.Button("Load") then LoadProfile(h) end
-            end
-        end
-
-        ui.Separator()
-        ui.Spacing()
-
-        if type(def.renderQuickSetup) == "function" then
-            def.renderQuickSetup(quickSetupContext)
-        end
-
-        for _, entry in ipairs(cachedQuickList or {}) do
-            if staging.modules[entry.id] then
-                local host = GetSnapshotHost(entry, snapshot)
-                if not host then
-                    goto continue
-                end
-
-                ui.Separator()
-                ui.Spacing()
-                DrawColoredText(colors.info, entry.name or entry.id)
-                ui.Spacing()
-                host.drawQuickContent(ui)
-                CommitEntrySession(entry, snapshot)
-            end
-            ::continue::
-        end
-    end
-
-    local function DrawModuleTab(entry, snapshot)
-        local enabled = staging.modules[entry.id] or false
-        local val, chg = ui.Checkbox(entry._enableLabel, enabled)
-        if chg then
-            ToggleEntry(entry, val, snapshot)
-        end
-        if ui.IsItemHovered() and entry.definition.tooltip then
-            ui.SetTooltip(entry.definition.tooltip)
-        end
-
-        if not enabled then return end
-
-        ui.Spacing()
-        DrawEntryBody(entry, snapshot)
-    end
-
-    local function DrawProfiles()
-        local winW = ui.GetWindowWidth()
-
-        -- Export / Import
-        DrawColoredText(colors.info, "Export / Import")
-        ui.Indent()
-
-        -- Read cached hash (computed from staging, not Chalk)
-        local canonical, fingerprint = GetCachedHash()
-        ui.Text("Config ID:")
-        ui.SameLine()
-        DrawColoredText(colors.success, fingerprint)
-        ui.SameLine()
-        if ui.Button("Copy") then
-            ui.SetClipboardText(canonical)
-            SetImportFeedback("Copied to clipboard!", colors.success)
-        end
-
-        ui.Spacing()
-        ui.Text("Import Hash:")
-        ui.SameLine()
-        ui.PushItemWidth(winW * FIELD_MEDIUM)
-        local newText, changed = ui.InputText("##ImportHash", importHashBuffer, 2048)
-        if changed then importHashBuffer = newText end
-        ui.PopItemWidth()
-        ui.SameLine()
-        if ui.Button("Paste") then
-            local clip = ui.GetClipboardText()
-            if clip then importHashBuffer = clip end
-        end
-        ui.SameLine()
-        if ui.Button("Import") then
-            if LoadProfile(importHashBuffer) then
-                SetImportFeedback("Imported successfully!", colors.success)
-            else
-                SetImportFeedback("Invalid hash.", colors.error)
-            end
-        end
-
-        ui.Unindent()
-        ui.Spacing()
-        ui.Separator()
-        ui.Spacing()
-
-        -- Profile Slot Selector
-        DrawColoredText(colors.info, "Saved Profiles")
-        ui.Indent()
-
-        if slotLabelsDirty then RebuildSlotLabels() end
-
-        ui.PushItemWidth(winW * FIELD_NARROW)
-        if ui.BeginCombo("Slot", slotLabels[selectedProfileSlot]) then
-            for i, label in ipairs(slotLabels) do
-                if ui.Selectable(label, i == selectedProfileSlot) then
-                    selectedProfileSlot = i
-                end
-            end
-            ui.EndCombo()
-        end
-        ui.PopItemWidth()
-
-        ui.Spacing()
-
-        -- Read from profileStaging, not Chalk
-        local ps = profileStaging[selectedProfileSlot]
-        local hasData = ps.Hash ~= ""
-
-        ui.Text("Name:")
-        ui.SameLine()
-        ui.PushItemWidth(winW * FIELD_NARROW)
-        local newName, nameChanged = ui.InputText("##SlotName", ps.Name, 64)
-        if nameChanged then
-            ps.Name = newName
-            config.Profiles[selectedProfileSlot].Name = newName -- write to Chalk
-            slotLabelsDirty = true
-        end
-        ui.PopItemWidth()
-
-        ui.Text("Tooltip:")
-        ui.SameLine()
-        ui.PushItemWidth(winW * FIELD_WIDE)
-        local newTooltip, tooltipChanged = ui.InputText("##SlotTooltip", ps.Tooltip, 256)
-        if tooltipChanged then
-            ps.Tooltip = newTooltip
-            config.Profiles[selectedProfileSlot].Tooltip = newTooltip -- write to Chalk
-        end
-        ui.PopItemWidth()
-
-        ui.Spacing()
-
-        if ui.Button("Save Current") then
-            local h = GetCachedHash()
-            ps.Hash = h
-            config.Profiles[selectedProfileSlot].Hash = h -- write to Chalk
-            if ps.Name == "" then
-                ps.Name = "Profile " .. selectedProfileSlot
-                config.Profiles[selectedProfileSlot].Name = ps.Name
-            end
-            slotLabelsDirty = true
-            SetImportFeedback("Profile saved.", colors.success)
-        end
-
-        if hasData then
-            ui.SameLine()
-            if ui.Button("Load") then
-                if LoadProfile(ps.Hash) then
-                    SetImportFeedback("Profile loaded.", colors.success)
-                else
-                    SetImportFeedback("Failed to load profile.", colors.error)
-                end
-            end
-            ui.SameLine()
-            if ui.Button("Copy Hash") then
-                ui.SetClipboardText(ps.Hash)
-                SetImportFeedback("Copied to clipboard!", colors.success)
-            end
-            ui.SameLine()
-            if ui.Button("Clear") then
-                ps.Name = ""
-                ps.Hash = ""
-                ps.Tooltip = ""
-                local cp = config.Profiles[selectedProfileSlot]
-                cp.Name = ""
-                cp.Hash = ""
-                cp.Tooltip = ""
-                slotLabelsDirty = true
-                SetImportFeedback("Slot cleared.", colors.textDisabled)
-            end
-            if ui.IsItemHovered() then
-                ui.SetTooltip("Permanently clears this profile slot.")
-            end
-        end
-
-        ui.Unindent()
-        ui.Spacing()
-        ui.Separator()
-        ui.Spacing()
-
-        if ui.Button("Restore Default Profiles") then
-            for i = 1, NUM_PROFILES do
-                local d = defaultProfiles[i]
-                local cp = config.Profiles[i] -- Chalk write
-                if d then
-                    profileStaging[i] = { Name = d.Name, Hash = d.Hash, Tooltip = d.Tooltip }
-                    cp.Name = d.Name
-                    cp.Hash = d.Hash
-                    cp.Tooltip = d.Tooltip
-                else
-                    profileStaging[i] = { Name = "", Hash = "", Tooltip = "" }
-                    cp.Name = ""
-                    cp.Hash = ""
-                    cp.Tooltip = ""
-                end
-            end
-            slotLabelsDirty = true
-            SetImportFeedback("Default profiles restored.", colors.success)
-        end
-        if ui.IsItemHovered() then
-            ui.SetTooltip("Overwrites ALL profile slots with the shipped defaults. Custom profiles will be lost.")
-        end
-
-        -- Status bar: single feedback line for all profile actions
-        ui.Spacing()
-        if importFeedback then
-            if os.clock() - importFeedbackTime > FEEDBACK_DURATION then
-                importFeedback = nil
-            else
-                DrawColoredText(importFeedbackColor, importFeedback)
-            end
-        end
-    end
-
-    local function DrawDev(snapshot)
-        DrawColoredText(colors.info, "Developer options for module authors and debugging.")
-        ui.Spacing()
-
-        -- Framework debug gates framework-owned warnings such as discovery, hash import,
-        -- and framework-managed apply/revert failures.
-        -- Load-time schema validation lives in Lib.
-        -- Read/write directly from config — intentional exception to the staging pattern.
-        -- These flags have no external writers (no profile load),
-        -- so staging would add complexity with no correctness benefit.
-        -- lib.config.DebugMode is shared across packs: direct reads reflect changes from
-        -- other pack Dev tabs immediately, whereas staging would go stale.
-        local fwVal, fwChg = ui.Checkbox("Framework Debug", config.DebugMode == true)
-        if fwChg then
-            config.DebugMode = fwVal
-        end
-        if ui.IsItemHovered() then
-            ui.SetTooltip(
-            "Print framework diagnostics for discovery, hash parsing, and apply/revert failures.")
-        end
-
-        local libVal, libChg = ui.Checkbox("Lib Debug", lib.config.DebugMode == true)
-        if libChg then
-            lib.config.DebugMode = libVal
-        end
-        if ui.IsItemHovered() then
-            ui.SetTooltip(
-            "Print lib-internal diagnostic warnings (schema errors, unknown field types). Shared across all packs.")
-        end
-
-        if ui.Button("Resync Sessions") then
-            ResyncAllSessions()
-        end
-
-        DrawColoredText(colors.info, "Per-Module Debug")
-        ui.Spacing()
-
-        for _, entry in ipairs(discovery.modules) do
-            local val, chg = ui.Checkbox(entry._debugLabel, staging.debug[entry.id])
-            if chg then
-                staging.debug[entry.id] = val
-                discovery.setDebugEnabled(entry, val, snapshot)
-            end
-        end
     end
 
     -- =============================================================================
@@ -714,7 +191,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         -- Read from staging, not Chalk
         local val, chg = ui.Checkbox("Enable Mod", staging.ModEnabled)
         if chg then
-            SetPackRuntimeState(val)
+            runtime.setPackRuntimeState(val, snapshot)
         end
         if ui.IsItemHovered() then ui.SetTooltip("Toggle the entire modpack on or off.") end
 
@@ -748,13 +225,13 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         ui.Spacing()
 
         if selectedTab == "Quick Setup" then
-            DrawQuickSetup(snapshot)
+            quickSetup.draw(cachedQuickList, snapshot)
         elseif selectedTab == "Profiles" then
-            DrawProfiles()
+            profiles.draw()
         elseif selectedTab == "Dev" then
-            DrawDev(snapshot)
+            dev.draw(snapshot)
         elseif moduleByTabLabel[selectedTab] then
-            DrawModuleTab(moduleByTabLabel[selectedTab], snapshot)
+            moduleTabs.draw(moduleByTabLabel[selectedTab], snapshot)
         end
 
         ui.EndChild()
@@ -781,6 +258,8 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             PushTheme()
             SeedWindowSize()
             local open, shouldDraw = ui.Begin(windowTitle, _showModWindow)
+            local renderOk = true
+            local renderErr = nil
             if shouldDraw then
                 local previousSnapshot = currentSnapshot
                 currentSnapshot = CaptureSnapshot()
@@ -788,24 +267,26 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
                     DrawMainWindow(currentSnapshot)
                 end, debug.traceback)
                 currentSnapshot = previousSnapshot
-                if not ok then
-                    error(err)
-                end
+                renderOk = ok
+                renderErr = err
             end
             ui.End()
             if open == false then
-                flushPendingRunData()
+                runtime.flushPendingRunData()
                 hud.flushPendingHash()
                 _showModWindow = false
             end
             PopTheme()
+            if renderOk == false then
+                error(renderErr)
+            end
         end
     end
 
     local function addMenuBar()
         if ui.MenuItem("Show Mod Menu") then
             if _showModWindow then
-                flushPendingRunData()
+                runtime.flushPendingRunData()
                 hud.flushPendingHash()
             end
             _showModWindow = not _showModWindow
@@ -815,6 +296,6 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     return {
         renderWindow = renderWindow,
         addMenuBar = addMenuBar,
-        flushPendingRunData = flushPendingRunData,
+        flushPendingRunData = runtime.flushPendingRunData,
     }
 end

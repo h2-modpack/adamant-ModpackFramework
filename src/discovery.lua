@@ -5,12 +5,14 @@
 -- Under the lean framework contract, every coordinated module gets its own top-level tab.
 -- Modules render themselves through DrawTab; DrawQuickContent is optional.
 
+local internal = AdamantModpackFramework_Internal
+
 --- Create the discovery subsystem for one coordinator pack.
 --- @param packId string Pack identifier used to filter opted-in modules.
 --- @param config table Coordinator config table containing at least `DebugMode`.
 --- @param lib table Adamant Modpack Lib export.
 --- @return table discovery Discovery object with `run`, state accessors, and discovered entry lists.
-function Framework.createDiscovery(packId, config, lib)
+function internal.createDiscovery(packId, config, lib)
     local Discovery = {}
     local contractWarn = lib.logging.warn
     local warnIf = lib.logging.warnIf

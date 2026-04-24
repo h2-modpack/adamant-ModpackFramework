@@ -11,15 +11,17 @@
 --- Create the HUD subsystem for one coordinator pack.
 --- @param packId string Pack identifier used for component naming.
 --- @param packIndex number Stable vertical stacking index for this pack.
---- @param hash table Hash subsystem returned by `Framework.createHash(...)`.
---- @param theme table Theme object returned by `Framework.createTheme(...)`.
+--- @param hash table Hash subsystem.
+--- @param theme table Theme object.
 --- @param config table Coordinator config table containing `ModEnabled`.
 --- @param lib AdamantModpackLib Shared lib used for reload-stable hook registration.
 --- @param hideHashMarker boolean|nil Optional pack-level flag to suppress the HUD fingerprint marker.
 --- @return table hud HUD object exposing marker/hash update helpers.
-function Framework.createHud(packId, packIndex, hash, theme, config, lib, hideHashMarker)
+local internal = AdamantModpackFramework_Internal
+
+function internal.createHud(packId, packIndex, hash, theme, config, lib, hideHashMarker)
     assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
-        "Framework.createHud: game HUD globals are not ready; call Framework.init after game load")
+        "Framework.init: game HUD globals are not ready; call after game load")
 
     local HUD_LINE_HEIGHT = 24
     local HASH_UPDATE_DEBOUNCE_SECONDS = 5
@@ -82,7 +84,7 @@ function Framework.createHud(packId, packIndex, hash, theme, config, lib, hideHa
     end)
 
     -- =============================================================================
-    -- PUBLIC API
+    -- RETURNED API
     -- =============================================================================
 
     local function updateHash()

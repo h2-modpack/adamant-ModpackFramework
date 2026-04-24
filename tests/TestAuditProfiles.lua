@@ -22,7 +22,7 @@ function TestAuditProfiles:testKnownStorageKeysProduceNoWarnings()
 
     -- SpecialBiome is not a discovered module; its hash keys are an unknown namespace and
     -- should be silently ignored (not installed vs. renamed are indistinguishable).
-    Framework.auditSavedProfiles("test-pack", {
+    FrameworkTestApi.auditSavedProfiles("test-pack", {
         { Name = "Known", Hash = "_v=1|GodPool=1|GodPool.EnabledFlag=1|SpecialBiome=1|SpecialBiome.Mode=Chaos", Tooltip = "" },
     }, discovery, lib)
 
@@ -39,7 +39,7 @@ function TestAuditProfiles:testUnknownKeyInKnownNamespaceWarns()
         },
     })
 
-    Framework.auditSavedProfiles("test-pack", {
+    FrameworkTestApi.auditSavedProfiles("test-pack", {
         { Name = "Broken", Hash = "_v=1|GodPool.MissingField=1", Tooltip = "" },
     }, discovery, lib)
 
@@ -57,7 +57,7 @@ function TestAuditProfiles:testUnknownNamespaceIsIgnored()
         },
     })
 
-    Framework.auditSavedProfiles("test-pack", {
+    FrameworkTestApi.auditSavedProfiles("test-pack", {
         { Name = "Foreign", Hash = "_v=1|UnknownModule.Field=1", Tooltip = "" },
     }, discovery, lib)
 

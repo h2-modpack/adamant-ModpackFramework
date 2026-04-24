@@ -11,34 +11,39 @@
 --       windowTitle = "Speedrun Modpack",
 --       config      = config,    -- coordinator's Chalk config
 --       def         = def,       -- { NUM_PROFILES, defaultProfiles }
---       modutil     = modutil,
 --   })
 --
 -- Framework.init can be called on every hot reload; subsequent calls update subsystem
 -- instances in place. GUI registration is the coordinator's responsibility:
 --   rom.gui.add_imgui(Framework.getRenderer(packId))
+--   rom.gui.add_always_draw_imgui(Framework.getAlwaysDrawRenderer(packId))
 --   rom.gui.add_to_menu_bar(Framework.getMenuBar(packId))
 
 local mods = rom.mods
 mods["SGG_Modding-ENVY"].auto()
 
----@diagnostic disable: lowercase-global
-Framework = {}
 AdamantModpackFramework_Internal = AdamantModpackFramework_Internal or {}
 local internal = AdamantModpackFramework_Internal
 internal.packs = internal.packs or {}
-internal.packList = internal.packList or {}
+internal.packIndices = internal.packIndices or {}
+internal.nextPackIndex = internal.nextPackIndex or 1
 internal.callbacks = internal.callbacks or {}
 internal.frameworkGeneration = (internal.frameworkGeneration or 0) + 1
 
-import "ui_theme.lua"
+import "ui/theme.lua"
+import "profiles.lua"
 import "discovery.lua"
 import "hash.lua"
 import "hud.lua"
+import "ui/runtime.lua"
+import "ui/profiles.lua"
+import "ui/dev.lua"
+import "ui/quick_setup.lua"
+import "ui/module_tabs.lua"
 import "ui.lua"
 
 local _packs = internal.packs
-local _packList = internal.packList
+local _packIndices = internal.packIndices
 
 local function GetCurrentFramework()
     return rom.mods["adamant-ModpackFramework"]
@@ -58,8 +63,6 @@ local function ValidateInitParams(params)
         "Framework.init: config.ModEnabled must be a boolean")
     assert(type(params.config.DebugMode) == "boolean",
         "Framework.init: config.DebugMode must be a boolean")
-    assert(type(params.config.Profiles) == "table",
-        "Framework.init: config.Profiles must be a table")
 
     local numProfiles = params.def.NUM_PROFILES
     assert(type(numProfiles) == "number" and numProfiles > 0 and math.floor(numProfiles) == numProfiles,
@@ -67,65 +70,8 @@ local function ValidateInitParams(params)
     assert(type(params.def.defaultProfiles) == "table",
         "Framework.init: def.defaultProfiles must be a table")
 
-    for i = 1, numProfiles do
-        local profile = params.config.Profiles[i]
-        assert(type(profile) == "table",
-            string.format(
-                "Framework.init: config.Profiles[%d] is missing; ensure config.lua declares all %d profile entries",
-                i, numProfiles))
-        profile.Name = profile.Name or ""
-        profile.Hash = profile.Hash or ""
-        profile.Tooltip = profile.Tooltip or ""
-    end
+    internal.normalizeProfiles(params.config.Profiles, numProfiles)
 end
-
---- Scan saved profiles against the current discovered key surface.
---- Warns when a profile contains a field key for a known module that
---- no longer exists, indicating a likely rename. Namespaces absent from discovery
---- are skipped silently because "not installed" and "renamed" are indistinguishable.
-local function AuditSavedProfiles(packId, profiles, discovery, lib)
-    local knownModules = {}
-
-    for _, m in ipairs(discovery.modules) do
-        local fields = {}
-        if m.storage then
-            for _, root in ipairs(m.storage) do
-                if root._isRoot and root.alias ~= nil then
-                    fields[tostring(root.alias)] = true
-                end
-            end
-        end
-        knownModules[m.id] = fields
-    end
-
-    for i, profile in ipairs(profiles) do
-        local hash = profile.Hash
-        if hash and hash ~= "" then
-            local profileLabel = (profile.Name ~= "" and profile.Name) or ("slot " .. i)
-            for entry in string.gmatch(hash .. "|", "([^|]*)|") do
-                local key = string.match(entry, "^([^=]+)=")
-                if key and key ~= "_v" then
-                    local namespace, field = string.match(key, "^([^.]+)%.(.+)$")
-                    if not namespace then
-                        namespace = key
-                        field = nil
-                    end
-
-                    if field then
-                        local moduleFields = knownModules[namespace]
-                        if moduleFields and not moduleFields[field] then
-                            lib.logging.warn(packId,
-                                "Profile '%s': unrecognized key '%s.%s' - possible rename or removed option",
-                                profileLabel, namespace, field)
-                        end
-                    end
-                end
-            end
-        end
-    end
-end
-
-Framework.auditSavedProfiles = AuditSavedProfiles
 
 local function RememberInitParams(params)
     return {
@@ -137,40 +83,50 @@ local function RememberInitParams(params)
     }
 end
 
-function Framework.init(params)
+function public.init(params)
     local lib = rom.mods["adamant-ModpackLib"]
     ValidateInitParams(params)
 
     lib.lifecycle.registerCoordinator(params.packId, params.config)
     import_as_fallback(rom.game)
 
-    local packIndex = _packs[params.packId] and _packs[params.packId]._index or nil
+    local packIndex = _packIndices[params.packId]
     if not packIndex then
-        table.insert(_packList, params.packId)
-        packIndex = #_packList
+        packIndex = internal.nextPackIndex
+        internal.nextPackIndex = internal.nextPackIndex + 1
+        _packIndices[params.packId] = packIndex
     end
 
-    local discovery = Framework.createDiscovery(params.packId, params.config, lib)
-    local hash = Framework.createHash(discovery, params.config, lib, params.packId)
-    local theme = Framework.createTheme(lib)
+    local discovery = internal.createDiscovery(params.packId, params.config, lib)
+    local hash = internal.createHash(discovery, params.config, lib, params.packId)
+    local theme = internal.createTheme(lib)
 
     discovery.run(params.def and params.def.moduleOrder)
     local startupSnapshot = discovery.captureHostSnapshot()
+    local needsRunDataSetup = false
     for _, entry in ipairs(discovery.modules) do
         local host = discovery.getSnapshotHost(entry, startupSnapshot)
-        local ok, err = host and host.applyOnLoad()
+        local ok, err
+        if host then
+            ok, err = host.applyOnLoad()
+        end
         if not ok then
-            lib.logging.warn("%s startup lifecycle failed: %s",
+            lib.logging.warn(params.packId, "%s startup lifecycle failed: %s",
                 tostring(entry.name or entry.id or "module"),
                 tostring(err))
+        elseif lib.lifecycle.mutatesRunData(entry.definition) then
+            needsRunDataSetup = true
         end
     end
+    if needsRunDataSetup then
+        rom.game.SetupRunData()
+    end
 
-    AuditSavedProfiles(params.packId, params.config.Profiles, discovery, lib)
+    internal.auditSavedProfiles(params.packId, params.config.Profiles, discovery, lib)
 
-    local hud = Framework.createHud(params.packId, packIndex, hash, theme, params.config, lib,
+    local hud = internal.createHud(params.packId, packIndex, hash, theme, params.config, lib,
         params.hideHashMarker == true)
-    local ui = Framework.createUI(discovery, hud, theme, params.def, params.config, lib, params.packId,
+    local ui = internal.createUI(discovery, hud, theme, params.def, params.config, lib, params.packId,
         params.windowTitle)
 
     _packs[params.packId] = {
@@ -180,7 +136,7 @@ function Framework.init(params)
         ui = ui,
         initParams = RememberInitParams(params),
         frameworkGeneration = internal.frameworkGeneration,
-        _index = packIndex,
+        packIndex = packIndex,
     }
 
     if params.config.ModEnabled then
@@ -189,8 +145,6 @@ function Framework.init(params)
 
     return _packs[params.packId]
 end
-
-public.init = Framework.init
 
 local function EnsurePackCurrent(packId)
     local pack = _packs[packId]

@@ -1,4 +1,6 @@
-function Framework.createHash(discovery, config, lib, packId)
+local internal = AdamantModpackFramework_Internal
+
+function internal.createHash(discovery, config, lib, packId)
     local HASH_VERSION = 1
     local Hash = {}
     local contractWarn = lib.logging.warn

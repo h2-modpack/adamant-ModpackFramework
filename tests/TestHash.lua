@@ -1,7 +1,7 @@
 local lu = require('luaunit')
 
 local function makeHash(discovery)
-    return Framework.createHash(discovery, { DebugMode = false }, lib, "test-pack")
+    return FrameworkTestApi.createHash(discovery, { DebugMode = false }, lib, "test-pack")
 end
 
 local function assertWarningContains(fragment)

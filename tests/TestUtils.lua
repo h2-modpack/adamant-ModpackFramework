@@ -128,9 +128,47 @@ import_as_fallback = function() end
 
 dofile("src/main.lua")
 rom.mods['adamant-ModpackFramework'] = public
-dofile("src/ui_theme.lua")
+FrameworkTestApi = setmetatable({}, {
+    __index = function(_, key)
+        local internal = AdamantModpackFramework_Internal
+        if internal[key] ~= nil then
+            return internal[key]
+        end
+        return public[key]
+    end,
+    __newindex = function(_, key, value)
+        AdamantModpackFramework_Internal[key] = value
+    end,
+})
+rawset(FrameworkTestApi, "withFactories", function(overrides, body)
+    local previous = {}
+    local keys = {}
+    for key in pairs(overrides) do
+        table.insert(keys, key)
+        previous[key] = AdamantModpackFramework_Internal[key]
+        AdamantModpackFramework_Internal[key] = overrides[key]
+    end
+
+    local ok, result = pcall(body)
+
+    for _, key in ipairs(keys) do
+        AdamantModpackFramework_Internal[key] = previous[key]
+    end
+
+    if not ok then
+        error(result)
+    end
+    return result
+end)
+dofile("src/ui/theme.lua")
+dofile("src/profiles.lua")
 dofile("src/discovery.lua")
 dofile("src/hash.lua")
+dofile("src/ui/runtime.lua")
+dofile("src/ui/profiles.lua")
+dofile("src/ui/dev.lua")
+dofile("src/ui/quick_setup.lua")
+dofile("src/ui/module_tabs.lua")
 dofile("src/ui.lua")
 
 config = { ModEnabled = true, DebugMode = false }

@@ -57,7 +57,7 @@ function TestDiscovery:testModulesDiscoverDrawTabAndQuickContent()
         DrawQuickContent = function() end,
     })
 
-    local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
+    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
     discovery.run()
 
     lu.assertEquals(#discovery.modules, 1)
@@ -80,7 +80,7 @@ function TestDiscovery:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissing()
         DrawTab = function() end,
     })
 
-    local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
+    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
     discovery.run()
 
     local entry = discovery.modules[1]
@@ -125,7 +125,7 @@ function TestDiscovery:testMissingStorageSkipsModule()
         DrawTab = function() end,
     })
 
-    local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
+    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
     discovery.run()
 
     lu.assertEquals(#discovery.modules, 0)
@@ -145,7 +145,7 @@ function TestDiscovery:testMissingDrawTabSkipsModule()
         revert = function() end,
     }, { Enabled = false, DebugMode = false, EnabledFlag = false })
 
-    local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
+    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
     discovery.run()
 
     lu.assertEquals(#discovery.modules, 0)
@@ -179,7 +179,7 @@ function TestDiscovery:testDuplicateIdsSkipConflictingEntries()
         DrawTab = function() end,
     })
 
-    local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
+    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
     discovery.run()
 
     lu.assertEquals(#discovery.modules, 0)
@@ -214,7 +214,7 @@ function TestDiscovery:testTabOrderPinsKnownLabelsFirst()
         DrawTab = function() end,
     })
 
-    local discovery = Framework.createDiscovery("test-pack", { DebugMode = false }, lib)
+    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
     discovery.run({ "Biome", "God Pool" })
 
     lu.assertEquals(#discovery.tabOrder, 2)

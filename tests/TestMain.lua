@@ -12,6 +12,228 @@ function TestMain:testGetMenuBarIsSafeBeforeInit()
     lu.assertTrue(pcall(addMenuBar))
 end
 
+function TestMain:testRenderWindowCleansUpImguiStacksBeforeRethrow()
+    local previousImGui = rom.ImGui
+    local endCalls = 0
+    local popStyleCalls = 0
+
+    local function noop() end
+
+    rom.ImGui = {
+        Begin = function() return true, true end,
+        End = function()
+            endCalls = endCalls + 1
+        end,
+        SetNextWindowSize = noop,
+        MenuItem = function() return true end,
+        Checkbox = function()
+            error("draw boom")
+        end,
+        PushStyleColor = noop,
+        PopStyleColor = function()
+            popStyleCalls = popStyleCalls + 1
+        end,
+    }
+
+    local discovery = {
+        modules = {},
+        modulesWithQuickContent = {},
+        tabOrder = {},
+        captureHostSnapshot = function()
+            return { hosts = {} }
+        end,
+        getSnapshotHost = function()
+            return nil
+        end,
+    }
+    local hud = {
+        refreshHashIfIdle = noop,
+        flushPendingHash = noop,
+        getConfigHash = function()
+            return "hash", "fingerprint"
+        end,
+        applyConfigHash = function()
+            return true
+        end,
+        markHashDirty = noop,
+    }
+    local theme = FrameworkTestApi.createTheme(lib)
+    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, {
+        NUM_PROFILES = 1,
+        defaultProfiles = {
+            { Name = "", Hash = "", Tooltip = "" },
+        },
+    }, {
+        ModEnabled = true,
+        DebugMode = false,
+        Profiles = {
+            { Name = "", Hash = "", Tooltip = "" },
+        },
+    }, lib, "test-pack", "Test Window")
+
+    builtUi.addMenuBar()
+    local ok, err = pcall(builtUi.renderWindow)
+
+    rom.ImGui = previousImGui
+
+    lu.assertFalse(ok)
+    lu.assertStrContains(tostring(err), "draw boom")
+    lu.assertEquals(endCalls, 1)
+    lu.assertEquals(popStyleCalls, 1)
+end
+
+function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
+    local previousSetupRunData = rom.game.SetupRunData
+    local setupRunDataCalls = 0
+
+    local entry = {
+        id = "Alpha",
+        name = "Alpha",
+        modName = "Alpha",
+        storage = {},
+        definition = {
+            id = "Alpha",
+            name = "Alpha",
+            affectsRunData = true,
+        },
+    }
+    local host = {
+        applyOnLoad = function()
+            return true
+        end,
+    }
+
+    rom.game.SetupRunData = function()
+        setupRunDataCalls = setupRunDataCalls + 1
+    end
+
+    FrameworkTestApi.withFactories({
+        createDiscovery = function()
+            return {
+                modules = { entry },
+                run = function() end,
+                captureHostSnapshot = function()
+                    return { hosts = { [entry] = host } }
+                end,
+                getSnapshotHost = function(_, snapshot)
+                    return snapshot.hosts[entry]
+                end,
+            }
+        end,
+        createHash = function()
+            return {}
+        end,
+        createTheme = function()
+            return { colors = {} }
+        end,
+        createHud = function()
+            return {
+                setModMarker = function() end,
+            }
+        end,
+        createUI = function()
+            return {
+                renderWindow = function() end,
+                addMenuBar = function() end,
+            }
+        end,
+    }, function()
+        FrameworkTestApi.init({
+            packId = "startup-pack",
+            windowTitle = "Startup Pack",
+            config = {
+                ModEnabled = true,
+                DebugMode = false,
+                Profiles = {
+                    { Name = "", Hash = "", Tooltip = "" },
+                },
+            },
+            def = {
+                NUM_PROFILES = 1,
+                defaultProfiles = {},
+            },
+        })
+    end)
+
+    rom.game.SetupRunData = previousSetupRunData
+
+    lu.assertEquals(setupRunDataCalls, 1)
+end
+
+function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
+    CaptureWarnings()
+
+    local entry = {
+        id = "Alpha",
+        name = "Alpha",
+        modName = "Alpha",
+        storage = {},
+        definition = {
+            id = "Alpha",
+            name = "Alpha",
+        },
+    }
+    local host = {
+        applyOnLoad = function()
+            return false, "startup boom"
+        end,
+    }
+
+    FrameworkTestApi.withFactories({
+        createDiscovery = function()
+            return {
+                modules = { entry },
+                run = function() end,
+                captureHostSnapshot = function()
+                    return { hosts = { [entry] = host } }
+                end,
+                getSnapshotHost = function(_, snapshot)
+                    return snapshot.hosts[entry]
+                end,
+            }
+        end,
+        createHash = function()
+            return {}
+        end,
+        createTheme = function()
+            return { colors = {} }
+        end,
+        createHud = function()
+            return {
+                setModMarker = function() end,
+            }
+        end,
+        createUI = function()
+            return {
+                renderWindow = function() end,
+                addMenuBar = function() end,
+            }
+        end,
+    }, function()
+        FrameworkTestApi.init({
+            packId = "startup-pack",
+            windowTitle = "Startup Pack",
+            config = {
+                ModEnabled = true,
+                DebugMode = false,
+                Profiles = {
+                    { Name = "", Hash = "", Tooltip = "" },
+                },
+            },
+            def = {
+                NUM_PROFILES = 1,
+                defaultProfiles = {},
+            },
+        })
+    end)
+
+    local warnings = Warnings
+    RestoreWarnings()
+
+    lu.assertEquals(#warnings, 1)
+    lu.assertEquals(warnings[1], "[startup-pack] Alpha startup lifecycle failed: startup boom")
+end
+
 function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
     CaptureWarnings()
 
@@ -135,7 +357,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
         end,
     }
 
-    local theme = Framework.createTheme(lib)
+    local theme = FrameworkTestApi.createTheme(lib)
     local def = {
         NUM_PROFILES = 1,
         defaultProfiles = {
@@ -150,7 +372,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
         },
     }
 
-    local builtUi = Framework.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
+    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
     builtUi.addMenuBar()
 
     local okFirst, errFirst = pcall(builtUi.renderWindow)
@@ -265,7 +487,7 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
         end,
     }
 
-    local theme = Framework.createTheme(lib)
+    local theme = FrameworkTestApi.createTheme(lib)
     local def = {
         NUM_PROFILES = 1,
         defaultProfiles = {
@@ -280,7 +502,7 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
         },
     }
 
-    local builtUi = Framework.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
+    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
     builtUi.addMenuBar()
     local ok, err = pcall(builtUi.renderWindow)
 
@@ -378,7 +600,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
         end,
     }
 
-    local theme = Framework.createTheme(lib)
+    local theme = FrameworkTestApi.createTheme(lib)
     local def = {
         NUM_PROFILES = 1,
         defaultProfiles = {
@@ -393,7 +615,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
         },
     }
 
-    local builtUi = Framework.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
+    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
     builtUi.addMenuBar()
     local okFirst, errFirst = pcall(builtUi.renderWindow)
 
@@ -556,7 +778,7 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
         end,
     }
 
-    local theme = Framework.createTheme(lib)
+    local theme = FrameworkTestApi.createTheme(lib)
     local def = {
         NUM_PROFILES = 1,
         defaultProfiles = {
@@ -577,7 +799,7 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
         },
     }
 
-    local builtUi = Framework.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
+    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
     builtUi.addMenuBar()
     local ok, err = pcall(builtUi.renderWindow)
     builtUi.addMenuBar()
@@ -592,81 +814,68 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
 end
 
 function TestMain:testRendererRebuildsWhenFrameworkGenerationChanges()
-    local previousCreateDiscovery = Framework.createDiscovery
-    local previousCreateHash = Framework.createHash
-    local previousCreateTheme = Framework.createTheme
-    local previousCreateHud = Framework.createHud
-    local previousCreateUI = Framework.createUI
-
     local packId = "generation-pack"
     local initCount = 0
     local renderCount = 0
     local previousGeneration = AdamantModpackFramework_Internal.frameworkGeneration
 
-    Framework.createDiscovery = function()
-        return {
-            modules = {},
-            run = function() end,
-            captureHostSnapshot = function()
-                return { hosts = {} }
-            end,
-            getSnapshotHost = function()
-                return nil
-            end,
-        }
-    end
-
-    Framework.createHash = function()
-        return {}
-    end
-
-    Framework.createTheme = function()
-        return { colors = {} }
-    end
-
-    Framework.createHud = function()
-        return {
-            setModMarker = function() end,
-        }
-    end
-
-    Framework.createUI = function()
-        initCount = initCount + 1
-        local currentInit = initCount
-        return {
-            renderWindow = function()
-                renderCount = renderCount + currentInit
-            end,
-            addMenuBar = function() end,
-        }
-    end
-
-    Framework.init({
-        packId = packId,
-        windowTitle = "Registry Pack",
-        config = {
-            ModEnabled = true,
-            DebugMode = false,
-            Profiles = {
-                { Name = "", Hash = "", Tooltip = "" },
+    FrameworkTestApi.withFactories({
+        createDiscovery = function()
+            return {
+                modules = {},
+                run = function() end,
+                captureHostSnapshot = function()
+                    return { hosts = {} }
+                end,
+                getSnapshotHost = function()
+                    return nil
+                end,
+            }
+        end,
+        createHash = function()
+            return {}
+        end,
+        createTheme = function()
+            return { colors = {} }
+        end,
+        createHud = function()
+            return {
+                setModMarker = function() end,
+            }
+        end,
+        createUI = function()
+            initCount = initCount + 1
+            local currentInit = initCount
+            return {
+                renderWindow = function()
+                    renderCount = renderCount + currentInit
+                end,
+                addMenuBar = function() end,
+            }
+        end,
+    }, function()
+        FrameworkTestApi.init({
+            packId = packId,
+            windowTitle = "Registry Pack",
+            config = {
+                ModEnabled = true,
+                DebugMode = false,
+                Profiles = {
+                    { Name = "", Hash = "", Tooltip = "" },
+                },
             },
-        },
-        def = {
-            NUM_PROFILES = 1,
-            defaultProfiles = {},
-        },
-    })
+            def = {
+                NUM_PROFILES = 1,
+                defaultProfiles = {},
+            },
+        })
 
-    local render = public.getRenderer(packId)
-    render()
-    AdamantModpackFramework_Internal.frameworkGeneration = previousGeneration + 1
-    render()
+        local render = public.getRenderer(packId)
+        render()
+        AdamantModpackFramework_Internal.frameworkGeneration = previousGeneration + 1
+        render()
+    end)
 
-    Framework.createDiscovery = previousCreateDiscovery
-    Framework.createHash = previousCreateHash
-    Framework.createTheme = previousCreateTheme
-    Framework.createHud = previousCreateHud
-    Framework.createUI = previousCreateUI
     AdamantModpackFramework_Internal.frameworkGeneration = previousGeneration
 
     lu.assertEquals(initCount, 2)
