@@ -84,12 +84,13 @@ function TestHashStorage:testRegularAndSpecialStorageRoundTrip()
 
     local module = discovery.modulesById.GodPool
     local biome = discovery.modulesById.BiomeControl
-    local moduleHost = discovery.getCurrentHost(module)
-    local biomeHost = discovery.getCurrentHost(biome)
-    discovery.setModuleEnabled(module, false)
+    local moduleHost = discovery.live.getHost(module)
+    local biomeHost = discovery.live.getHost(biome)
+    local editSnapshot = discovery.live.captureSnapshot()
+    discovery.snapshot.setModuleEnabled(module, false, editSnapshot)
     moduleHost.writeAndFlush("EnabledFlag", false)
     moduleHost.writeAndFlush("Count", 3)
-    discovery.setModuleEnabled(biome, false)
+    discovery.snapshot.setModuleEnabled(biome, false, editSnapshot)
     biomeHost.writeAndFlush("Mode", "Vanilla")
 
     lu.assertTrue(hash.ApplyConfigHash(canonical))
@@ -115,7 +116,7 @@ function TestHashStorage:testFingerprintChangesWithConfig()
     local hash = makeHash(discovery)
     local canonicalA, fingerprintA = hash.GetConfigHash()
 
-    discovery.getCurrentHost(discovery.modulesById.GodPool).writeAndFlush("EnabledFlag", true)
+    discovery.live.getHost(discovery.modulesById.GodPool).writeAndFlush("EnabledFlag", true)
     local canonicalB, fingerprintB = hash.GetConfigHash()
 
     lu.assertNotEquals(canonicalA, canonicalB)
@@ -145,7 +146,7 @@ function TestHashStorage:testApplyConfigHashRollsBackWhenEnableFails()
     })
     local hash = makeHash(discovery)
     local module = discovery.modulesById.GodPool
-    local moduleHost = discovery.getCurrentHost(module)
+    local moduleHost = discovery.live.getHost(module)
 
     local ok = hash.ApplyConfigHash("_v=1|GodPool=1|GodPool.EnabledFlag=1")
 
@@ -235,7 +236,7 @@ function TestHashStorage:testTransientRootsAreExcludedFromHash()
         },
     })
 
-    discovery.getCurrentHost(discovery.modulesById.GodPool).stage("FilterText", "Apollo")
+    discovery.live.getHost(discovery.modulesById.GodPool).stage("FilterText", "Apollo")
     local canonical = makeHash(discovery).GetConfigHash()
 
     lu.assertStrContains(canonical, "GodPool.EnabledFlag=1")

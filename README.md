@@ -62,7 +62,7 @@ Discovered modules render through:
 Sidebar behavior:
 
 - one top-level tab per discovered module
-- `moduleOrder` may pin known labels first
+- `moduleOrder` may pin known module ids first
 - `moduleOrder` and discovered module order define the tab list
 
 ## Validation

@@ -102,16 +102,106 @@ function TestDiscovery:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissing()
 
     exports.host = replacement
 
-    local liveSnapshot = discovery.captureHostSnapshot()
-    lu.assertEquals(discovery.getSnapshotHost(entry, liveSnapshot), replacement)
-    lu.assertTrue(discovery.isEntryEnabled(entry, liveSnapshot))
+    local liveSnapshot = discovery.live.captureSnapshot()
+    lu.assertEquals(discovery.snapshot.getHost(entry, liveSnapshot), replacement)
+    lu.assertTrue(discovery.snapshot.isEntryEnabled(entry, liveSnapshot))
 
     exports.host = nil
 
-    local missingSnapshot = discovery.captureHostSnapshot()
-    lu.assertNil(discovery.getSnapshotHost(entry, missingSnapshot))
+    local missingSnapshot = discovery.live.captureSnapshot()
+    lu.assertNil(discovery.snapshot.getHost(entry, missingSnapshot))
     lu.assertEquals(#Warnings, 1)
     lu.assertStrContains(Warnings[1], "module host is unavailable")
+end
+
+function TestDiscovery:testCapturedSnapshotIsStableAcrossHostReplacement()
+    local exports = attachModule("test-GodPool", {
+        modpack = "test-pack",
+        id = "GodPool",
+        name = "God Pool",
+        storage = {
+            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+        },
+        apply = function() end,
+        revert = function() end,
+    }, { Enabled = false, DebugMode = false, EnabledFlag = false }, {
+        DrawTab = function() end,
+    })
+
+    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
+    discovery.run()
+
+    local entry = discovery.modules[1]
+    local originalHost = exports.host
+    local capturedSnapshot = discovery.live.captureSnapshot()
+
+    local replacement = {
+        read = function() return "replacement" end,
+        writeAndFlush = function() return true end,
+        setEnabled = function() return true end,
+        setDebugMode = function() end,
+        hasDrawTab = function() return true end,
+        drawTab = function() end,
+        hasQuickContent = function() return false end,
+        drawQuickContent = function() end,
+    }
+    exports.host = replacement
+
+    lu.assertEquals(discovery.snapshot.getHost(entry, capturedSnapshot), originalHost)
+    lu.assertEquals(discovery.live.getHost(entry), replacement)
+
+    local freshSnapshot = discovery.live.captureSnapshot()
+    lu.assertEquals(discovery.snapshot.getHost(entry, freshSnapshot), replacement)
+    lu.assertEquals(discovery.snapshot.getHost(entry, capturedSnapshot), originalHost)
+end
+
+function TestDiscovery:testHostSnapshotWarnsOnceWhenHostStaysMissing()
+    local exports = attachModule("test-GodPool", {
+        modpack = "test-pack",
+        id = "GodPool",
+        name = "God Pool",
+        storage = {
+            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+        },
+        apply = function() end,
+        revert = function() end,
+    }, { Enabled = false, DebugMode = false, EnabledFlag = false }, {
+        DrawTab = function() end,
+    })
+
+    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
+    discovery.run()
+    exports.host = nil
+
+    discovery.live.captureSnapshot()
+    discovery.live.captureSnapshot()
+
+    lu.assertEquals(#Warnings, 1)
+    lu.assertStrContains(Warnings[1], "module host is unavailable")
+end
+
+function TestDiscovery:testSnapshotAccessRequiresCapturedSnapshot()
+    attachModule("test-GodPool", {
+        modpack = "test-pack",
+        id = "GodPool",
+        name = "God Pool",
+        storage = {
+            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+        },
+        apply = function() end,
+        revert = function() end,
+    }, { Enabled = false, DebugMode = false, EnabledFlag = false }, {
+        DrawTab = function() end,
+    })
+
+    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
+    discovery.run()
+
+    lu.assertErrorMsgContains(
+        "discovery.snapshot access requires a captured host snapshot",
+        function()
+            discovery.snapshot.getHost(discovery.modules[1])
+        end)
 end
 
 function TestDiscovery:testMissingStorageSkipsModule()
@@ -187,7 +277,55 @@ function TestDiscovery:testDuplicateIdsSkipConflictingEntries()
     lu.assertStrContains(Warnings[1], "duplicate hash namespace 'SharedId'")
 end
 
-function TestDiscovery:testTabOrderPinsKnownLabelsFirst()
+function TestDiscovery:testTabOrderPinsKnownIdsFirst()
+    attachModule("test-GodPool", {
+        modpack = "test-pack",
+        id = "GodPool",
+        name = "God Pool",
+        storage = {
+            { type = "bool", alias = "FlagA", configKey = "FlagA", default = false },
+        },
+        apply = function() end,
+        revert = function() end,
+    }, { Enabled = false, DebugMode = false, FlagA = false }, {
+        DrawTab = function() end,
+    })
+    attachModule("test-Biome", {
+        modpack = "test-pack",
+        id = "BiomeControl",
+        name = "Biome Control",
+        shortName = "Biome",
+        storage = {
+            { type = "bool", alias = "FlagB", configKey = "FlagB", default = false },
+        },
+        apply = function() end,
+        revert = function() end,
+    }, { Enabled = false, DebugMode = false, FlagB = false }, {
+        DrawTab = function() end,
+    })
+    attachModule("test-BoonBans", {
+        modpack = "test-pack",
+        id = "BoonBans",
+        name = "Boon Bans",
+        storage = {
+            { type = "bool", alias = "FlagC", configKey = "FlagC", default = false },
+        },
+        apply = function() end,
+        revert = function() end,
+    }, { Enabled = false, DebugMode = false, FlagC = false }, {
+        DrawTab = function() end,
+    })
+
+    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
+    discovery.run({ "BiomeControl", "GodPool" })
+
+    lu.assertEquals(#discovery.tabOrder, 3)
+    lu.assertEquals(discovery.tabOrder[1].id, "BiomeControl")
+    lu.assertEquals(discovery.tabOrder[2].id, "GodPool")
+    lu.assertEquals(discovery.tabOrder[3].id, "BoonBans")
+end
+
+function TestDiscovery:testTabOrderIgnoresLabels()
     attachModule("test-GodPool", {
         modpack = "test-pack",
         id = "GodPool",
@@ -215,9 +353,9 @@ function TestDiscovery:testTabOrderPinsKnownLabelsFirst()
     })
 
     local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run({ "Biome", "God Pool" })
+    discovery.run({ "Biome", "God Pool", "GodPool" })
 
     lu.assertEquals(#discovery.tabOrder, 2)
-    lu.assertEquals(discovery.tabOrder[1].id, "BiomeControl")
-    lu.assertEquals(discovery.tabOrder[2].id, "GodPool")
+    lu.assertEquals(discovery.tabOrder[1].id, "GodPool")
+    lu.assertEquals(discovery.tabOrder[2].id, "BiomeControl")
 end

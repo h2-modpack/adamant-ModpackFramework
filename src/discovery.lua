@@ -18,6 +18,7 @@ function internal.createDiscovery(packId, config, lib)
     local warnIf = lib.logging.warnIf
     local inferMutation = lib.lifecycle.inferMutation
     local mutatesRunData = lib.lifecycle.mutatesRunData
+    local missingHostWarnings = {}
 
     local function GetLiveHost(modName)
         local mod = rom.mods[modName]
@@ -28,36 +29,44 @@ function internal.createDiscovery(packId, config, lib)
         contractWarn(packId, "%s: module host is unavailable", tostring(entry.modName or entry.id or "module"))
     end
 
-    local function ResolveLiveHost(entry)
+    local function WarnSnapshotMissingEntry(entry)
+        contractWarn(packId, "%s: module host is not present in snapshot; capture a fresh snapshot for this discovery entry",
+            tostring(entry.modName or entry.id or "module"))
+    end
+
+    local function ResolveLiveHost(entry, warnOnce)
         local host = GetLiveHost(entry.modName)
         if type(host) == "table" then
             return host
+        end
+        if warnOnce then
+            if missingHostWarnings[entry] then
+                return nil
+            end
+            missingHostWarnings[entry] = true
         end
         WarnMissingHost(entry)
         return nil
     end
 
     local function GetSnapshotHost(entry, snapshot)
-        if snapshot and snapshot.hosts then
-            local host = snapshot.hosts[entry]
-            if host ~= nil then
-                return host or nil
-            end
+        assert(type(snapshot) == "table" and type(snapshot.hosts) == "table",
+            "discovery.snapshot access requires a captured host snapshot")
+
+        local host = snapshot.hosts[entry]
+        if type(host) == "table" then
+            return host
+        end
+        if host == false then
+            return nil
         end
 
-        WarnMissingHost(entry)
+        WarnSnapshotMissingEntry(entry)
         return nil
     end
 
-    local function GetHostForAccess(entry, snapshot)
-        if snapshot ~= nil then
-            return GetSnapshotHost(entry, snapshot)
-        end
-        return ResolveLiveHost(entry)
-    end
-
     local function ReadPersisted(entry, key, snapshot)
-        local host = GetHostForAccess(entry, snapshot)
+        local host = GetSnapshotHost(entry, snapshot)
         if not host then
             return nil
         end
@@ -65,7 +74,7 @@ function internal.createDiscovery(packId, config, lib)
     end
 
     local function WriteStagedAndFlush(entry, key, value, snapshot)
-        local host = GetHostForAccess(entry, snapshot)
+        local host = GetSnapshotHost(entry, snapshot)
         if host then
             return host.writeAndFlush(key, value)
         end
@@ -73,7 +82,7 @@ function internal.createDiscovery(packId, config, lib)
     end
 
     local function SetEntryEnabled(entry, enabled, snapshot)
-        local host = GetHostForAccess(entry, snapshot)
+        local host = GetSnapshotHost(entry, snapshot)
         if not host then
             return false, "module host is unavailable"
         end
@@ -87,7 +96,7 @@ function internal.createDiscovery(packId, config, lib)
     end
 
     local function SetEntryDebugMode(entry, val, snapshot)
-        local host = GetHostForAccess(entry, snapshot)
+        local host = GetSnapshotHost(entry, snapshot)
         if host then
             host.setDebugMode(val)
         end
@@ -113,9 +122,11 @@ function internal.createDiscovery(packId, config, lib)
     Discovery.modulesById = {}           -- id -> module entry
     Discovery.modulesWithQuickContent = {}
     Discovery.tabOrder = {}              -- ordered list of module entries for the sidebar
+    Discovery.live = {}      -- live host access: snapshot creation + explicit "latest" reads
+    Discovery.snapshot = {}  -- snapshot-bound accessors for UI/hash/profile operations
 
     --- Discover all modules for this pack.
-    --- @param moduleOrder table|nil Ordered list of module labels to pin first in the sidebar.
+    --- @param moduleOrder table|nil Ordered list of module ids to pin first in the sidebar.
     function Discovery.run(moduleOrder)
         Discovery.modules = {}
         Discovery.modulesById = {}
@@ -206,7 +217,6 @@ function internal.createDiscovery(packId, config, lib)
         end
 
         local labelIndex = {}
-        local moduleByLabel = {}
         for _, entry in ipairs(Discovery.modules) do
             local label = entry.shortName or entry.name
             if labelCount[label] > 1 then
@@ -218,27 +228,20 @@ function internal.createDiscovery(packId, config, lib)
             else
                 entry._tabLabel = label
             end
-            moduleByLabel[entry._tabLabel] = entry
-            if entry.name and not moduleByLabel[entry.name] then
-                moduleByLabel[entry.name] = entry
-            end
-            if entry.id and not moduleByLabel[entry.id] then
-                moduleByLabel[entry.id] = entry
-            end
         end
 
         local placed = {}
         if type(moduleOrder) == "table" then
-            for _, name in ipairs(moduleOrder) do
-                if type(name) == "string" and moduleByLabel[name] then
-                    local entry = moduleByLabel[name]
+            for _, orderKey in ipairs(moduleOrder) do
+                if type(orderKey) == "string" and Discovery.modulesById[orderKey] then
+                    local entry = Discovery.modulesById[orderKey]
                     if not placed[entry.id] then
                         placed[entry.id] = true
                         table.insert(Discovery.tabOrder, entry)
                     end
-                elseif type(name) == "string" then
+                elseif type(orderKey) == "string" then
                     warnIf(packId, config.DebugMode,
-                        "moduleOrder contains unknown module label '%s'; entry ignored", name)
+                        "moduleOrder contains unknown module id '%s'; entry ignored", orderKey)
                 end
             end
         end
@@ -250,55 +253,58 @@ function internal.createDiscovery(packId, config, lib)
         end
     end
 
-    function Discovery.captureHostSnapshot()
+    -- Snapshot rule: UI/hash/profile operations should capture once and pass the
+    -- snapshot through the whole operation. Live host resolution is reserved for
+    -- snapshot creation and explicit "latest host" reads after a module reload.
+    function Discovery.live.captureSnapshot()
         local snapshot = {
             hosts = {},
         }
 
         for _, entry in ipairs(Discovery.modules) do
-            snapshot.hosts[entry] = ResolveLiveHost(entry) or false
+            snapshot.hosts[entry] = ResolveLiveHost(entry, true) or false
         end
 
         return snapshot
     end
 
-    function Discovery.getCurrentHost(entry)
+    function Discovery.live.getHost(entry)
         return ResolveLiveHost(entry)
     end
 
-    function Discovery.getSnapshotHost(entry, snapshot)
+    function Discovery.snapshot.getHost(entry, snapshot)
         return GetSnapshotHost(entry, snapshot)
     end
 
-    function Discovery.isEntryEnabled(entry, snapshot)
+    function Discovery.snapshot.isEntryEnabled(entry, snapshot)
         return ReadPersisted(entry, "Enabled", snapshot) == true
     end
 
-    function Discovery.setEntryEnabled(entry, enabled, snapshot)
+    function Discovery.snapshot.setEntryEnabled(entry, enabled, snapshot)
         return SetEntryEnabled(entry, enabled, snapshot)
     end
 
-    function Discovery.getStorageValue(entry, aliasOrKey, snapshot)
+    function Discovery.snapshot.getStorageValue(entry, aliasOrKey, snapshot)
         return ReadPersisted(entry, aliasOrKey, snapshot)
     end
 
-    function Discovery.setStorageValue(entry, aliasOrKey, value, snapshot)
+    function Discovery.snapshot.setStorageValue(entry, aliasOrKey, value, snapshot)
         return WriteStagedAndFlush(entry, aliasOrKey, value, snapshot)
     end
 
-    function Discovery.isModuleEnabled(module, snapshot)
-        return Discovery.isEntryEnabled(module, snapshot)
+    function Discovery.snapshot.isModuleEnabled(module, snapshot)
+        return Discovery.snapshot.isEntryEnabled(module, snapshot)
     end
 
-    function Discovery.setModuleEnabled(module, enabled, snapshot)
-        return Discovery.setEntryEnabled(module, enabled, snapshot)
+    function Discovery.snapshot.setModuleEnabled(module, enabled, snapshot)
+        return Discovery.snapshot.setEntryEnabled(module, enabled, snapshot)
     end
 
-    function Discovery.isDebugEnabled(entry, snapshot)
+    function Discovery.snapshot.isDebugEnabled(entry, snapshot)
         return ReadPersisted(entry, "DebugMode", snapshot) == true
     end
 
-    function Discovery.setDebugEnabled(entry, val, snapshot)
+    function Discovery.snapshot.setDebugEnabled(entry, val, snapshot)
         SetEntryDebugMode(entry, val, snapshot)
     end
 

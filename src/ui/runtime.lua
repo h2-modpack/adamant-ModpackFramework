@@ -56,7 +56,7 @@ function internal.createUIRuntime(ctx)
     end
 
     function Runtime.toggleEntry(entry, enabled, snapshot)
-        local ok = discovery.setEntryEnabled(entry, enabled, snapshot)
+        local ok = discovery.snapshot.setEntryEnabled(entry, enabled, snapshot)
         if not ok then
             return
         end
@@ -100,7 +100,7 @@ function internal.createUIRuntime(ctx)
             local entry = discovery.modulesById[moduleId]
             if entry and staging.modules[moduleId] ~= enabled then
                 local previousEnabled = staging.modules[moduleId] == true
-                local ok, err = discovery.setEntryEnabled(entry, enabled, snapshot)
+                local ok, err = discovery.snapshot.setEntryEnabled(entry, enabled, snapshot)
                 if ok then
                     table.insert(touched, {
                         entry = entry,
@@ -115,7 +115,7 @@ function internal.createUIRuntime(ctx)
                     local rollbackErrors = {}
                     for i = #touched, 1, -1 do
                         local touchedEntry = touched[i].entry
-                        local rollbackOk, rollbackErr = discovery.setEntryEnabled(
+                        local rollbackOk, rollbackErr = discovery.snapshot.setEntryEnabled(
                             touchedEntry,
                             touched[i].previousEnabled,
                             snapshot

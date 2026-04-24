@@ -33,11 +33,11 @@ function internal.createUI(discovery, hud, theme, def, config, lib, packId, wind
     local currentSnapshot    = nil
 
     local function CaptureSnapshot()
-        return discovery.captureHostSnapshot()
+        return discovery.live.captureSnapshot()
     end
 
     local function GetSnapshotHost(entry, snapshot)
-        return discovery.getSnapshotHost(entry, snapshot or currentSnapshot)
+        return discovery.snapshot.getHost(entry, snapshot or currentSnapshot)
     end
 
     local function DrawColoredText(color, text)
@@ -64,8 +64,8 @@ function internal.createUI(discovery, hud, theme, def, config, lib, packId, wind
 
         -- Grouped modules
         for _, m in ipairs(discovery.modules) do
-            staging.modules[m.id] = discovery.isEntryEnabled(m, snapshot)
-            staging.debug[m.id] = discovery.isDebugEnabled(m, snapshot)
+            staging.modules[m.id] = discovery.snapshot.isEntryEnabled(m, snapshot)
+            staging.debug[m.id] = discovery.snapshot.isDebugEnabled(m, snapshot)
             local host = GetSnapshotHost(m, snapshot)
             if host then
                 host.reloadFromConfig()

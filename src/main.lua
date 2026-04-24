@@ -102,10 +102,10 @@ function public.init(params)
     local theme = internal.createTheme(lib)
 
     discovery.run(params.def and params.def.moduleOrder)
-    local startupSnapshot = discovery.captureHostSnapshot()
+    local startupSnapshot = discovery.live.captureSnapshot()
     local needsRunDataSetup = false
     for _, entry in ipairs(discovery.modules) do
-        local host = discovery.getSnapshotHost(entry, startupSnapshot)
+        local host = discovery.snapshot.getHost(entry, startupSnapshot)
         local ok, err
         if host then
             ok, err = host.applyOnLoad()
@@ -154,6 +154,10 @@ local function EnsurePackCurrent(packId)
 
     local currentGeneration = internal.frameworkGeneration or 0
     if pack.frameworkGeneration ~= currentGeneration then
+        -- GUI callbacks are registered once and intentionally survive Framework reloads.
+        -- When they run against an older pack object, re-enter the latest public init()
+        -- through rom.mods so discovery/UI/hash state is rebuilt with the new code while
+        -- preserving the stable callback registered by Core.
         local framework = GetCurrentFramework()
         local init = framework and framework.init
         if type(init) == "function" then

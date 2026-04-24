@@ -39,12 +39,16 @@ function TestMain:testRenderWindowCleansUpImguiStacksBeforeRethrow()
         modules = {},
         modulesWithQuickContent = {},
         tabOrder = {},
-        captureHostSnapshot = function()
-            return { hosts = {} }
-        end,
-        getSnapshotHost = function()
-            return nil
-        end,
+        live = {
+            captureSnapshot = function()
+                return { hosts = {} }
+            end,
+        },
+        snapshot = {
+            getHost = function()
+                return nil
+            end,
+        },
     }
     local hud = {
         refreshHashIfIdle = noop,
@@ -112,12 +116,16 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
             return {
                 modules = { entry },
                 run = function() end,
-                captureHostSnapshot = function()
-                    return { hosts = { [entry] = host } }
-                end,
-                getSnapshotHost = function(_, snapshot)
-                    return snapshot.hosts[entry]
-                end,
+                live = {
+                    captureSnapshot = function()
+                        return { hosts = { [entry] = host } }
+                    end,
+                },
+                snapshot = {
+                    getHost = function(_, snapshot)
+                        return snapshot.hosts[entry]
+                    end,
+                },
             }
         end,
         createHash = function()
@@ -212,12 +220,16 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
             return {
                 modules = { entry },
                 run = function() end,
-                captureHostSnapshot = function()
-                    return { hosts = { [entry] = host } }
-                end,
-                getSnapshotHost = function(_, snapshot)
-                    return snapshot.hosts[entry]
-                end,
+                live = {
+                    captureSnapshot = function()
+                        return { hosts = { [entry] = host } }
+                    end,
+                },
+                snapshot = {
+                    getHost = function(_, snapshot)
+                        return snapshot.hosts[entry]
+                    end,
+                },
             }
         end,
         createHash = function()
@@ -289,12 +301,16 @@ function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
             return {
                 modules = { entry },
                 run = function() end,
-                captureHostSnapshot = function()
-                    return { hosts = { [entry] = host } }
-                end,
-                getSnapshotHost = function(_, snapshot)
-                    return snapshot.hosts[entry]
-                end,
+                live = {
+                    captureSnapshot = function()
+                        return { hosts = { [entry] = host } }
+                    end,
+                },
+                snapshot = {
+                    getHost = function(_, snapshot)
+                        return snapshot.hosts[entry]
+                    end,
+                },
             }
         end,
         createHash = function()
@@ -576,10 +592,10 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
         colors = {},
         staging = staging,
         captureSnapshot = function()
-            return discovery.captureHostSnapshot()
+            return discovery.live.captureSnapshot()
         end,
         getSnapshotHost = function(entry, snapshot)
-            return discovery.getSnapshotHost(entry, snapshot)
+            return discovery.snapshot.getHost(entry, snapshot)
         end,
         getCurrentSnapshot = function()
             return nil
@@ -587,7 +603,7 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
         snapshotToStaging = function() end,
     })
 
-    local snapshot = discovery.captureHostSnapshot()
+    local snapshot = discovery.live.captureSnapshot()
     local ok, err = runtime.setModulesEnabled({ "Alpha", "Bravo" }, false, snapshot)
     runtime.flushPendingRunData()
 
@@ -599,8 +615,8 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
     lu.assertStrContains(tostring(err), "revert boom")
     lu.assertTrue(staging.modules.Alpha)
     lu.assertTrue(staging.modules.Bravo)
-    lu.assertTrue(discovery.isModuleEnabled(discovery.modulesById.Alpha, snapshot))
-    lu.assertTrue(discovery.isModuleEnabled(discovery.modulesById.Bravo, snapshot))
+    lu.assertTrue(discovery.snapshot.isModuleEnabled(discovery.modulesById.Alpha, snapshot))
+    lu.assertTrue(discovery.snapshot.isModuleEnabled(discovery.modulesById.Bravo, snapshot))
     lu.assertEquals(firstState.reverted, 1)
     lu.assertEquals(firstState.applied, 1)
     lu.assertEquals(secondState.reverted, 1)
@@ -1037,12 +1053,16 @@ function TestMain:testRendererRebuildsWhenFrameworkGenerationChanges()
             return {
                 modules = {},
                 run = function() end,
-                captureHostSnapshot = function()
-                    return { hosts = {} }
-                end,
-                getSnapshotHost = function()
-                    return nil
-                end,
+                live = {
+                    captureSnapshot = function()
+                        return { hosts = {} }
+                    end,
+                },
+                snapshot = {
+                    getHost = function()
+                        return nil
+                    end,
+                },
             }
         end,
         createHash = function()

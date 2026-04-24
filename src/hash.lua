@@ -15,11 +15,11 @@ function internal.createHash(discovery, config, lib, packId)
     local decodeHashValue = lib.hashing.fromHash
 
     local function CaptureSnapshot()
-        return discovery.captureHostSnapshot()
+        return discovery.live.captureSnapshot()
     end
 
     local function GetSnapshotHost(entry, snapshot)
-        return discovery.getSnapshotHost(entry, snapshot)
+        return discovery.snapshot.getHost(entry, snapshot)
     end
 
     local function ReadPersisted(entry, key, snapshot)
@@ -185,7 +185,7 @@ function internal.createHash(discovery, config, lib, packId)
         }
 
         for _, m in ipairs(discovery.modules) do
-            state.moduleEnabled[m] = discovery.isModuleEnabled(m, hostSnapshot)
+            state.moduleEnabled[m] = discovery.snapshot.isModuleEnabled(m, hostSnapshot)
             local roots = {}
             for _, root in ipairs(GetRootStorage(m)) do
                 table.insert(roots, {
@@ -213,7 +213,7 @@ function internal.createHash(discovery, config, lib, packId)
 
         for _, m in ipairs(discovery.modules) do
             local previousEnabled = state.moduleEnabled[m]
-            local ok, err = discovery.setModuleEnabled(m, previousEnabled, snapshot)
+            local ok, err = discovery.snapshot.setModuleEnabled(m, previousEnabled, snapshot)
             if ok == false then
                 table.insert(rollbackErrors, string.format("%s: %s", tostring(m.modName or m.id), tostring(err)))
             end
@@ -338,7 +338,7 @@ function internal.createHash(discovery, config, lib, packId)
             if source then
                 enabled = source.modules and source.modules[m.id]
             else
-                enabled = discovery.isModuleEnabled(m, snapshot)
+                enabled = discovery.snapshot.isModuleEnabled(m, snapshot)
             end
             if enabled == nil then enabled = false end
             local default = m.default == true
@@ -455,7 +455,7 @@ function internal.createHash(discovery, config, lib, packId)
         ReloadManagedSession(snapshot)
 
         for _, m in ipairs(discovery.modules) do
-            local ok, err = discovery.setModuleEnabled(m, moduleTargets[m], snapshot)
+            local ok, err = discovery.snapshot.setModuleEnabled(m, moduleTargets[m], snapshot)
             if ok == false then
                 return FailApplyHash(state, err, snapshot)
             end

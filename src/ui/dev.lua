@@ -53,7 +53,7 @@ function internal.createUIDev(ctx)
             local val, chg = ui.Checkbox(entry._debugLabel, staging.debug[entry.id])
             if chg then
                 staging.debug[entry.id] = val
-                discovery.setDebugEnabled(entry, val, snapshot)
+                discovery.snapshot.setDebugEnabled(entry, val, snapshot)
             end
         end
     end

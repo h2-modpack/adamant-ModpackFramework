@@ -67,7 +67,7 @@ Required:
 
 Optional `def` fields:
 - `moduleOrder`
-  Ordered list of module labels to pin first in the sidebar. Unknown entries are warned and ignored.
+  Ordered list of module ids to pin first in the sidebar. Unknown entries are warned and ignored.
 - `renderQuickSetup(ctx)`
   Coordinator-owned Quick Setup content. See [QUICK_SETUP.md](QUICK_SETUP.md).
 
