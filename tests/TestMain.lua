@@ -160,6 +160,111 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
     lu.assertEquals(setupRunDataCalls, 1)
 end
 
+function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
+    local packId = "load-order-pack"
+    lib.lifecycle.registerCoordinator(packId, nil)
+
+    local previousSetupRunData = rom.game.SetupRunData
+    local setupRunDataCalls = 0
+    local applyCalls = 0
+    local revertCalls = 0
+
+    rom.game.SetupRunData = function()
+        setupRunDataCalls = setupRunDataCalls + 1
+    end
+
+    local definition = {
+        modpack = packId,
+        id = "Alpha",
+        name = "Alpha",
+        storage = {},
+        affectsRunData = true,
+        apply = function()
+            applyCalls = applyCalls + 1
+        end,
+        revert = function()
+            revertCalls = revertCalls + 1
+        end,
+    }
+    local store, session = lib.createStore({
+        Enabled = true,
+        DebugMode = false,
+    }, definition)
+    local host = lib.createModuleHost({
+        definition = definition,
+        store = store,
+        session = session,
+        drawTab = function() end,
+    })
+
+    lu.assertEquals(applyCalls, 0)
+
+    local entry = {
+        id = definition.id,
+        name = definition.name,
+        modName = "Alpha",
+        storage = definition.storage,
+        definition = definition,
+    }
+
+    FrameworkTestApi.withFactories({
+        createDiscovery = function()
+            return {
+                modules = { entry },
+                run = function() end,
+                captureHostSnapshot = function()
+                    return { hosts = { [entry] = host } }
+                end,
+                getSnapshotHost = function(_, snapshot)
+                    return snapshot.hosts[entry]
+                end,
+            }
+        end,
+        createHash = function()
+            return {}
+        end,
+        createTheme = function()
+            return { colors = {} }
+        end,
+        createHud = function()
+            return {
+                setModMarker = function() end,
+            }
+        end,
+        createUI = function()
+            return {
+                renderWindow = function() end,
+                addMenuBar = function() end,
+            }
+        end,
+    }, function()
+        FrameworkTestApi.init({
+            packId = packId,
+            windowTitle = "Load Order Pack",
+            config = {
+                ModEnabled = true,
+                DebugMode = false,
+                Profiles = {
+                    { Name = "", Hash = "", Tooltip = "" },
+                },
+            },
+            def = {
+                NUM_PROFILES = 1,
+                defaultProfiles = {},
+            },
+        })
+    end)
+
+    local ok, err = host.revertMutation()
+    lib.lifecycle.registerCoordinator(packId, nil)
+    rom.game.SetupRunData = previousSetupRunData
+
+    lu.assertTrue(ok, tostring(err))
+    lu.assertEquals(applyCalls, 1)
+    lu.assertEquals(revertCalls, 1)
+    lu.assertEquals(setupRunDataCalls, 1)
+end
+
 function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
     CaptureWarnings()
 
@@ -396,6 +501,114 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
     lu.assertEquals(#warnings, 2)
     lu.assertStrContains(warnings[1], "[test-pack] Bravo apply failed: ")
     lu.assertStrContains(warnings[2], "[test-pack] Enable Mod toggle failed; restoring previous runtime state")
+end
+
+function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
+    CaptureWarnings()
+
+    local previousSetupRunData = rom.game.SetupRunData
+    local setupRunDataCalls = 0
+    rom.game.SetupRunData = function()
+        setupRunDataCalls = setupRunDataCalls + 1
+    end
+
+    local firstState = { applied = 0, reverted = 0 }
+    local secondState = { applied = 0, reverted = 0 }
+
+    local discovery = MockDiscovery.create({
+        {
+            modName = "Alpha",
+            id = "Alpha",
+            name = "Alpha",
+            enabled = true,
+            affectsRunData = true,
+            storage = {},
+            apply = function()
+                firstState.applied = firstState.applied + 1
+            end,
+            revert = function()
+                firstState.reverted = firstState.reverted + 1
+            end,
+        },
+        {
+            modName = "Bravo",
+            id = "Bravo",
+            name = "Bravo",
+            enabled = true,
+            affectsRunData = true,
+            storage = {},
+            apply = function()
+                secondState.applied = secondState.applied + 1
+            end,
+            revert = function()
+                secondState.reverted = secondState.reverted + 1
+                error("revert boom")
+            end,
+        },
+    })
+
+    local markHashDirtyCalls = 0
+    local hud = {
+        markHashDirty = function()
+            markHashDirtyCalls = markHashDirtyCalls + 1
+        end,
+        getConfigHash = function()
+            return "hash", "fingerprint"
+        end,
+    }
+    local staging = {
+        ModEnabled = true,
+        modules = {
+            Alpha = true,
+            Bravo = true,
+        },
+        debug = {},
+    }
+    local runtime = AdamantModpackFramework_Internal.createUIRuntime({
+        discovery = discovery,
+        hud = hud,
+        config = {
+            ModEnabled = true,
+            DebugMode = false,
+        },
+        lib = lib,
+        packId = "test-pack",
+        colors = {},
+        staging = staging,
+        captureSnapshot = function()
+            return discovery.captureHostSnapshot()
+        end,
+        getSnapshotHost = function(entry, snapshot)
+            return discovery.getSnapshotHost(entry, snapshot)
+        end,
+        getCurrentSnapshot = function()
+            return nil
+        end,
+        snapshotToStaging = function() end,
+    })
+
+    local snapshot = discovery.captureHostSnapshot()
+    local ok, err = runtime.setModulesEnabled({ "Alpha", "Bravo" }, false, snapshot)
+    runtime.flushPendingRunData()
+
+    local warnings = Warnings
+    rom.game.SetupRunData = previousSetupRunData
+    RestoreWarnings()
+
+    lu.assertFalse(ok)
+    lu.assertStrContains(tostring(err), "revert boom")
+    lu.assertTrue(staging.modules.Alpha)
+    lu.assertTrue(staging.modules.Bravo)
+    lu.assertTrue(discovery.isModuleEnabled(discovery.modulesById.Alpha, snapshot))
+    lu.assertTrue(discovery.isModuleEnabled(discovery.modulesById.Bravo, snapshot))
+    lu.assertEquals(firstState.reverted, 1)
+    lu.assertEquals(firstState.applied, 1)
+    lu.assertEquals(secondState.reverted, 1)
+    lu.assertEquals(secondState.applied, 0)
+    lu.assertEquals(markHashDirtyCalls, 0)
+    lu.assertEquals(setupRunDataCalls, 0)
+    lu.assertEquals(#warnings, 1)
+    lu.assertStrContains(warnings[1], "[test-pack] Module batch toggle failed; restoring previous module states: ")
 end
 
 function TestMain:testQuickSetupRendersModuleQuickContent()

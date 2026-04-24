@@ -93,24 +93,59 @@ function internal.createUIRuntime(ctx)
     function Runtime.setModulesEnabled(moduleIds, enabled, snapshot)
         local changed = false
         local needsRunData = false
+        local touched = {}
         snapshot = snapshot or getCurrentSnapshot() or captureSnapshot()
 
         for _, moduleId in ipairs(moduleIds or {}) do
             local entry = discovery.modulesById[moduleId]
             if entry and staging.modules[moduleId] ~= enabled then
-                local ok = discovery.setEntryEnabled(entry, enabled, snapshot)
+                local previousEnabled = staging.modules[moduleId] == true
+                local ok, err = discovery.setEntryEnabled(entry, enabled, snapshot)
                 if ok then
+                    table.insert(touched, {
+                        entry = entry,
+                        previousEnabled = previousEnabled,
+                    })
                     staging.modules[moduleId] = enabled
                     changed = true
                     if mutatesRunData(entry.definition) then
                         needsRunData = true
                     end
+                else
+                    local rollbackErrors = {}
+                    for i = #touched, 1, -1 do
+                        local touchedEntry = touched[i].entry
+                        local rollbackOk, rollbackErr = discovery.setEntryEnabled(
+                            touchedEntry,
+                            touched[i].previousEnabled,
+                            snapshot
+                        )
+                        if rollbackOk then
+                            staging.modules[touchedEntry.id] = touched[i].previousEnabled
+                        else
+                            table.insert(rollbackErrors,
+                                string.format("%s: %s",
+                                    tostring(touchedEntry.modName or touchedEntry.id or "unknown"),
+                                    tostring(rollbackErr)))
+                        end
+                    end
+
+                    contractWarn(packId,
+                        "Module batch toggle failed; restoring previous module states: %s",
+                        tostring(err))
+                    if #rollbackErrors > 0 then
+                        contractWarn(packId,
+                            "Module batch toggle rollback incomplete: %s",
+                            table.concat(rollbackErrors, "; "))
+                    end
+
+                    return false, err
                 end
             end
         end
 
         if not changed then
-            return
+            return true, nil
         end
 
         if needsRunData then
@@ -118,6 +153,7 @@ function internal.createUIRuntime(ctx)
         end
         Runtime.invalidateHash()
         hud.markHashDirty()
+        return true, nil
     end
 
     function Runtime.setEntryRuntimeState(entry, state, snapshot)
