@@ -27,7 +27,6 @@ function TestHashStorage:testAllDefaultsProduceVersionOnlyCanonical()
     local discovery = MockDiscovery.create({
         {
             id = "GodPool",
-            default = false,
             enabled = false,
             storage = {
                 { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
@@ -49,7 +48,6 @@ function TestHashStorage:testRegularAndSpecialStorageRoundTrip()
     local discovery = MockDiscovery.create({
         {
             id = "GodPool",
-            default = false,
             enabled = true,
             storage = {
                 { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
@@ -105,7 +103,6 @@ function TestHashStorage:testFingerprintChangesWithConfig()
     local discovery = MockDiscovery.create({
         {
             id = "GodPool",
-            default = false,
             enabled = false,
             storage = {
                 { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
@@ -129,7 +126,6 @@ function TestHashStorage:testApplyConfigHashRollsBackWhenEnableFails()
     local discovery = MockDiscovery.create({
         {
             id = "GodPool",
-            default = false,
             enabled = false,
             storage = {
                 { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
@@ -162,10 +158,14 @@ function TestHashStorage:testHashGroupsRejectPackedChildAliases()
     local discovery = MockDiscovery.create({
         {
             id = "GodPool",
-            default = false,
             enabled = false,
-            hashGroups = {
-                { key = "PackedBits", "EnabledBit" },
+            hashGroupPlan = {
+                {
+                    keyPrefix = "PackedBits",
+                    items = {
+                        "EnabledBit",
+                    },
+                },
             },
             storage = {
                 {
@@ -194,10 +194,14 @@ function TestHashStorage:testHashGroupsAllowPackedRootAliases()
     local discovery = MockDiscovery.create({
         {
             id = "GodPool",
-            default = false,
             enabled = false,
-            hashGroups = {
-                { key = "PackedRoots", "PackedA", "PackedB" },
+            hashGroupPlan = {
+                {
+                    keyPrefix = "PackedRoots",
+                    items = {
+                        { "PackedA", "PackedB" },
+                    },
+                },
             },
             storage = {
                 { type = "packedInt", alias = "PackedA", configKey = "PackedA", width = 12, bits = {
@@ -216,14 +220,13 @@ function TestHashStorage:testHashGroupsAllowPackedRootAliases()
 
     local canonical = makeHash(discovery).GetConfigHash()
 
-    lu.assertStrContains(canonical, "GodPool.PackedRoots=")
+    lu.assertStrContains(canonical, "GodPool.PackedRoots_1=")
 end
 
 function TestHashStorage:testTransientRootsAreExcludedFromHash()
     local discovery = MockDiscovery.create({
         {
             id = "GodPool",
-            default = false,
             enabled = false,
             storage = {
                 { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
@@ -248,10 +251,14 @@ function TestHashStorage:testHashGroupsRejectTransientAliases()
     local discovery = MockDiscovery.create({
         {
             id = "GodPool",
-            default = false,
             enabled = false,
-            hashGroups = {
-                { key = "TransientGroup", "FilterMode" },
+            hashGroupPlan = {
+                {
+                    keyPrefix = "TransientGroup",
+                    items = {
+                        "FilterMode",
+                    },
+                },
             },
             storage = {
                 { type = "string", alias = "FilterMode", lifetime = "transient", default = "all", maxLen = 16 },

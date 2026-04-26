@@ -103,3 +103,5 @@ function internal.createTheme(lib)
         PopTheme           = PopTheme,
     }
 end
+
+Framework.createTheme = internal.createTheme

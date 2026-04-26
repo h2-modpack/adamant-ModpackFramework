@@ -127,6 +127,10 @@ import = function() end
 import_as_fallback = function() end
 
 dofile("src/main.lua")
+AdamantModpackFramework_Internal = AdamantModpackFramework_Internal or {}
+setmetatable(public, {
+    __index = Framework,
+})
 rom.mods['adamant-ModpackFramework'] = public
 FrameworkTestApi = setmetatable({}, {
     __index = function(_, key)
@@ -134,25 +138,39 @@ FrameworkTestApi = setmetatable({}, {
         if internal[key] ~= nil then
             return internal[key]
         end
+        if Framework and Framework[key] ~= nil then
+            return Framework[key]
+        end
         return public[key]
     end,
     __newindex = function(_, key, value)
         AdamantModpackFramework_Internal[key] = value
+        if type(Framework) == "table" then
+            Framework[key] = value
+        end
     end,
 })
 rawset(FrameworkTestApi, "withFactories", function(overrides, body)
-    local previous = {}
+    local previousInternal = {}
+    local previousFramework = {}
     local keys = {}
     for key in pairs(overrides) do
         table.insert(keys, key)
-        previous[key] = AdamantModpackFramework_Internal[key]
+        previousInternal[key] = AdamantModpackFramework_Internal[key]
+        previousFramework[key] = Framework and Framework[key] or nil
         AdamantModpackFramework_Internal[key] = overrides[key]
+        if type(Framework) == "table" then
+            Framework[key] = overrides[key]
+        end
     end
 
     local ok, result = pcall(body)
 
     for _, key in ipairs(keys) do
-        AdamantModpackFramework_Internal[key] = previous[key]
+        AdamantModpackFramework_Internal[key] = previousInternal[key]
+        if type(Framework) == "table" then
+            Framework[key] = previousFramework[key]
+        end
     end
 
     if not ok then
@@ -174,6 +192,10 @@ dofile("src/ui.lua")
 config = { ModEnabled = true, DebugMode = false }
 
 MockDiscovery = {}
+
+local function prepareDefinition(definition)
+    return lib.prepareDefinition({}, definition)
+end
 
 local function makePersistedConfig(storage, overrides)
     local persisted = {
@@ -215,20 +237,19 @@ function MockDiscovery.create(moduleDefs)
         persisted.Enabled = def.enabled == true
         persisted.DebugMode = def.debug == true
 
-        local definition = {
+        local definition = prepareDefinition({
             id = def.id,
             name = def.name or def.id,
             modpack = def.modpack or "test-pack",
-            default = def.default == true,
             storage = def.storage or {},
-            hashGroups = def.hashGroups,
+            hashGroupPlan = def.hashGroupPlan,
             affectsRunData = def.affectsRunData == true,
             apply = def.apply,
             revert = def.revert,
             patchPlan = def.patchPlan,
             shortName = def.shortName,
             tooltip = def.tooltip,
-        }
+        })
         local store, session = lib.createStore(persisted, definition)
         local host = lib.createModuleHost({
             definition = definition,
@@ -246,7 +267,11 @@ function MockDiscovery.create(moduleDefs)
             definition = definition,
             id = definition.id,
             name = definition.name,
-            default = definition.default,
+            shortName = definition.shortName,
+            tooltip = definition.tooltip,
+            modpack = definition.modpack,
+            affectsRunData = definition.affectsRunData == true,
+            hashHints = definition.hashGroupPlan,
             storage = definition.storage,
         }
 

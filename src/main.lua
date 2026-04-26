@@ -1,53 +1,24 @@
 -- =============================================================================
 -- ADAMANT-MODPACK-FRAMEWORK
 -- =============================================================================
--- Reusable modpack orchestration library: discovery, hash, HUD, and UI.
---
--- Usage (from a coordinator mod's main.lua):
---
---   local Framework = rom.mods['adamant-ModpackFramework']
---   Framework.init({
---       packId      = "speedrun",
---       windowTitle = "Speedrun Modpack",
---       config      = config,    -- coordinator's Chalk config
---       def         = def,       -- { NUM_PROFILES, defaultProfiles }
---   })
---
--- Framework.init can be called on every hot reload; subsequent calls update subsystem
--- instances in place. GUI registration is the coordinator's responsibility:
---   rom.gui.add_imgui(Framework.getRenderer(packId))
---   rom.gui.add_always_draw_imgui(Framework.getAlwaysDrawRenderer(packId))
---   rom.gui.add_to_menu_bar(Framework.getMenuBar(packId))
 
 local mods = rom.mods
 mods["SGG_Modding-ENVY"].auto()
 
+---@diagnostic disable: lowercase-global
+Framework = {}
 AdamantModpackFramework_Internal = AdamantModpackFramework_Internal or {}
+
 local internal = AdamantModpackFramework_Internal
 internal.packs = internal.packs or {}
-internal.packIndices = internal.packIndices or {}
-internal.nextPackIndex = internal.nextPackIndex or 1
-internal.callbacks = internal.callbacks or {}
-internal.frameworkGeneration = (internal.frameworkGeneration or 0) + 1
+internal.packList = internal.packList or {}
+internal.frameworkGeneration = internal.frameworkGeneration or 0
 
 import "ui/theme.lua"
-import "profiles.lua"
 import "discovery.lua"
 import "hash.lua"
 import "hud.lua"
-import "ui/runtime.lua"
-import "ui/profiles.lua"
-import "ui/dev.lua"
-import "ui/quick_setup.lua"
-import "ui/module_tabs.lua"
 import "ui.lua"
-
-local _packs = internal.packs
-local _packIndices = internal.packIndices
-
-local function GetCurrentFramework()
-    return rom.mods["adamant-ModpackFramework"]
-end
 
 local function ValidateInitParams(params)
     assert(type(params) == "table", "Framework.init: params must be a table")
@@ -73,162 +44,126 @@ local function ValidateInitParams(params)
     internal.normalizeProfiles(params.config.Profiles, numProfiles)
 end
 
-local function RememberInitParams(params)
-    return {
-        packId = params.packId,
-        windowTitle = params.windowTitle,
-        config = params.config,
-        def = params.def,
-        hideHashMarker = params.hideHashMarker,
-    }
+function Framework.auditSavedProfiles(packId, profiles, discovery, lib)
+    return internal.auditSavedProfiles(packId, profiles, discovery, lib)
 end
 
-function public.init(params)
+local function EnsurePackCurrent(packId)
+    local pack = internal.packs[packId]
+    if not pack then
+        return nil
+    end
+    if pack._generation ~= internal.frameworkGeneration and type(pack._params) == "table" then
+        pack = Framework.init(pack._params)
+    end
+    return pack
+end
+
+function Framework.init(params)
     local lib = rom.mods["adamant-ModpackLib"]
     ValidateInitParams(params)
 
     lib.lifecycle.registerCoordinator(params.packId, params.config)
     import_as_fallback(rom.game)
 
-    local packIndex = _packIndices[params.packId]
+    local packIndex = internal.packs[params.packId] and internal.packs[params.packId]._index or nil
     if not packIndex then
-        packIndex = internal.nextPackIndex
-        internal.nextPackIndex = internal.nextPackIndex + 1
-        _packIndices[params.packId] = packIndex
+        table.insert(internal.packList, params.packId)
+        packIndex = #internal.packList
     end
 
-    local discovery = internal.createDiscovery(params.packId, params.config, lib)
-    local hash = internal.createHash(discovery, params.config, lib, params.packId)
-    local theme = internal.createTheme(lib)
+    local discovery = Framework.createDiscovery(params.packId, params.config, lib)
+    local hash = Framework.createHash(discovery, params.config, lib, params.packId)
+    local theme = Framework.createTheme(lib)
 
-    discovery.run(params.def and params.def.moduleOrder)
+    discovery.run(params.def.moduleOrder)
+
     local startupSnapshot = discovery.live.captureSnapshot()
     local needsRunDataSetup = false
     for _, entry in ipairs(discovery.modules) do
         local host = discovery.snapshot.getHost(entry, startupSnapshot)
-        local ok, err
         if host then
-            ok, err = host.applyOnLoad()
-        end
-        if not ok then
-            lib.logging.warn(params.packId, "%s startup lifecycle failed: %s",
-                tostring(entry.name or entry.id or "module"),
-                tostring(err))
-        elseif lib.lifecycle.mutatesRunData(entry.definition) then
-            needsRunDataSetup = true
+            local ok, err = host.applyOnLoad()
+            if not ok then
+                lib.logging.warn(params.packId,
+                    "%s startup lifecycle failed: %s",
+                    tostring(entry.name or entry.id or "module"),
+                    tostring(err))
+            elseif entry.affectsRunData then
+                needsRunDataSetup = true
+            end
         end
     end
+
     if needsRunDataSetup then
         rom.game.SetupRunData()
     end
 
     internal.auditSavedProfiles(params.packId, params.config.Profiles, discovery, lib)
 
-    local hud = internal.createHud(params.packId, packIndex, hash, theme, params.config, lib,
+    local hud = Framework.createHud(params.packId, packIndex, hash, theme, params.config, params.modutil,
         params.hideHashMarker == true)
-    local ui = internal.createUI(discovery, hud, theme, params.def, params.config, lib, params.packId,
+    local ui = Framework.createUI(discovery, hud, theme, params.def, params.config, lib, params.packId,
         params.windowTitle)
 
-    _packs[params.packId] = {
+    local pack = {
         discovery = discovery,
         hash = hash,
         hud = hud,
         ui = ui,
-        initParams = RememberInitParams(params),
-        frameworkGeneration = internal.frameworkGeneration,
-        packIndex = packIndex,
+        _index = packIndex,
+        _generation = internal.frameworkGeneration,
+        _params = params,
     }
+    internal.packs[params.packId] = pack
 
     if params.config.ModEnabled then
         hud.setModMarker(true)
     end
 
-    return _packs[params.packId]
-end
-
-local function EnsurePackCurrent(packId)
-    local pack = _packs[packId]
-    if not pack or not pack.initParams then
-        return pack
-    end
-
-    local currentGeneration = internal.frameworkGeneration or 0
-    if pack.frameworkGeneration ~= currentGeneration then
-        -- GUI callbacks are registered once and intentionally survive Framework reloads.
-        -- When they run against an older pack object, re-enter the latest public init()
-        -- through rom.mods so discovery/UI/hash state is rebuilt with the new code while
-        -- preserving the stable callback registered by Core.
-        local framework = GetCurrentFramework()
-        local init = framework and framework.init
-        if type(init) == "function" then
-            return init(pack.initParams)
-        end
-    end
-
     return pack
 end
 
-local function GetStableCallback(kind, packId, factory)
-    local callbacks = internal.callbacks
-    local key = tostring(packId)
-    local bucket = callbacks[kind]
-    if not bucket then
-        bucket = {}
-        callbacks[kind] = bucket
-    end
-
-    local callback = bucket[key]
-    if callback then
-        return callback
-    end
-
-    callback = factory(packId)
-    bucket[key] = callback
-    return callback
-end
+public.init = Framework.init
 
 public.getRenderer = function(packId)
-    return GetStableCallback("renderer", packId, function(currentPackId)
-        return function()
-            local pack = EnsurePackCurrent(currentPackId)
-            if not pack or not pack.ui then
-                return
-            end
-            pack.ui.renderWindow()
+    return function()
+        local pack = EnsurePackCurrent(packId)
+        if not pack or not pack.ui then
+            return
         end
-    end)
+        pack.ui.renderWindow()
+    end
 end
 
 public.getMenuBar = function(packId)
-    return GetStableCallback("menuBar", packId, function(currentPackId)
-        return function()
-            local pack = EnsurePackCurrent(currentPackId)
-            if not pack or not pack.ui then
-                return
-            end
-            pack.ui.addMenuBar()
+    return function()
+        local pack = EnsurePackCurrent(packId)
+        if not pack or not pack.ui then
+            return
         end
-    end)
+        pack.ui.addMenuBar()
+    end
 end
 
 public.getAlwaysDrawRenderer = function(packId)
-    return GetStableCallback("alwaysDraw", packId, function(currentPackId)
-        local wasGuiOpen = rom.gui.is_open() == true
+    local wasGuiOpen = rom.gui.is_open() == true
 
-        return function()
-            local pack = EnsurePackCurrent(currentPackId)
-            local isGuiOpen = rom.gui.is_open() == true
+    return function()
+        local isGuiOpen = rom.gui.is_open() == true
 
-            if wasGuiOpen and not isGuiOpen then
-                if pack and pack.ui and type(pack.ui.flushPendingRunData) == "function" then
+        if wasGuiOpen and not isGuiOpen then
+            local pack = EnsurePackCurrent(packId)
+            if pack then
+                if pack.ui then
                     pack.ui.flushPendingRunData()
                 end
-                if pack and pack.hud then
+                if pack.hud then
                     pack.hud.flushPendingHash()
                 end
             end
-
-            wasGuiOpen = isGuiOpen
         end
-    end)
+
+        wasGuiOpen = isGuiOpen
+    end
 end

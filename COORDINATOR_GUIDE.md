@@ -80,14 +80,14 @@ Optional top-level params:
 Framework discovers modules by:
 
 ```lua
-public.definition.modpack = PACK_ID
+public.host.getIdentity().modpack == PACK_ID
 ```
 
 Each discovered coordinated module must expose:
-- `definition.id`
-- `definition.name`
-- `definition.storage`
 - public `host`
+- `host.getIdentity().id`
+- `host.getMeta().name`
+- a prepared definition with `storage`
 
 `host.drawQuickContent(...)` is optional.
 
@@ -144,7 +144,7 @@ Coordinated module behavior reloads do not rebuild the pack. Instead:
 Hash/profile behavior is built on:
 - module enable state
 - validated persisted storage roots
-- optional `definition.hashGroups`
+- optional `definition.hashGroupPlan`
 
 Profile load:
 - stages decoded persisted values through each module host/session plumbing

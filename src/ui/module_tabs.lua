@@ -25,8 +25,8 @@ function internal.createUIModuleTabs(ctx)
         if chg then
             runtime.toggleEntry(entry, val, snapshot)
         end
-        if ui.IsItemHovered() and entry.definition.tooltip then
-            ui.SetTooltip(entry.definition.tooltip)
+        if ui.IsItemHovered() and entry.tooltip then
+            ui.SetTooltip(entry.tooltip)
         end
 
         if not enabled then return end

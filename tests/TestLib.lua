@@ -4,14 +4,14 @@ TestLibHost = {}
 
 function TestLibHost:testCommitSessionFlushesManagedAliasState()
     local config = { Flag = false, Enabled = false, DebugMode = false }
-    local definition = {
+    local definition = lib.prepareDefinition({}, {
         id = "ManagedState",
         name = "Managed State",
         storage = {
             { type = "bool", alias = "Flag", configKey = "Flag", default = false },
         },
         affectsRunData = false,
-    }
+    })
     local store, session = lib.createStore(config, definition)
 
     session.write("Flag", true)

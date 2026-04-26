@@ -15,8 +15,6 @@ function internal.createUIRuntime(ctx)
     local onProfileLoaded = ctx.onProfileLoaded
 
     local contractWarn = lib.logging.warn
-    local mutatesRunData = lib.lifecycle.mutatesRunData
-
     local cachedHash = nil
     local cachedFingerprint = nil
     local runDataDirty = false
@@ -47,8 +45,8 @@ function internal.createUIRuntime(ctx)
         return cachedHash, cachedFingerprint
     end
 
-    function Runtime.finishUiChange(definition)
-        if mutatesRunData(definition) then
+    function Runtime.finishUiChange(entry)
+        if entry and entry.affectsRunData then
             Runtime.markRunDataDirty()
         end
         Runtime.invalidateHash()
@@ -61,7 +59,7 @@ function internal.createUIRuntime(ctx)
             return
         end
         staging.modules[entry.id] = enabled
-        Runtime.finishUiChange(entry.definition)
+        Runtime.finishUiChange(entry)
     end
 
     function Runtime.getModulesStatus(moduleIds)
@@ -108,7 +106,7 @@ function internal.createUIRuntime(ctx)
                     })
                     staging.modules[moduleId] = enabled
                     changed = true
-                    if mutatesRunData(entry.definition) then
+                    if entry.affectsRunData then
                         needsRunData = true
                     end
                 else
@@ -241,7 +239,7 @@ function internal.createUIRuntime(ctx)
 
         local ok, err, committed = host.commitIfDirty()
         if ok and committed then
-            Runtime.finishUiChange(entry.definition)
+            Runtime.finishUiChange(entry)
         elseif ok == false then
             contractWarn(packId,
                 "%s session commit failed; restored previous config where possible: %s",

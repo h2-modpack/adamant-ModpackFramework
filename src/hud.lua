@@ -11,17 +11,15 @@
 --- Create the HUD subsystem for one coordinator pack.
 --- @param packId string Pack identifier used for component naming.
 --- @param packIndex number Stable vertical stacking index for this pack.
---- @param hash table Hash subsystem.
---- @param theme table Theme object.
+--- @param hash table Hash subsystem returned by `Framework.createHash(...)`.
+--- @param theme table Theme object returned by `Framework.createTheme(...)`.
 --- @param config table Coordinator config table containing `ModEnabled`.
---- @param lib AdamantModpackLib Shared lib used for reload-stable hook registration.
+--- @param modutil table ModUtil mod reference used for the HUD hook registration.
 --- @param hideHashMarker boolean|nil Optional pack-level flag to suppress the HUD fingerprint marker.
 --- @return table hud HUD object exposing marker/hash update helpers.
-local internal = AdamantModpackFramework_Internal
-
-function internal.createHud(packId, packIndex, hash, theme, config, lib, hideHashMarker)
+function Framework.createHud(packId, packIndex, hash, theme, config, modutil, hideHashMarker)
     assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
-        "Framework.init: game HUD globals are not ready; call after game load")
+        "Framework.createHud: game HUD globals are not ready; call Framework.init after game load")
 
     local HUD_LINE_HEIGHT = 24
     local HASH_UPDATE_DEBOUNCE_SECONDS = 5
@@ -75,7 +73,7 @@ function internal.createHud(packId, packIndex, hash, theme, config, lib, hideHas
         displayedHash = currentHash
     end
 
-    lib.hooks.Wrap(AdamantModpackFramework_Internal, "ShowHealthUI", "hud:" .. packId, function(base, args)
+    modutil.mod.Path.Wrap("ShowHealthUI", function(base, args)
         base(args)
         if not markerHidden and config.ModEnabled then
             displayedHash = nil
@@ -84,7 +82,7 @@ function internal.createHud(packId, packIndex, hash, theme, config, lib, hideHas
     end)
 
     -- =============================================================================
-    -- RETURNED API
+    -- PUBLIC API
     -- =============================================================================
 
     local function updateHash()

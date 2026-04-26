@@ -1,72 +1,44 @@
 -- =============================================================================
 -- MODULE DISCOVERY
 -- =============================================================================
--- Auto-discovers all installed modules that opt in via definition.modpack = packId.
--- Under the lean framework contract, every coordinated module gets its own top-level tab.
--- Modules render themselves through DrawTab; DrawQuickContent is optional.
+-- Discovers coordinated modules through public.host and snapshots live host pointers
+-- so UI/runtime work can tolerate hot-replaced hosts safely.
 
-local internal = AdamantModpackFramework_Internal
-
---- Create the discovery subsystem for one coordinator pack.
---- @param packId string Pack identifier used to filter opted-in modules.
---- @param config table Coordinator config table containing at least `DebugMode`.
---- @param lib table Adamant Modpack Lib export.
---- @return table discovery Discovery object with `run`, state accessors, and discovered entry lists.
-function internal.createDiscovery(packId, config, lib)
+function Framework.createDiscovery(packId, config, lib)
     local Discovery = {}
     local contractWarn = lib.logging.warn
     local warnIf = lib.logging.warnIf
     local inferMutation = lib.lifecycle.inferMutation
     local mutatesRunData = lib.lifecycle.mutatesRunData
-    local missingHostWarnings = {}
 
-    local function GetLiveHost(modName)
-        local mod = rom.mods[modName]
+    local warnedMissingHosts = {}
+
+    local function GetHost(mod)
         return type(mod) == "table" and type(mod.host) == "table" and mod.host or nil
     end
 
-    local function WarnMissingHost(entry)
-        contractWarn(packId, "%s: module host is unavailable", tostring(entry.modName or entry.id or "module"))
+    local function ReadDefinition(host)
+        return host.getDefinition()
     end
 
-    local function WarnSnapshotMissingEntry(entry)
-        contractWarn(packId, "%s: module host is not present in snapshot; capture a fresh snapshot for this discovery entry",
-            tostring(entry.modName or entry.id or "module"))
+    local function ReadIdentity(host)
+        return host.getIdentity()
     end
 
-    local function ResolveLiveHost(entry, warnOnce)
-        local host = GetLiveHost(entry.modName)
-        if type(host) == "table" then
-            return host
-        end
-        if warnOnce then
-            if missingHostWarnings[entry] then
-                return nil
-            end
-            missingHostWarnings[entry] = true
-        end
-        WarnMissingHost(entry)
-        return nil
+    local function ReadMeta(host)
+        return host.getMeta()
     end
 
-    local function GetSnapshotHost(entry, snapshot)
-        assert(type(snapshot) == "table" and type(snapshot.hosts) == "table",
-            "discovery.snapshot access requires a captured host snapshot")
+    local function ReadHashHints(host)
+        return host.getHashHints()
+    end
 
-        local host = snapshot.hosts[entry]
-        if type(host) == "table" then
-            return host
-        end
-        if host == false then
-            return nil
-        end
-
-        WarnSnapshotMissingEntry(entry)
-        return nil
+    local function ReadAffectsRunData(host)
+        return host.affectsRunData() == true
     end
 
     local function ReadPersisted(entry, key, snapshot)
-        local host = GetSnapshotHost(entry, snapshot)
+        local host = Discovery.snapshot.getHost(entry, snapshot)
         if not host then
             return nil
         end
@@ -74,15 +46,15 @@ function internal.createDiscovery(packId, config, lib)
     end
 
     local function WriteStagedAndFlush(entry, key, value, snapshot)
-        local host = GetSnapshotHost(entry, snapshot)
-        if host then
-            return host.writeAndFlush(key, value)
+        local host = Discovery.snapshot.getHost(entry, snapshot)
+        if not host then
+            return false, "module host is unavailable"
         end
-        return false
+        return host.writeAndFlush(key, value)
     end
 
     local function SetEntryEnabled(entry, enabled, snapshot)
-        local host = GetSnapshotHost(entry, snapshot)
+        local host = Discovery.snapshot.getHost(entry, snapshot)
         if not host then
             return false, "module host is unavailable"
         end
@@ -95,38 +67,36 @@ function internal.createDiscovery(packId, config, lib)
         return ok, err
     end
 
-    local function SetEntryDebugMode(entry, val, snapshot)
-        local host = GetSnapshotHost(entry, snapshot)
-        if host then
-            host.setDebugMode(val)
-        end
-    end
+    local function BuildEntry(found)
+        local def = found.definition
+        local identity = found.identity
+        local meta = found.meta
 
-    local function BuildEntry(modName, def)
         return {
-            modName = modName,
+            modName = found.modName,
+            mod = found.mod,
             definition = def,
-            id = def.id,
-            name = def.name,
-            shortName = def.shortName,
-            default = def.default,
+            id = identity.id,
+            modpack = identity.modpack,
+            name = meta.name or identity.id,
+            shortName = meta.shortName,
+            tooltip = meta.tooltip or "",
+            affectsRunData = found.affectsRunData,
+            hashHints = found.hashHints,
             storage = def.storage,
-            _enableLabel = "Enable " .. tostring(def.name),
-            _debugLabel = tostring(def.name or def.id or modName)
-                .. "##" .. tostring(def.id or modName),
+            _enableLabel = "Enable " .. tostring(meta.name or identity.id or found.modName),
+            _debugLabel = tostring(meta.name or identity.id or found.modName)
+                .. "##" .. tostring(identity.id or found.modName),
         }
     end
 
-    -- Populated by Discovery.run()
-    Discovery.modules = {}               -- ordered list of discovered modules
-    Discovery.modulesById = {}           -- id -> module entry
+    Discovery.modules = {}
+    Discovery.modulesById = {}
     Discovery.modulesWithQuickContent = {}
-    Discovery.tabOrder = {}              -- ordered list of module entries for the sidebar
-    Discovery.live = {}      -- live host access: snapshot creation + explicit "latest" reads
-    Discovery.snapshot = {}  -- snapshot-bound accessors for UI/hash/profile operations
+    Discovery.tabOrder = {}
+    Discovery.live = {}
+    Discovery.snapshot = {}
 
-    --- Discover all modules for this pack.
-    --- @param moduleOrder table|nil Ordered list of module ids to pin first in the sidebar.
     function Discovery.run(moduleOrder)
         Discovery.modules = {}
         Discovery.modulesById = {}
@@ -135,20 +105,34 @@ function internal.createDiscovery(packId, config, lib)
 
         local found = {}
         for modName, mod in pairs(rom.mods) do
-            if type(mod) == "table" and mod.definition
-                and mod.definition.modpack and mod.definition.modpack == packId then
-                table.insert(found, { modName = modName, def = mod.definition })
+            local host = GetHost(mod)
+            if host then
+                local identity = ReadIdentity(host)
+                if identity.modpack == packId then
+                    table.insert(found, {
+                        modName = modName,
+                        mod = mod,
+                        host = host,
+                        definition = ReadDefinition(host),
+                        identity = identity,
+                        meta = ReadMeta(host),
+                        hashHints = ReadHashHints(host),
+                        affectsRunData = ReadAffectsRunData(host),
+                    })
+                end
             end
         end
 
         table.sort(found, function(a, b)
-            return (a.def.name or a.def.id or a.modName) < (b.def.name or b.def.id or b.modName)
+            local aName = a.meta.name or a.identity.id or a.modName
+            local bName = b.meta.name or b.identity.id or b.modName
+            return aName < bName
         end)
 
         local duplicateNamespaces = {}
         local namespaceEntries = {}
         for _, entry in ipairs(found) do
-            local namespace = entry.def.id
+            local namespace = entry.identity.id
             if namespace ~= nil then
                 namespaceEntries[namespace] = namespaceEntries[namespace] or {}
                 table.insert(namespaceEntries[namespace], entry.modName)
@@ -171,38 +155,38 @@ function internal.createDiscovery(packId, config, lib)
             end
         end
 
-        for _, entry in ipairs(found) do
-            local modName = entry.modName
-            local def = entry.def
-            local inferredMutationShape, mutationInfo = inferMutation(def)
+        for _, foundEntry in ipairs(found) do
+            local modName = foundEntry.modName
+            local host = foundEntry.host
+            local def = foundEntry.definition
+            local id = foundEntry.identity.id
+            local name = foundEntry.meta.name
+            local inferredMutationShape, mutationInfo = inferMutation(def or {})
             local hasLifecycle = mutationInfo.hasManual or mutationInfo.hasPatch
-            local lifecycleRequired = mutatesRunData(def)
-            local host = GetLiveHost(modName)
-            local hasDrawTab = host and host.hasDrawTab() == true
-            local hasQuickContent = host and host.hasQuickContent() == true
+            local lifecycleRequired = foundEntry.affectsRunData
+            local hasDrawTab = host and host.hasDrawTab and host.hasDrawTab() == true
+            local hasQuickContent = host and host.hasQuickContent and host.hasQuickContent() == true
 
-            if lifecycleRequired and not inferredMutationShape then
+            if mutatesRunData(def) and not inferredMutationShape then
                 contractWarn(packId,
                     "%s: affectsRunData=true but module exposes neither patchPlan nor apply/revert",
                     modName)
             end
 
-            if not duplicateNamespaces[def.id] then
-                if not def.id or not def.name or (lifecycleRequired and not hasLifecycle) then
+            if not duplicateNamespaces[id] then
+                if not id or not name or (lifecycleRequired and not hasLifecycle) then
                     contractWarn(packId,
                         "Skipping %s: missing id/name or lifecycle (patchPlan/apply/revert)", modName)
                 elseif type(def.storage) ~= "table" then
                     contractWarn(packId, "Skipping %s: missing definition.storage", modName)
-                elseif not host then
-                    contractWarn(packId, "%s: module is missing public.host", modName)
                 elseif not hasDrawTab then
                     contractWarn(packId,
                         "%s: coordinated modules must expose host.drawTab under the lean framework contract",
                         modName)
                 else
-                    local discovered = BuildEntry(modName, def)
+                    local discovered = BuildEntry(foundEntry)
                     table.insert(Discovery.modules, discovered)
-                    Discovery.modulesById[def.id] = discovered
+                    Discovery.modulesById[discovered.id] = discovered
                     if hasQuickContent then
                         table.insert(Discovery.modulesWithQuickContent, discovered)
                     end
@@ -232,16 +216,16 @@ function internal.createDiscovery(packId, config, lib)
 
         local placed = {}
         if type(moduleOrder) == "table" then
-            for _, orderKey in ipairs(moduleOrder) do
-                if type(orderKey) == "string" and Discovery.modulesById[orderKey] then
-                    local entry = Discovery.modulesById[orderKey]
+            for _, moduleId in ipairs(moduleOrder) do
+                if type(moduleId) == "string" and Discovery.modulesById[moduleId] then
+                    local entry = Discovery.modulesById[moduleId]
                     if not placed[entry.id] then
                         placed[entry.id] = true
                         table.insert(Discovery.tabOrder, entry)
                     end
-                elseif type(orderKey) == "string" then
+                elseif type(moduleId) == "string" then
                     warnIf(packId, config.DebugMode,
-                        "moduleOrder contains unknown module id '%s'; entry ignored", orderKey)
+                        "moduleOrder contains unknown module id '%s'; entry ignored", moduleId)
                 end
             end
         end
@@ -253,59 +237,109 @@ function internal.createDiscovery(packId, config, lib)
         end
     end
 
-    -- Snapshot rule: UI/hash/profile operations should capture once and pass the
-    -- snapshot through the whole operation. Live host resolution is reserved for
-    -- snapshot creation and explicit "latest host" reads after a module reload.
     function Discovery.live.captureSnapshot()
-        local snapshot = {
-            hosts = {},
-        }
+        local snapshot = { hosts = {} }
 
         for _, entry in ipairs(Discovery.modules) do
-            snapshot.hosts[entry] = ResolveLiveHost(entry, true) or false
+            local host = GetHost(rom.mods[entry.modName])
+            snapshot.hosts[entry] = host or false
+            if not host and not warnedMissingHosts[entry.modName] then
+                warnedMissingHosts[entry.modName] = true
+                contractWarn(packId, "%s: module host is unavailable", entry.modName)
+            end
         end
 
         return snapshot
     end
 
     function Discovery.live.getHost(entry)
-        return ResolveLiveHost(entry)
+        return GetHost(rom.mods[entry.modName])
+    end
+
+    local function RequireSnapshot(snapshot)
+        assert(type(snapshot) == "table" and type(snapshot.hosts) == "table",
+            "discovery.snapshot access requires a captured host snapshot")
     end
 
     function Discovery.snapshot.getHost(entry, snapshot)
-        return GetSnapshotHost(entry, snapshot)
-    end
-
-    function Discovery.snapshot.isEntryEnabled(entry, snapshot)
-        return ReadPersisted(entry, "Enabled", snapshot) == true
-    end
-
-    function Discovery.snapshot.setEntryEnabled(entry, enabled, snapshot)
-        return SetEntryEnabled(entry, enabled, snapshot)
-    end
-
-    function Discovery.snapshot.getStorageValue(entry, aliasOrKey, snapshot)
-        return ReadPersisted(entry, aliasOrKey, snapshot)
-    end
-
-    function Discovery.snapshot.setStorageValue(entry, aliasOrKey, value, snapshot)
-        return WriteStagedAndFlush(entry, aliasOrKey, value, snapshot)
+        RequireSnapshot(snapshot)
+        local host = snapshot.hosts[entry]
+        return host or nil
     end
 
     function Discovery.snapshot.isModuleEnabled(module, snapshot)
-        return Discovery.snapshot.isEntryEnabled(module, snapshot)
+        return ReadPersisted(module, "Enabled", snapshot) == true
+    end
+
+    function Discovery.snapshot.isEntryEnabled(entry, snapshot)
+        return Discovery.snapshot.isModuleEnabled(entry, snapshot)
     end
 
     function Discovery.snapshot.setModuleEnabled(module, enabled, snapshot)
-        return Discovery.snapshot.setEntryEnabled(module, enabled, snapshot)
+        return SetEntryEnabled(module, enabled, snapshot)
+    end
+
+    function Discovery.snapshot.setEntryEnabled(entry, enabled, snapshot)
+        return Discovery.snapshot.setModuleEnabled(entry, enabled, snapshot)
+    end
+
+    function Discovery.snapshot.getStorageValue(module, aliasOrKey, snapshot)
+        return ReadPersisted(module, aliasOrKey, snapshot)
+    end
+
+    function Discovery.snapshot.setStorageValue(module, aliasOrKey, value, snapshot)
+        return WriteStagedAndFlush(module, aliasOrKey, value, snapshot)
     end
 
     function Discovery.snapshot.isDebugEnabled(entry, snapshot)
         return ReadPersisted(entry, "DebugMode", snapshot) == true
     end
 
-    function Discovery.snapshot.setDebugEnabled(entry, val, snapshot)
-        SetEntryDebugMode(entry, val, snapshot)
+    function Discovery.snapshot.setDebugEnabled(entry, value, snapshot)
+        local host = Discovery.snapshot.getHost(entry, snapshot)
+        if not host then
+            return false, "module host is unavailable"
+        end
+        host.setDebugMode(value)
+        return true
+    end
+
+    function Discovery.isEntryEnabled(entry)
+        local snapshot = Discovery.live.captureSnapshot()
+        return Discovery.snapshot.isEntryEnabled(entry, snapshot)
+    end
+
+    function Discovery.setEntryEnabled(entry, enabled)
+        local snapshot = Discovery.live.captureSnapshot()
+        return Discovery.snapshot.setEntryEnabled(entry, enabled, snapshot)
+    end
+
+    function Discovery.getStorageValue(entry, aliasOrKey)
+        local snapshot = Discovery.live.captureSnapshot()
+        return Discovery.snapshot.getStorageValue(entry, aliasOrKey, snapshot)
+    end
+
+    function Discovery.setStorageValue(entry, aliasOrKey, value)
+        local snapshot = Discovery.live.captureSnapshot()
+        return Discovery.snapshot.setStorageValue(entry, aliasOrKey, value, snapshot)
+    end
+
+    function Discovery.isModuleEnabled(module)
+        return Discovery.isEntryEnabled(module)
+    end
+
+    function Discovery.setModuleEnabled(module, enabled)
+        return Discovery.setEntryEnabled(module, enabled)
+    end
+
+    function Discovery.isDebugEnabled(entry)
+        local snapshot = Discovery.live.captureSnapshot()
+        return Discovery.snapshot.isDebugEnabled(entry, snapshot)
+    end
+
+    function Discovery.setDebugEnabled(entry, val)
+        local snapshot = Discovery.live.captureSnapshot()
+        return Discovery.snapshot.setDebugEnabled(entry, val, snapshot)
     end
 
     return Discovery

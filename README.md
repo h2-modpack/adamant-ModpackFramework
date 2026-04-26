@@ -20,8 +20,13 @@ It provides:
 Modules participate by exposing a Lib module host:
 
 ```lua
+local definition = lib.prepareDefinition(internal, dataDefaults, {
+    modpack = PACK_ID,
+    ...
+})
+
 public.host = lib.createModuleHost({
-    definition = public.definition,
+    definition = definition,
     store = store,
     session = session,
     hookOwner = internal,
@@ -48,11 +53,11 @@ If a module does not register runtime hooks, `hookOwner` and `registerHooks` may
 
 The framework discovers modules that expose:
 
-- `definition.modpack = PACK_ID`
-- `definition.id`
-- `definition.name`
-- `definition.storage`
 - `public.host`
+- `host.getIdentity().modpack == PACK_ID`
+- `host.getIdentity().id`
+- `host.getMeta().name`
+- a prepared definition with `storage`
 
 Discovered modules render through:
 

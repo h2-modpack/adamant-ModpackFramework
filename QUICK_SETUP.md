@@ -48,8 +48,12 @@ internal.DrawQuickContent = function(ui, session)
     ...
 end
 
+local definition = lib.prepareDefinition(internal, dataDefaults, {
+    ...
+})
+
 public.host = lib.createModuleHost({
-    definition = public.definition,
+    definition = definition,
     store = store,
     session = session,
     hookOwner = internal,

@@ -15,7 +15,7 @@ end
 
 local function attachModule(modName, definition, persisted, exports)
     exports = exports or {}
-    exports.definition = definition
+    definition = lib.prepareDefinition({}, definition)
     local store, session = lib.createStore(persisted or {}, definition)
     if type(definition.storage) == "table" and session then
         exports.host = lib.createModuleHost({
@@ -25,6 +25,47 @@ local function attachModule(modName, definition, persisted, exports)
             drawTab = exports.DrawTab,
             drawQuickContent = exports.DrawQuickContent,
         })
+    else
+        exports.host = {
+            getDefinition = function()
+                return definition
+            end,
+            getIdentity = function()
+                return {
+                    id = definition.id,
+                    modpack = definition.modpack,
+                }
+            end,
+            getMeta = function()
+                return {
+                    name = definition.name,
+                    shortName = definition.shortName,
+                    tooltip = definition.tooltip,
+                }
+            end,
+            getHashHints = function()
+                return definition.hashGroupPlan
+            end,
+            affectsRunData = function()
+                return definition.affectsRunData == true
+            end,
+            hasDrawTab = function()
+                return type(exports.DrawTab) == "function"
+            end,
+            drawTab = function(...)
+                if type(exports.DrawTab) == "function" then
+                    return exports.DrawTab(...)
+                end
+            end,
+            hasQuickContent = function()
+                return type(exports.DrawQuickContent) == "function"
+            end,
+            drawQuickContent = function(...)
+                if type(exports.DrawQuickContent) == "function" then
+                    return exports.DrawQuickContent(...)
+                end
+            end,
+        }
     end
     rom.mods[modName] = exports
     return exports
@@ -85,6 +126,25 @@ function TestDiscovery:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissing()
 
     local entry = discovery.modules[1]
     local replacement = {
+        getDefinition = function()
+            return entry.definition
+        end,
+        getIdentity = function()
+            return {
+                id = entry.id,
+                modpack = entry.modpack,
+            }
+        end,
+        getMeta = function()
+            return {
+                name = entry.name,
+                shortName = entry.shortName,
+                tooltip = entry.tooltip,
+            }
+        end,
+        affectsRunData = function()
+            return entry.affectsRunData == true
+        end,
         read = function(key)
             if key == "Enabled" then
                 return true
@@ -136,6 +196,25 @@ function TestDiscovery:testCapturedSnapshotIsStableAcrossHostReplacement()
     local capturedSnapshot = discovery.live.captureSnapshot()
 
     local replacement = {
+        getDefinition = function()
+            return entry.definition
+        end,
+        getIdentity = function()
+            return {
+                id = entry.id,
+                modpack = entry.modpack,
+            }
+        end,
+        getMeta = function()
+            return {
+                name = entry.name,
+                shortName = entry.shortName,
+                tooltip = entry.tooltip,
+            }
+        end,
+        affectsRunData = function()
+            return entry.affectsRunData == true
+        end,
         read = function() return "replacement" end,
         writeAndFlush = function() return true end,
         setEnabled = function() return true end,

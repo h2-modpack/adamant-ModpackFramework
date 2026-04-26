@@ -1,85 +1,70 @@
--- =============================================================================
--- UI: Main window, sidebar, tab rendering
--- =============================================================================
--- Registration (add_imgui / add_to_menu_bar) is handled by the coordinator;
--- this factory only returns { renderWindow, addMenuBar }.
+import "ui/runtime.lua"
+import "ui/profiles.lua"
+import "ui/dev.lua"
+import "ui/quick_setup.lua"
+import "ui/module_tabs.lua"
 
-local internal = AdamantModpackFramework_Internal
-
---- Create the main ImGui UI subsystem for one coordinator pack.
---- @param discovery table Discovery object.
---- @param hud table HUD object.
---- @param theme table Theme object.
---- @param def table Coordinator definition table containing profile and layout metadata.
---- @param config table Coordinator config table.
---- @param lib table Adamant Modpack Lib export.
---- @param packId string Pack identifier used in warnings.
---- @param windowTitle string Window title shown in the mod menu.
---- @return table ui UI object exposing `{ renderWindow, addMenuBar }`.
-function internal.createUI(discovery, hud, theme, def, config, lib, packId, windowTitle)
-    local ui                 = rom.ImGui
+function Framework.createUI(discovery, hud, theme, def, config, lib, packId, windowTitle)
+    local internal = AdamantModpackFramework_Internal
+    local ui = rom.ImGui
     local DEFAULT_WINDOW_WIDTH = 1280
     local DEFAULT_WINDOW_HEIGHT = 840
 
-    -- Unpack theme for convenient access
-    local colors             = theme.colors
+    local colors = theme.colors
+    local SIDEBAR_RATIO = theme.SIDEBAR_RATIO
+    local FIELD_MEDIUM = theme.FIELD_MEDIUM
+    local FIELD_NARROW = theme.FIELD_NARROW
+    local FIELD_WIDE = theme.FIELD_WIDE
+    local PushTheme = theme.PushTheme
+    local PopTheme = theme.PopTheme
 
-    local SIDEBAR_RATIO      = theme.SIDEBAR_RATIO
-    local FIELD_MEDIUM       = theme.FIELD_MEDIUM
-    local FIELD_NARROW       = theme.FIELD_NARROW
-    local FIELD_WIDE         = theme.FIELD_WIDE
-    local PushTheme          = theme.PushTheme
-    local PopTheme           = theme.PopTheme
-    local currentSnapshot    = nil
-
-    local function CaptureSnapshot()
-        return discovery.live.captureSnapshot()
-    end
-
-    local function GetSnapshotHost(entry, snapshot)
-        return discovery.snapshot.getHost(entry, snapshot or currentSnapshot)
-    end
-
-    local function DrawColoredText(color, text)
-        ui.TextColored(color[1], color[2], color[3], color[4], text)
-    end
-    -- =============================================================================
-    -- STAGING TABLE (performance cache — avoids Chalk reads in render loop)
-    -- =============================================================================
-    -- Plain Lua tables mirroring each module's Chalk config.
-    -- UI reads/writes go through staging. Chalk is only touched in event handlers.
-
+    local currentSnapshot = nil
     local staging = {
-        ModEnabled = config.ModEnabled == true, -- snapshot once
-        modules    = {},                        -- [module.id] = bool
-        debug      = {},                        -- [module.id] = bool (DebugMode per entry)
+        ModEnabled = config.ModEnabled == true,
+        modules = {},
+        debug = {},
     }
 
-    local profiles = nil
+    local function drawColoredText(color, text)
+        ui.TextColored(color[1], color[2], color[3], color[4], text)
+    end
 
-    --- Snapshot all Chalk configs into staging (called at init and after profile load).
-    local function SnapshotToStaging()
-        local snapshot = CaptureSnapshot()
+    local function captureSnapshot()
+        currentSnapshot = discovery.live.captureSnapshot()
+        return currentSnapshot
+    end
+
+    local function getCurrentSnapshot()
+        return currentSnapshot
+    end
+
+    local function getSnapshotHost(entry, snapshot)
+        return discovery.snapshot.getHost(entry, snapshot)
+    end
+
+    local profiles
+    local runtime
+
+    local function snapshotToStaging()
         staging.ModEnabled = config.ModEnabled == true
+        local snapshot = captureSnapshot()
 
-        -- Grouped modules
         for _, m in ipairs(discovery.modules) do
-            staging.modules[m.id] = discovery.snapshot.isEntryEnabled(m, snapshot)
+            staging.modules[m.id] = discovery.snapshot.isModuleEnabled(m, snapshot)
             staging.debug[m.id] = discovery.snapshot.isDebugEnabled(m, snapshot)
-            local host = GetSnapshotHost(m, snapshot)
+
+            local host = getSnapshotHost(m, snapshot)
             if host then
                 host.reloadFromConfig()
             end
         end
+
         if profiles then
             profiles.snapshot()
         end
     end
 
-    -- Initialize staging from current configs
-    SnapshotToStaging()
-
-    local runtime = internal.createUIRuntime({
+    runtime = internal.createUIRuntime({
         discovery = discovery,
         hud = hud,
         config = config,
@@ -87,12 +72,10 @@ function internal.createUI(discovery, hud, theme, def, config, lib, packId, wind
         packId = packId,
         colors = colors,
         staging = staging,
-        captureSnapshot = CaptureSnapshot,
-        getSnapshotHost = GetSnapshotHost,
-        getCurrentSnapshot = function()
-            return currentSnapshot
-        end,
-        snapshotToStaging = SnapshotToStaging,
+        captureSnapshot = captureSnapshot,
+        getSnapshotHost = getSnapshotHost,
+        getCurrentSnapshot = getCurrentSnapshot,
+        snapshotToStaging = snapshotToStaging,
         onProfileLoaded = function()
             if profiles then
                 profiles.markSlotLabelsDirty()
@@ -103,9 +86,9 @@ function internal.createUI(discovery, hud, theme, def, config, lib, packId, wind
     profiles = internal.createUIProfiles({
         ui = ui,
         config = config,
-        def = def,
         colors = colors,
-        drawColoredText = DrawColoredText,
+        def = def,
+        drawColoredText = drawColoredText,
         getCachedHash = runtime.getCachedHash,
         loadProfile = runtime.loadProfile,
         fieldMedium = FIELD_MEDIUM,
@@ -118,54 +101,20 @@ function internal.createUI(discovery, hud, theme, def, config, lib, packId, wind
         def = def,
         profiles = profiles,
         staging = staging,
-        discovery = discovery,
         runtime = runtime,
-        getSnapshotHost = GetSnapshotHost,
-        drawColoredText = DrawColoredText,
+        getSnapshotHost = getSnapshotHost,
+        drawColoredText = drawColoredText,
         colors = colors,
         theme = theme,
-        getCurrentSnapshot = function()
-            return currentSnapshot
-        end,
+        getCurrentSnapshot = getCurrentSnapshot,
     })
 
     local moduleTabs = internal.createUIModuleTabs({
         ui = ui,
         staging = staging,
         runtime = runtime,
-        getSnapshotHost = GetSnapshotHost,
+        getSnapshotHost = getSnapshotHost,
     })
-
-    -- =============================================================================
-    -- SIDE TAB DEFINITIONS
-    -- =============================================================================
-
-    local selectedTab = "Quick Setup"
-
-    local cachedTabList = nil
-    local cachedQuickList = nil  -- ordered list of modules with DrawQuickContent
-
-    local function BuildTabList()
-        if cachedTabList then return cachedTabList end
-        cachedTabList = { "Quick Setup" }
-        cachedQuickList = {}
-        local quickContentById = {}
-
-        for _, entry in ipairs(discovery.modulesWithQuickContent or {}) do
-            quickContentById[entry.id] = true
-        end
-
-        for _, entry in ipairs(discovery.tabOrder or {}) do
-            table.insert(cachedTabList, entry._tabLabel)
-            if quickContentById[entry.id] then
-                table.insert(cachedQuickList, entry)
-            end
-        end
-
-        table.insert(cachedTabList, "Profiles")
-        table.insert(cachedTabList, "Dev")
-        return cachedTabList
-    end
 
     local dev = internal.createUIDev({
         ui = ui,
@@ -174,30 +123,72 @@ function internal.createUI(discovery, hud, theme, def, config, lib, packId, wind
         colors = colors,
         discovery = discovery,
         staging = staging,
-        drawColoredText = DrawColoredText,
+        drawColoredText = drawColoredText,
         resyncAllSessions = runtime.resyncAllSessions,
     })
 
+    snapshotToStaging()
+
     local moduleByTabLabel = {}
+    local cachedTabList = nil
+    local cachedQuickList = nil
+    local selectedTab = "Quick Setup"
+    local _showModWindow = false
+    local _didSeedWindowSize = false
+
     for _, entry in ipairs(discovery.modules) do
         moduleByTabLabel[entry._tabLabel] = entry
     end
 
-    -- =============================================================================
-    -- MAIN WINDOW
-    -- =============================================================================
+    local function buildTabList()
+        if cachedTabList then
+            return cachedTabList
+        end
 
-    local function DrawMainWindow(snapshot)
-        -- Read from staging, not Chalk
+        cachedTabList = { "Quick Setup" }
+        cachedQuickList = {}
+
+        for _, entry in ipairs(discovery.tabOrder) do
+            table.insert(cachedTabList, entry._tabLabel)
+        end
+
+        for _, entry in ipairs(discovery.modulesWithQuickContent) do
+            table.insert(cachedQuickList, entry)
+        end
+
+        table.insert(cachedTabList, "Profiles")
+        table.insert(cachedTabList, "Dev")
+        return cachedTabList
+    end
+
+    local function drawQuickSetup(snapshot)
+        quickSetup.draw(cachedQuickList, snapshot)
+    end
+
+    local function drawProfiles()
+        profiles.draw()
+    end
+
+    local function drawDev(snapshot)
+        dev.draw(snapshot)
+    end
+
+    local function drawModuleTab(entry, snapshot)
+        moduleTabs.draw(entry, snapshot)
+    end
+
+    local function drawMainWindow(snapshot)
         local val, chg = ui.Checkbox("Enable Mod", staging.ModEnabled)
         if chg then
             runtime.setPackRuntimeState(val, snapshot)
         end
-        if ui.IsItemHovered() then ui.SetTooltip("Toggle the entire modpack on or off.") end
+        if ui.IsItemHovered() then
+            ui.SetTooltip("Toggle the entire modpack on or off.")
+        end
 
         if not staging.ModEnabled then
             ui.Separator()
-            DrawColoredText(colors.warning, "Mod is currently disabled. All changes have been reverted.")
+            drawColoredText(colors.warning, "Mod is currently disabled. All changes have been reverted.")
             return
         end
 
@@ -205,11 +196,10 @@ function internal.createUI(discovery, hud, theme, def, config, lib, packId, wind
         ui.Separator()
         ui.Spacing()
 
-        local tabs = BuildTabList()
+        local tabs = buildTabList()
         local totalW = ui.GetWindowWidth()
         local sidebarW = totalW * SIDEBAR_RATIO
 
-        -- Sidebar (proportional width, fill remaining height)
         ui.BeginChild("Sidebar", sidebarW, 0, true)
         for _, tabName in ipairs(tabs) do
             if ui.Selectable(tabName, selectedTab == tabName) then
@@ -220,31 +210,23 @@ function internal.createUI(discovery, hud, theme, def, config, lib, packId, wind
 
         ui.SameLine()
 
-        -- Content panel (0 height = fill remaining space)
         ui.BeginChild("TabContent", 0, 0, true)
         ui.Spacing()
 
         if selectedTab == "Quick Setup" then
-            quickSetup.draw(cachedQuickList, snapshot)
+            drawQuickSetup(snapshot)
         elseif selectedTab == "Profiles" then
-            profiles.draw()
+            drawProfiles()
         elseif selectedTab == "Dev" then
-            dev.draw(snapshot)
+            drawDev(snapshot)
         elseif moduleByTabLabel[selectedTab] then
-            moduleTabs.draw(moduleByTabLabel[selectedTab], snapshot)
+            drawModuleTab(moduleByTabLabel[selectedTab], snapshot)
         end
 
         ui.EndChild()
     end
 
-    -- =============================================================================
-    -- RETURNED API
-    -- =============================================================================
-
-    local _showModWindow = false
-    local _didSeedWindowSize = false
-
-    local function SeedWindowSize()
+    local function seedWindowSize()
         if _didSeedWindowSize then
             return
         end
@@ -254,32 +236,37 @@ function internal.createUI(discovery, hud, theme, def, config, lib, packId, wind
 
     local function renderWindow()
         hud.refreshHashIfIdle()
-        if _showModWindow then
-            PushTheme()
-            SeedWindowSize()
-            local open, shouldDraw = ui.Begin(windowTitle, _showModWindow)
-            local renderOk = true
-            local renderErr = nil
+        if not _showModWindow then
+            return
+        end
+
+        PushTheme()
+
+        local beganWindow = false
+        local openState = _showModWindow
+        local ok, err = xpcall(function()
+            seedWindowSize()
+            local shouldDraw
+            openState, shouldDraw = ui.Begin(windowTitle, _showModWindow)
+            beganWindow = true
             if shouldDraw then
-                local previousSnapshot = currentSnapshot
-                currentSnapshot = CaptureSnapshot()
-                local ok, err = xpcall(function()
-                    DrawMainWindow(currentSnapshot)
-                end, debug.traceback)
-                currentSnapshot = previousSnapshot
-                renderOk = ok
-                renderErr = err
+                drawMainWindow(captureSnapshot())
             end
+        end, debug.traceback)
+
+        if beganWindow then
             ui.End()
-            if open == false then
-                runtime.flushPendingRunData()
-                hud.flushPendingHash()
-                _showModWindow = false
-            end
-            PopTheme()
-            if renderOk == false then
-                error(renderErr)
-            end
+        end
+        PopTheme()
+
+        if openState == false then
+            runtime.flushPendingRunData()
+            hud.flushPendingHash()
+            _showModWindow = false
+        end
+
+        if not ok then
+            error(err)
         end
     end
 

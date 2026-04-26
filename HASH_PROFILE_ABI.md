@@ -46,7 +46,7 @@ Treat the following as frozen after release unless you are doing deliberate comp
 - storage `default`
 - storage type `toHash(...)`
 - storage type `fromHash(...)`
-- `definition.hashGroups` keys, membership, and member order
+- `definition.hashGroupPlan` key prefixes, item boundaries, and alias order
 
 These are the wire format.
 
@@ -101,7 +101,7 @@ Changing:
 
 can change how existing hashes decode or what future hashes look like.
 
-### `definition.hashGroups`
+### `definition.hashGroupPlan`
 
 When a module declares hash groups, the group surface becomes part of the wire format.
 
@@ -112,7 +112,7 @@ Compatibility-sensitive parts are:
 
 ## Hash Groups
 
-`definition.hashGroups` compresses multiple small persisted root values into one base62 token.
+`definition.hashGroupPlan` provides optional grouping hints that let Framework compress multiple small persisted root values into one base62 token.
 
 Supported members:
 - root `bool`
@@ -148,6 +148,6 @@ Once a module is publicly shipped, the following are part of its ABI and should 
 - `definition.id` — identifies the module in hashes and profiles
 - persisted storage root `alias` names — identify values within a module's namespace
 - storage defaults — consumed when a persisted value is absent
-- `definition.hashGroups` layout — determines hash encoding
+- `definition.hashGroupPlan` layout — determines grouped hash encoding
 
 Changing any of these is a compatibility event and requires an explicit compatibility plan.

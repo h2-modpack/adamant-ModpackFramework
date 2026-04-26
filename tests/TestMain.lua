@@ -95,6 +95,7 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
         name = "Alpha",
         modName = "Alpha",
         storage = {},
+        affectsRunData = true,
         definition = {
             id = "Alpha",
             name = "Alpha",
@@ -181,7 +182,7 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
         setupRunDataCalls = setupRunDataCalls + 1
     end
 
-    local definition = {
+    local definition = lib.prepareDefinition({}, {
         modpack = packId,
         id = "Alpha",
         name = "Alpha",
@@ -193,7 +194,7 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
         revert = function()
             revertCalls = revertCalls + 1
         end,
-    }
+    })
     local store, session = lib.createStore({
         Enabled = true,
         DebugMode = false,
@@ -212,6 +213,7 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
         name = definition.name,
         modName = "Alpha",
         storage = definition.storage,
+        affectsRunData = true,
         definition = definition,
     }
 

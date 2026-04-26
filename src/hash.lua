@@ -1,6 +1,4 @@
-local internal = AdamantModpackFramework_Internal
-
-function internal.createHash(discovery, config, lib, packId)
+function Framework.createHash(discovery, config, lib, packId)
     local HASH_VERSION = 1
     local Hash = {}
     local contractWarn = lib.logging.warn
@@ -14,34 +12,37 @@ function internal.createHash(discovery, config, lib, packId)
     local encodeHashValue = lib.hashing.toHash
     local decodeHashValue = lib.hashing.fromHash
 
-    local function CaptureSnapshot()
-        return discovery.live.captureSnapshot()
-    end
-
-    local function GetSnapshotHost(entry, snapshot)
-        return discovery.snapshot.getHost(entry, snapshot)
-    end
-
     local function ReadPersisted(entry, key, snapshot)
-        local host = GetSnapshotHost(entry, snapshot)
-        if not host then
-            return nil
+        if snapshot then
+            return discovery.snapshot.getStorageValue(entry, key, snapshot)
         end
-        return host.read(key)
+        local host = discovery.live.getHost(entry)
+        return host and host.read(key) or nil
     end
 
     local function StagePersisted(entry, key, value, snapshot)
-        local host = GetSnapshotHost(entry, snapshot)
-        if host then
-            host.stage(key, value)
+        local host = discovery.snapshot.getHost(entry, snapshot)
+        if not host then
+            return false, "module host is unavailable"
         end
+        return host.stage(key, value)
     end
 
     local function FlushManagedSessions(snapshot)
         for _, m in ipairs(discovery.modules) do
-            local host = GetSnapshotHost(m, snapshot)
+            local host = discovery.snapshot.getHost(m, snapshot)
             if host then
                 host.flush()
+            end
+        end
+    end
+
+    local function ReloadManagedSession()
+        local snapshot = discovery.live.captureSnapshot()
+        for _, m in ipairs(discovery.modules) do
+            local host = discovery.snapshot.getHost(m, snapshot)
+            if host then
+                host.reloadFromConfig()
             end
         end
     end
@@ -64,81 +65,143 @@ function internal.createHash(discovery, config, lib, packId)
         return encoded + math.floor(node.min or 0)
     end
 
-    local function BuildHashGroups(storage, hashGroupsDecl)
+    local function ValidateGroupAlias(aliasNodes, alias, groupKey)
+        local node = aliasNodes[alias]
+        if not node then
+            contractWarn(packId, "hashGroups: unknown alias '%s' in group '%s'", alias, groupKey)
+            return nil
+        end
+        if node._isBitAlias then
+            contractWarn(packId,
+                "hashGroups: alias '%s' in group '%s' is a packed child alias; only root storage aliases are supported",
+                alias, groupKey)
+            return nil
+        end
+        if node._lifetime == "transient" then
+            contractWarn(packId,
+                "hashGroups: alias '%s' in group '%s' is transient; only persisted root aliases are supported",
+                alias, groupKey)
+            return nil
+        end
+        local width = getPackWidth(node)
+        if not width then
+            contractWarn(packId,
+                "hashGroups: alias '%s' in group '%s' cannot be packed (no derivable width)",
+                alias, groupKey)
+            return nil
+        end
+        return node, width
+    end
+
+    local function FlushPackedGroup(groups, groupedAliases, key, members)
+        if #members == 0 then
+            return
+        end
+
+        local packedDefault = 0
+        for _, member in ipairs(members) do
+            local encoded = EncodeGroupMemberValue(member.node, member.node.default)
+            packedDefault = writeBitsValue(packedDefault, member.offset, member.width, encoded)
+            groupedAliases[member.alias] = true
+        end
+        table.insert(groups, {
+            key = key,
+            members = members,
+            packedDefault = packedDefault,
+        })
+    end
+
+    local function BuildHashGroups(storage, hashHints)
         local aliasNodes = getStorageAliases(storage)
         local groups = {}
         local groupedAliases = {}
         local seenKeys = {}
 
-        for groupIndex, groupDecl in ipairs(hashGroupsDecl) do
-            local key = type(groupDecl.key) == "string" and groupDecl.key or ("#" .. groupIndex)
-            if seenKeys[key] then
-                contractWarn(packId, "hashGroups: duplicate group key '%s' at index %d; group will be skipped", key, groupIndex)
-                goto continue
-            end
-            seenKeys[key] = true
-            local members = {}
+        for groupIndex, groupHint in ipairs(hashHints or {}) do
+            local keyPrefix = type(groupHint.keyPrefix) == "string" and groupHint.keyPrefix or ("#" .. groupIndex)
+            local groupNumber = 1
             local offset = 0
-            local valid = true
+            local members = {}
 
-            for _, alias in ipairs(groupDecl) do
-                local node = aliasNodes[alias]
-                if not node then
-                    contractWarn(packId, "hashGroups: unknown alias '%s' in group '%s'", alias, key)
-                    valid = false
-                    break
-                end
-                if node._isBitAlias then
-                    contractWarn(packId, "hashGroups: alias '%s' in group '%s' is a packed child alias; only root storage aliases are supported", alias, key)
-                    valid = false
-                    break
-                end
-                if node._lifetime == "transient" then
+            local function flushCurrentGroup()
+                local key = keyPrefix .. "_" .. tostring(groupNumber)
+                if seenKeys[key] then
                     contractWarn(packId,
-                        "hashGroups: alias '%s' in group '%s' is transient; only persisted root aliases are supported",
-                        alias, key)
-                    valid = false
-                    break
+                        "hashGroups: duplicate group key '%s' at index %d; group will be skipped",
+                        key, groupIndex)
+                    members = {}
+                    offset = 0
+                    return
                 end
-                local width = getPackWidth(node)
-                if not width then
-                    contractWarn(packId, "hashGroups: alias '%s' in group '%s' cannot be packed (no derivable width)", alias, key)
-                    valid = false
-                    break
-                end
-                if offset + width > 32 then
-                    contractWarn(packId, "hashGroups: group '%s' exceeds 32 bits at alias '%s'", key, alias)
-                    valid = false
-                    break
-                end
-                table.insert(members, { alias = alias, node = node, offset = offset, width = width })
-                offset = offset + width
+                seenKeys[key] = true
+                FlushPackedGroup(groups, groupedAliases, key, members)
+                members = {}
+                offset = 0
+                groupNumber = groupNumber + 1
             end
 
-            if valid and #members > 0 then
-                local packedDefault = 0
-                for _, member in ipairs(members) do
-                    local encoded = EncodeGroupMemberValue(member.node, member.node.default)
-                    packedDefault = writeBitsValue(packedDefault, member.offset, member.width, encoded)
+            for _, item in ipairs(groupHint.items or {}) do
+                local aliases = type(item) == "string" and { item } or item
+                if type(aliases) ~= "table" then
+                    goto continue_item
                 end
-                table.insert(groups, { key = key, members = members, packedDefault = packedDefault })
-                for _, member in ipairs(members) do
-                    groupedAliases[member.alias] = true
+
+                local itemMembers = {}
+                local itemWidth = 0
+                local valid = true
+                for _, alias in ipairs(aliases) do
+                    local node, width = ValidateGroupAlias(aliasNodes, alias, keyPrefix)
+                    if not node then
+                        valid = false
+                        break
+                    end
+                    table.insert(itemMembers, {
+                        alias = alias,
+                        node = node,
+                        width = width,
+                    })
+                    itemWidth = itemWidth + width
                 end
+
+                if not valid then
+                    goto continue_item
+                end
+
+                if itemWidth > 32 then
+                    contractWarn(packId,
+                        "hashGroups: group '%s' exceeds 32 bits at item %d",
+                        keyPrefix, groupIndex)
+                    goto continue_item
+                end
+
+                if offset + itemWidth > 32 then
+                    flushCurrentGroup()
+                end
+
+                for _, member in ipairs(itemMembers) do
+                    table.insert(members, {
+                        alias = member.alias,
+                        node = member.node,
+                        width = member.width,
+                        offset = offset,
+                    })
+                    offset = offset + member.width
+                end
+
+                ::continue_item::
             end
-            ::continue::
+
+            flushCurrentGroup()
         end
 
         return groups, groupedAliases
     end
 
     local function GetEntryHashMeta(entry)
-        local storage = entry.storage
-        local definition = entry.definition
-        if not storage or not definition or type(definition.hashGroups) ~= "table" then
+        if type(entry.storage) ~= "table" then
             return {}, {}
         end
-        return BuildHashGroups(storage, definition.hashGroups)
+        return BuildHashGroups(entry.storage, entry.hashHints)
     end
 
     local moduleHashMeta = {}
@@ -169,41 +232,32 @@ function internal.createHash(discovery, config, lib, packId)
         return getStorageRoots(entry.storage)
     end
 
-    local function ReloadManagedSession(snapshot)
-        for _, m in ipairs(discovery.modules) do
-            local host = GetSnapshotHost(m, snapshot)
-            if host then
-                host.reloadFromConfig()
-            end
-        end
-    end
-
-    local function CaptureApplyState(hostSnapshot)
-        local state = {
+    local function CaptureApplySnapshot(snapshot)
+        local captured = {
             moduleEnabled = {},
             moduleStorage = {},
         }
 
         for _, m in ipairs(discovery.modules) do
-            state.moduleEnabled[m] = discovery.snapshot.isModuleEnabled(m, hostSnapshot)
+            captured.moduleEnabled[m] = discovery.snapshot.isModuleEnabled(m, snapshot)
             local roots = {}
             for _, root in ipairs(GetRootStorage(m)) do
                 table.insert(roots, {
                     alias = root.alias,
-                    value = ClonePersistedValue(ReadPersisted(m, root.alias, hostSnapshot)),
+                    value = ClonePersistedValue(ReadPersisted(m, root.alias, snapshot)),
                 })
             end
-            state.moduleStorage[m] = roots
+            captured.moduleStorage[m] = roots
         end
 
-        return state
+        return captured
     end
 
-    local function RestoreApplyState(state, snapshot)
+    local function RestoreApplySnapshot(snapshot, captured)
         local rollbackErrors = {}
 
         for _, m in ipairs(discovery.modules) do
-            local roots = state.moduleStorage[m] or {}
+            local roots = captured.moduleStorage[m] or {}
             for _, entry in ipairs(roots) do
                 StagePersisted(m, entry.alias, ClonePersistedValue(entry.value), snapshot)
             end
@@ -212,7 +266,7 @@ function internal.createHash(discovery, config, lib, packId)
         FlushManagedSessions(snapshot)
 
         for _, m in ipairs(discovery.modules) do
-            local previousEnabled = state.moduleEnabled[m]
+            local previousEnabled = captured.moduleEnabled[m]
             local ok, err = discovery.snapshot.setModuleEnabled(m, previousEnabled, snapshot)
             if ok == false then
                 table.insert(rollbackErrors, string.format("%s: %s", tostring(m.modName or m.id), tostring(err)))
@@ -225,11 +279,11 @@ function internal.createHash(discovery, config, lib, packId)
         return true, nil
     end
 
-    local function FailApplyHash(state, err, snapshot)
+    local function FailApplyHash(snapshot, captured, err)
         contractWarn(packId,
             "ApplyConfigHash failed; restoring previous state: %s",
             tostring(err))
-        local rollbackOk, rollbackErr = RestoreApplyState(state, snapshot)
+        local rollbackOk, rollbackErr = RestoreApplySnapshot(snapshot, captured)
         if not rollbackOk then
             contractWarn(packId,
                 "ApplyConfigHash rollback incomplete: %s",
@@ -330,8 +384,8 @@ function internal.createHash(discovery, config, lib, packId)
     end
 
     function Hash.GetConfigHash(source)
-        local snapshot = CaptureSnapshot()
         local kv = {}
+        local snapshot = source and nil or discovery.live.captureSnapshot()
 
         for _, m in ipairs(discovery.modules) do
             local enabled
@@ -341,9 +395,8 @@ function internal.createHash(discovery, config, lib, packId)
                 enabled = discovery.snapshot.isModuleEnabled(m, snapshot)
             end
             if enabled == nil then enabled = false end
-            local default = m.default == true
-            if enabled ~= default then
-                kv[m.id] = enabled and "1" or "0"
+            if enabled then
+                kv[m.id] = "1"
             end
 
             local meta = EnsureEntryHashMeta(moduleHashMeta, m)
@@ -401,16 +454,12 @@ function internal.createHash(discovery, config, lib, packId)
                 version, HASH_VERSION)
         end
 
-        local snapshot = CaptureSnapshot()
-        local state = CaptureApplyState(snapshot)
+        local snapshot = discovery.live.captureSnapshot()
+        local captured = CaptureApplySnapshot(snapshot)
         local moduleTargets = {}
         for _, m in ipairs(discovery.modules) do
             local stored = kv[m.id]
-            if stored ~= nil then
-                moduleTargets[m] = stored == "1"
-            else
-                moduleTargets[m] = m.default == true
-            end
+            moduleTargets[m] = stored == "1"
         end
 
         local okWrite, writeErr = xpcall(function()
@@ -422,8 +471,7 @@ function internal.createHash(discovery, config, lib, packId)
                         local packedValue = Hash.DecodeBase62(stored) or group.packedDefault
                         for _, member in ipairs(group.members) do
                             local encoded = readBitsValue(packedValue, member.offset, member.width)
-                            StagePersisted(m, member.alias,
-                                DecodeGroupMemberValue(member.node, encoded), snapshot)
+                            StagePersisted(m, member.alias, DecodeGroupMemberValue(member.node, encoded), snapshot)
                         end
                     else
                         for _, member in ipairs(group.members) do
@@ -436,8 +484,7 @@ function internal.createHash(discovery, config, lib, packId)
                     if not meta.groupedAliases[root.alias] then
                         local stored = kv[m.id .. "." .. root.alias]
                         if stored ~= nil then
-                            StagePersisted(m, root.alias,
-                                DecodeValue(root, stored, "storage root"), snapshot)
+                            StagePersisted(m, root.alias, DecodeValue(root, stored, "storage root"), snapshot)
                         else
                             StagePersisted(m, root.alias, root.default, snapshot)
                         end
@@ -446,18 +493,17 @@ function internal.createHash(discovery, config, lib, packId)
             end
 
             FlushManagedSessions(snapshot)
-
         end, debug.traceback)
         if not okWrite then
-            return FailApplyHash(state, writeErr, snapshot)
+            return FailApplyHash(snapshot, captured, writeErr)
         end
 
-        ReloadManagedSession(snapshot)
+        ReloadManagedSession()
 
         for _, m in ipairs(discovery.modules) do
             local ok, err = discovery.snapshot.setModuleEnabled(m, moduleTargets[m], snapshot)
             if ok == false then
-                return FailApplyHash(state, err, snapshot)
+                return FailApplyHash(snapshot, captured, err)
             end
         end
 
