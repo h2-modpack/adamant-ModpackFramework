@@ -12,7 +12,6 @@ AdamantModpackFramework_Internal = AdamantModpackFramework_Internal or {}
 local internal = AdamantModpackFramework_Internal
 internal.packs = internal.packs or {}
 internal.packList = internal.packList or {}
-internal.frameworkGeneration = internal.frameworkGeneration or 0
 
 import "ui/theme.lua"
 import "discovery.lua"
@@ -46,17 +45,6 @@ end
 
 function Framework.auditSavedProfiles(packId, profiles, discovery, lib)
     return internal.auditSavedProfiles(packId, profiles, discovery, lib)
-end
-
-local function EnsurePackCurrent(packId)
-    local pack = internal.packs[packId]
-    if not pack then
-        return nil
-    end
-    if pack._generation ~= internal.frameworkGeneration and type(pack._params) == "table" then
-        pack = Framework.init(pack._params)
-    end
-    return pack
 end
 
 function Framework.init(params)
@@ -112,8 +100,6 @@ function Framework.init(params)
         hud = hud,
         ui = ui,
         _index = packIndex,
-        _generation = internal.frameworkGeneration,
-        _params = params,
     }
     internal.packs[params.packId] = pack
 
@@ -128,7 +114,7 @@ public.init = Framework.init
 
 public.getRenderer = function(packId)
     return function()
-        local pack = EnsurePackCurrent(packId)
+        local pack = internal.packs[packId]
         if not pack or not pack.ui then
             return
         end
@@ -138,7 +124,7 @@ end
 
 public.getMenuBar = function(packId)
     return function()
-        local pack = EnsurePackCurrent(packId)
+        local pack = internal.packs[packId]
         if not pack or not pack.ui then
             return
         end
@@ -153,7 +139,7 @@ public.getAlwaysDrawRenderer = function(packId)
         local isGuiOpen = rom.gui.is_open() == true
 
         if wasGuiOpen and not isGuiOpen then
-            local pack = EnsurePackCurrent(packId)
+            local pack = internal.packs[packId]
             if pack then
                 if pack.ui then
                     pack.ui.flushPendingRunData()
