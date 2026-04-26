@@ -21,6 +21,7 @@ end
 --- are skipped silently because "not installed" and "renamed" are indistinguishable.
 function internal.auditSavedProfiles(packId, profiles, discovery, lib)
     local knownModules = {}
+    local issueCount = 0
 
     for _, m in ipairs(discovery.modules) do
         local fields = {}
@@ -50,6 +51,7 @@ function internal.auditSavedProfiles(packId, profiles, discovery, lib)
                     if field then
                         local moduleFields = knownModules[namespace]
                         if moduleFields and not moduleFields[field] then
+                            issueCount = issueCount + 1
                             lib.logging.warn(packId,
                                 "Profile '%s': unrecognized key '%s.%s' - possible rename or removed option",
                                 profileLabel, namespace, field)
@@ -59,4 +61,6 @@ function internal.auditSavedProfiles(packId, profiles, discovery, lib)
             end
         end
     end
+
+    return issueCount
 end

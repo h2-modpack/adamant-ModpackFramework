@@ -5,6 +5,9 @@ function internal.createUIProfiles(ctx)
     local config = ctx.config
     local colors = ctx.colors
     local def = ctx.def
+    local packId = ctx.packId
+    local discovery = ctx.discovery
+    local lib = ctx.lib
     local drawColoredText = ctx.drawColoredText
     local getCachedHash = ctx.getCachedHash
     local loadProfile = ctx.loadProfile
@@ -16,7 +19,6 @@ function internal.createUIProfiles(ctx)
     local defaultProfiles = def.defaultProfiles
     local FEEDBACK_DURATION = 2.0
 
-    local profileStaging = {}
     local slotLabels = {}
     local slotOccupied = {}
     local slotLabelsDirty = true
@@ -37,11 +39,12 @@ function internal.createUIProfiles(ctx)
     end
 
     local function rebuildSlotLabels()
-        for i, p in ipairs(profileStaging) do
+        for i, p in ipairs(config.Profiles) do
+            local name = p.Name or ""
             local hasName = p.Name ~= ""
             slotOccupied[i] = hasName
             if hasName then
-                slotLabels[i] = i .. ": " .. p.Name
+                slotLabels[i] = i .. ": " .. name
             else
                 slotLabels[i] = i .. ": (empty)"
             end
@@ -50,13 +53,6 @@ function internal.createUIProfiles(ctx)
     end
 
     function Profiles.snapshot()
-        for i, p in ipairs(config.Profiles) do
-            profileStaging[i] = {
-                Name = p.Name or "",
-                Hash = p.Hash or "",
-                Tooltip = p.Tooltip or "",
-            }
-        end
         slotLabelsDirty = true
     end
 
@@ -86,7 +82,7 @@ function internal.createUIProfiles(ctx)
                         selectedProfileCombo = i
                     end
                     if ui.IsItemHovered() then
-                        local tip = profileStaging[i].Tooltip
+                        local tip = config.Profiles[i].Tooltip or ""
                         if tip ~= "" then ui.SetTooltip(tip) end
                     end
                     ui.PopID()
@@ -99,7 +95,7 @@ function internal.createUIProfiles(ctx)
         ui.SameLine()
         local sel = selectedProfileCombo
         if sel > 0 and sel <= NUM_PROFILES then
-            local h = profileStaging[sel].Hash
+            local h = config.Profiles[sel].Hash or ""
             if h ~= "" then
                 if ui.Button("Load") then loadProfile(h) end
             end
@@ -169,17 +165,18 @@ function internal.createUIProfiles(ctx)
 
         ui.Spacing()
 
-        -- Read from profileStaging, not Chalk
-        local ps = profileStaging[selectedProfileSlot]
-        local hasData = ps.Hash ~= ""
+        local ps = config.Profiles[selectedProfileSlot]
+        local currentName = ps.Name or ""
+        local currentHash = ps.Hash or ""
+        local currentTooltip = ps.Tooltip or ""
+        local hasData = currentHash ~= ""
 
         ui.Text("Name:")
         ui.SameLine()
         ui.PushItemWidth(winW * fieldNarrow)
-        local newName, nameChanged = ui.InputText("##SlotName", ps.Name, 64)
+        local newName, nameChanged = ui.InputText("##SlotName", currentName, 64)
         if nameChanged then
             ps.Name = newName
-            config.Profiles[selectedProfileSlot].Name = newName -- write to Chalk
             slotLabelsDirty = true
         end
         ui.PopItemWidth()
@@ -187,10 +184,9 @@ function internal.createUIProfiles(ctx)
         ui.Text("Tooltip:")
         ui.SameLine()
         ui.PushItemWidth(winW * fieldWide)
-        local newTooltip, tooltipChanged = ui.InputText("##SlotTooltip", ps.Tooltip, 256)
+        local newTooltip, tooltipChanged = ui.InputText("##SlotTooltip", currentTooltip, 256)
         if tooltipChanged then
             ps.Tooltip = newTooltip
-            config.Profiles[selectedProfileSlot].Tooltip = newTooltip -- write to Chalk
         end
         ui.PopItemWidth()
 
@@ -199,10 +195,8 @@ function internal.createUIProfiles(ctx)
         if ui.Button("Save Current") then
             local h = getCachedHash()
             ps.Hash = h
-            config.Profiles[selectedProfileSlot].Hash = h -- write to Chalk
-            if ps.Name == "" then
+            if (ps.Name or "") == "" then
                 ps.Name = "Profile " .. selectedProfileSlot
-                config.Profiles[selectedProfileSlot].Name = ps.Name
             end
             slotLabelsDirty = true
             setImportFeedback("Profile saved.", colors.success)
@@ -219,7 +213,7 @@ function internal.createUIProfiles(ctx)
             end
             ui.SameLine()
             if ui.Button("Copy Hash") then
-                ui.SetClipboardText(ps.Hash)
+                ui.SetClipboardText(currentHash)
                 setImportFeedback("Copied to clipboard!", colors.success)
             end
             ui.SameLine()
@@ -227,10 +221,6 @@ function internal.createUIProfiles(ctx)
                 ps.Name = ""
                 ps.Hash = ""
                 ps.Tooltip = ""
-                local cp = config.Profiles[selectedProfileSlot]
-                cp.Name = ""
-                cp.Hash = ""
-                cp.Tooltip = ""
                 slotLabelsDirty = true
                 setImportFeedback("Slot cleared.", colors.textDisabled)
             end
@@ -247,14 +237,12 @@ function internal.createUIProfiles(ctx)
         if ui.Button("Restore Default Profiles") then
             for i = 1, NUM_PROFILES do
                 local d = defaultProfiles[i]
-                local cp = config.Profiles[i] -- Chalk write
+                local cp = config.Profiles[i]
                 if d then
-                    profileStaging[i] = { Name = d.Name, Hash = d.Hash, Tooltip = d.Tooltip }
                     cp.Name = d.Name
                     cp.Hash = d.Hash
                     cp.Tooltip = d.Tooltip
                 else
-                    profileStaging[i] = { Name = "", Hash = "", Tooltip = "" }
                     cp.Name = ""
                     cp.Hash = ""
                     cp.Tooltip = ""
@@ -265,6 +253,23 @@ function internal.createUIProfiles(ctx)
         end
         if ui.IsItemHovered() then
             ui.SetTooltip("Overwrites ALL profile slots with the shipped defaults. Custom profiles will be lost.")
+        end
+
+        ui.SameLine()
+        if ui.Button("Audit Saved Profiles") then
+            local issueCount = internal.auditSavedProfiles(packId, config.Profiles, discovery, lib)
+            if issueCount == 0 then
+                setImportFeedback("All saved profiles look valid.", colors.success)
+            else
+                setImportFeedback(
+                    string.format("Profile audit found %d issue%s. Check warnings/log.",
+                        issueCount,
+                        issueCount == 1 and "" or "s"),
+                    colors.warning)
+            end
+        end
+        if ui.IsItemHovered() then
+            ui.SetTooltip("Check all saved profile hashes against the currently discovered module surface.")
         end
 
         -- Status bar: single feedback line for all profile actions

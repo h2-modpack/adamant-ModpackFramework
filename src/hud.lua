@@ -14,15 +14,16 @@
 --- @param hash table Hash subsystem returned by `Framework.createHash(...)`.
 --- @param theme table Theme object returned by `Framework.createTheme(...)`.
 --- @param config table Coordinator config table containing `ModEnabled`.
---- @param modutil table ModUtil mod reference used for the HUD hook registration.
 --- @param hideHashMarker boolean|nil Optional pack-level flag to suppress the HUD fingerprint marker.
 --- @return table hud HUD object exposing marker/hash update helpers.
-function Framework.createHud(packId, packIndex, hash, theme, config, modutil, hideHashMarker)
+function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMarker)
     assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
         "Framework.createHud: game HUD globals are not ready; call Framework.init after game load")
+    local modutil = rom.mods["SGG_Modding-ModUtil"]
+    assert(modutil and modutil.mod and modutil.mod.Path and type(modutil.mod.Path.Wrap) == "function",
+        "Framework.createHud: SGG_Modding-ModUtil is not available")
 
     local HUD_LINE_HEIGHT = 24
-    local HASH_UPDATE_DEBOUNCE_SECONDS = 5
     local componentName = "ModpackMark_" .. packId
 
     -- =============================================================================
@@ -33,8 +34,8 @@ function Framework.createHud(packId, packIndex, hash, theme, config, modutil, hi
     local currentHash = config.ModEnabled and initFingerprint or ""
     local displayedHash = nil
     local hashDirty = false
-    local hashDirtyAt = nil
     local markerHidden = hideHashMarker == true
+    local markerVisible = true
 
     if not markerHidden then
         ScreenData.HUD.ComponentData[componentName] = {
@@ -63,14 +64,15 @@ function Framework.createHud(packId, packIndex, hash, theme, config, modutil, hi
     local function UpdateModMark()
         if markerHidden then return end
         if not HUDScreen or not HUDScreen.Components[componentName] then return end
-        if currentHash == displayedHash then return end
+        local nextDisplay = markerVisible and currentHash or ""
+        if nextDisplay == displayedHash then return end
 
-        if currentHash == "" then
+        if nextDisplay == "" then
             ModifyTextBox({ Id = HUDScreen.Components[componentName].Id, ClearText = true })
         else
-            ModifyTextBox({ Id = HUDScreen.Components[componentName].Id, Text = currentHash })
+            ModifyTextBox({ Id = HUDScreen.Components[componentName].Id, Text = nextDisplay })
         end
-        displayedHash = currentHash
+        displayedHash = nextDisplay
     end
 
     modutil.mod.Path.Wrap("ShowHealthUI", function(base, args)
@@ -89,22 +91,11 @@ function Framework.createHud(packId, packIndex, hash, theme, config, modutil, hi
         local _, fingerprint = hash.GetConfigHash()
         currentHash = fingerprint
         hashDirty = false
-        hashDirtyAt = nil
         UpdateModMark()
     end
 
     local function markHashDirty()
         hashDirty = true
-        hashDirtyAt = os.clock()
-    end
-
-    local function refreshHashIfIdle()
-        if not hashDirty or not config.ModEnabled then
-            return
-        end
-        if hashDirtyAt ~= nil and (os.clock() - hashDirtyAt) >= HASH_UPDATE_DEBOUNCE_SECONDS then
-            updateHash()
-        end
     end
 
     local function flushPendingHash()
@@ -113,16 +104,19 @@ function Framework.createHud(packId, packIndex, hash, theme, config, modutil, hi
         end
     end
 
+    local function setMarkerVisible(visible)
+        markerVisible = visible == true
+        UpdateModMark()
+    end
+
     local function setModMarker(enabled)
         if enabled then
             local _, fingerprint = hash.GetConfigHash()
             currentHash = fingerprint
             hashDirty = false
-            hashDirtyAt = nil
         else
             currentHash = ""
             hashDirty = false
-            hashDirtyAt = nil
         end
         displayedHash = nil
         UpdateModMark()
@@ -130,8 +124,8 @@ function Framework.createHud(packId, packIndex, hash, theme, config, modutil, hi
 
     return {
         setModMarker    = setModMarker,
+        setMarkerVisible = setMarkerVisible,
         markHashDirty   = markHashDirty,
-        refreshHashIfIdle = refreshHashIfIdle,
         flushPendingHash = flushPendingHash,
         updateHash      = updateHash,
         getConfigHash   = hash.GetConfigHash,

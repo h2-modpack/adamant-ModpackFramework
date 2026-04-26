@@ -50,7 +50,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         local snapshot = captureSnapshot()
 
         for _, m in ipairs(discovery.modules) do
-            staging.modules[m.id] = discovery.snapshot.isModuleEnabled(m, snapshot)
+            staging.modules[m.id] = discovery.snapshot.isEntryEnabled(m, snapshot)
             staging.debug[m.id] = discovery.snapshot.isDebugEnabled(m, snapshot)
 
             local host = getSnapshotHost(m, snapshot)
@@ -88,6 +88,9 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         config = config,
         colors = colors,
         def = def,
+        packId = packId,
+        discovery = discovery,
+        lib = lib,
         drawColoredText = drawColoredText,
         getCachedHash = runtime.getCachedHash,
         loadProfile = runtime.loadProfile,
@@ -235,10 +238,10 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     end
 
     local function renderWindow()
-        hud.refreshHashIfIdle()
         if not _showModWindow then
             return
         end
+        hud.setMarkerVisible(false)
 
         PushTheme()
 
@@ -262,6 +265,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         if openState == false then
             runtime.flushPendingRunData()
             hud.flushPendingHash()
+            hud.setMarkerVisible(true)
             _showModWindow = false
         end
 
@@ -275,6 +279,9 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             if _showModWindow then
                 runtime.flushPendingRunData()
                 hud.flushPendingHash()
+                hud.setMarkerVisible(true)
+            else
+                hud.setMarkerVisible(false)
             end
             _showModWindow = not _showModWindow
         end

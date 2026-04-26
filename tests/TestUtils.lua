@@ -317,22 +317,14 @@ function MockDiscovery.create(moduleDefs)
         return host or nil
     end
 
-    function discovery.snapshot.isModuleEnabled(module, snapshot)
-        local host = discovery.snapshot.getHost(module, snapshot)
+    function discovery.snapshot.isEntryEnabled(entry, snapshot)
+        local host = discovery.snapshot.getHost(entry, snapshot)
         return host.read("Enabled") == true
     end
 
-    function discovery.snapshot.isEntryEnabled(entry, snapshot)
-        return discovery.snapshot.isModuleEnabled(entry, snapshot)
-    end
-
-    function discovery.snapshot.setModuleEnabled(module, enabled, snapshot)
-        local host = discovery.snapshot.getHost(module, snapshot)
-        return host.setEnabled(enabled)
-    end
-
     function discovery.snapshot.setEntryEnabled(entry, enabled, snapshot)
-        return discovery.snapshot.setModuleEnabled(entry, enabled, snapshot)
+        local host = discovery.snapshot.getHost(entry, snapshot)
+        return host.setEnabled(enabled)
     end
 
     function discovery.snapshot.getStorageValue(module, aliasOrKey, snapshot)

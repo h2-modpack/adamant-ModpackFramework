@@ -239,7 +239,7 @@ function Framework.createHash(discovery, config, lib, packId)
         }
 
         for _, m in ipairs(discovery.modules) do
-            captured.moduleEnabled[m] = discovery.snapshot.isModuleEnabled(m, snapshot)
+            captured.moduleEnabled[m] = discovery.snapshot.isEntryEnabled(m, snapshot)
             local roots = {}
             for _, root in ipairs(GetRootStorage(m)) do
                 table.insert(roots, {
@@ -267,7 +267,7 @@ function Framework.createHash(discovery, config, lib, packId)
 
         for _, m in ipairs(discovery.modules) do
             local previousEnabled = captured.moduleEnabled[m]
-            local ok, err = discovery.snapshot.setModuleEnabled(m, previousEnabled, snapshot)
+            local ok, err = discovery.snapshot.setEntryEnabled(m, previousEnabled, snapshot)
             if ok == false then
                 table.insert(rollbackErrors, string.format("%s: %s", tostring(m.modName or m.id), tostring(err)))
             end
@@ -392,7 +392,7 @@ function Framework.createHash(discovery, config, lib, packId)
             if source then
                 enabled = source.modules and source.modules[m.id]
             else
-                enabled = discovery.snapshot.isModuleEnabled(m, snapshot)
+                enabled = discovery.snapshot.isEntryEnabled(m, snapshot)
             end
             if enabled == nil then enabled = false end
             if enabled then
@@ -501,7 +501,7 @@ function Framework.createHash(discovery, config, lib, packId)
         ReloadManagedSession()
 
         for _, m in ipairs(discovery.modules) do
-            local ok, err = discovery.snapshot.setModuleEnabled(m, moduleTargets[m], snapshot)
+            local ok, err = discovery.snapshot.setEntryEnabled(m, moduleTargets[m], snapshot)
             if ok == false then
                 return FailApplyHash(snapshot, captured, err)
             end

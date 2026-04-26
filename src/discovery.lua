@@ -267,20 +267,12 @@ function Framework.createDiscovery(packId, config, lib)
         return host or nil
     end
 
-    function Discovery.snapshot.isModuleEnabled(module, snapshot)
-        return ReadPersisted(module, "Enabled", snapshot) == true
-    end
-
     function Discovery.snapshot.isEntryEnabled(entry, snapshot)
-        return Discovery.snapshot.isModuleEnabled(entry, snapshot)
-    end
-
-    function Discovery.snapshot.setModuleEnabled(module, enabled, snapshot)
-        return SetEntryEnabled(module, enabled, snapshot)
+        return ReadPersisted(entry, "Enabled", snapshot) == true
     end
 
     function Discovery.snapshot.setEntryEnabled(entry, enabled, snapshot)
-        return Discovery.snapshot.setModuleEnabled(entry, enabled, snapshot)
+        return SetEntryEnabled(entry, enabled, snapshot)
     end
 
     function Discovery.snapshot.getStorageValue(module, aliasOrKey, snapshot)
@@ -322,14 +314,6 @@ function Framework.createDiscovery(packId, config, lib)
     function Discovery.setStorageValue(entry, aliasOrKey, value)
         local snapshot = Discovery.live.captureSnapshot()
         return Discovery.snapshot.setStorageValue(entry, aliasOrKey, value, snapshot)
-    end
-
-    function Discovery.isModuleEnabled(module)
-        return Discovery.isEntryEnabled(module)
-    end
-
-    function Discovery.setModuleEnabled(module, enabled)
-        return Discovery.setEntryEnabled(module, enabled)
     end
 
     function Discovery.isDebugEnabled(entry)

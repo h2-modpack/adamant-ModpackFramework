@@ -43,15 +43,10 @@ local function ValidateInitParams(params)
     internal.normalizeProfiles(params.config.Profiles, numProfiles)
 end
 
-function Framework.auditSavedProfiles(packId, profiles, discovery, lib)
-    return internal.auditSavedProfiles(packId, profiles, discovery, lib)
-end
-
 function Framework.init(params)
     local lib = rom.mods["adamant-ModpackLib"]
     ValidateInitParams(params)
 
-    lib.lifecycle.registerCoordinator(params.packId, params.config)
     import_as_fallback(rom.game)
 
     local packIndex = internal.packs[params.packId] and internal.packs[params.packId]._index or nil
@@ -89,7 +84,7 @@ function Framework.init(params)
 
     internal.auditSavedProfiles(params.packId, params.config.Profiles, discovery, lib)
 
-    local hud = Framework.createHud(params.packId, packIndex, hash, theme, params.config, params.modutil,
+    local hud = Framework.createHud(params.packId, packIndex, hash, theme, params.config,
         params.hideHashMarker == true)
     local ui = Framework.createUI(discovery, hud, theme, params.def, params.config, lib, params.packId,
         params.windowTitle)
@@ -146,6 +141,7 @@ public.getAlwaysDrawRenderer = function(packId)
                 end
                 if pack.hud then
                     pack.hud.flushPendingHash()
+                    pack.hud.setMarkerVisible(true)
                 end
             end
         end

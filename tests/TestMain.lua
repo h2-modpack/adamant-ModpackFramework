@@ -51,8 +51,8 @@ function TestMain:testRenderWindowCleansUpImguiStacksBeforeRethrow()
         },
     }
     local hud = {
-        refreshHashIfIdle = noop,
         flushPendingHash = noop,
+        setMarkerVisible = noop,
         getConfigHash = function()
             return "hash", "fingerprint"
         end,
@@ -138,6 +138,7 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
         createHud = function()
             return {
                 setModMarker = function() end,
+                setMarkerVisible = function() end,
             }
         end,
         createUI = function()
@@ -207,6 +208,9 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
     })
 
     lu.assertEquals(applyCalls, 0)
+    lib.lifecycle.registerCoordinator(packId, {
+        ModEnabled = true,
+    })
 
     local entry = {
         id = definition.id,
@@ -243,6 +247,7 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
         createHud = function()
             return {
                 setModMarker = function() end,
+                setMarkerVisible = function() end,
             }
         end,
         createUI = function()
@@ -324,6 +329,7 @@ function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
         createHud = function()
             return {
                 setModMarker = function() end,
+                setMarkerVisible = function() end,
             }
         end,
         createUI = function()
@@ -469,8 +475,8 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
             table.insert(hudMarkers, val)
         end,
         markHashDirty = noop,
-        refreshHashIfIdle = noop,
         flushPendingHash = noop,
+        setMarkerVisible = noop,
         updateHash = noop,
         getConfigHash = function()
             return "hash", "fingerprint"
@@ -573,6 +579,7 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
         getConfigHash = function()
             return "hash", "fingerprint"
         end,
+        setMarkerVisible = noop,
     }
     local staging = {
         ModEnabled = true,
@@ -617,8 +624,8 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
     lu.assertStrContains(tostring(err), "revert boom")
     lu.assertTrue(staging.modules.Alpha)
     lu.assertTrue(staging.modules.Bravo)
-    lu.assertTrue(discovery.snapshot.isModuleEnabled(discovery.modulesById.Alpha, snapshot))
-    lu.assertTrue(discovery.snapshot.isModuleEnabled(discovery.modulesById.Bravo, snapshot))
+    lu.assertTrue(discovery.snapshot.isEntryEnabled(discovery.modulesById.Alpha, snapshot))
+    lu.assertTrue(discovery.snapshot.isEntryEnabled(discovery.modulesById.Bravo, snapshot))
     lu.assertEquals(firstState.reverted, 1)
     lu.assertEquals(firstState.applied, 1)
     lu.assertEquals(secondState.reverted, 1)
@@ -707,8 +714,8 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
     local hud = {
         setModMarker = noop,
         markHashDirty = noop,
-        refreshHashIfIdle = noop,
         flushPendingHash = noop,
+        setMarkerVisible = noop,
         updateHash = noop,
         getConfigHash = function()
             return "hash", "fingerprint"
@@ -820,8 +827,8 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
     local hud = {
         setModMarker = noop,
         markHashDirty = noop,
-        refreshHashIfIdle = noop,
         flushPendingHash = noop,
+        setMarkerVisible = noop,
         updateHash = noop,
         getConfigHash = function()
             return "hash", "fingerprint"
@@ -904,6 +911,7 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
             flushPendingHash = function()
                 flushCalls = flushCalls + 1
             end,
+            setMarkerVisible = function() end,
         },
     }
 
@@ -998,8 +1006,8 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
     local hud = {
         setModMarker = noop,
         markHashDirty = noop,
-        refreshHashIfIdle = noop,
         flushPendingHash = noop,
+        setMarkerVisible = noop,
         updateHash = noop,
         getConfigHash = function()
             return "hash", "fingerprint"
