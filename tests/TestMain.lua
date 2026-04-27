@@ -874,6 +874,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
         FlagA = false,
     }, replacementDefinition)
     local replacementHost = lib.createModuleHost({
+        moduleName = entry.modName,
         definition = replacementDefinition,
         store = store,
         session = session,

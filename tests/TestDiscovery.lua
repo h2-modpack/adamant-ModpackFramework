@@ -19,6 +19,7 @@ local function attachModule(modName, definition, persisted, exports)
     local store, session = lib.createStore(persisted or {}, definition)
     if type(definition.storage) == "table" and session then
         exports.host = lib.createModuleHost({
+            moduleName = modName,
             definition = definition,
             store = store,
             session = session,
@@ -61,6 +62,7 @@ local function attachModule(modName, definition, persisted, exports)
             end
         end
     end
+    AdamantModpackLib_Internal.liveModuleHosts[modName] = exports.host
     rom.mods[modName] = exports
     return exports
 end
@@ -152,12 +154,14 @@ function TestDiscovery:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissing()
     }
 
     exports.host = replacement
+    AdamantModpackLib_Internal.liveModuleHosts["test-GodPool"] = replacement
 
     local liveSnapshot = discovery.live.captureSnapshot()
     lu.assertEquals(discovery.snapshot.getHost(entry, liveSnapshot), replacement)
     lu.assertTrue(discovery.snapshot.isEntryEnabled(entry, liveSnapshot))
 
     exports.host = nil
+    AdamantModpackLib_Internal.liveModuleHosts["test-GodPool"] = nil
 
     local missingSnapshot = discovery.live.captureSnapshot()
     lu.assertNil(discovery.snapshot.getHost(entry, missingSnapshot))
@@ -213,6 +217,7 @@ function TestDiscovery:testCapturedSnapshotIsStableAcrossHostReplacement()
         drawTab = function() end,
     }
     exports.host = replacement
+    AdamantModpackLib_Internal.liveModuleHosts["test-GodPool"] = replacement
 
     lu.assertEquals(discovery.snapshot.getHost(entry, capturedSnapshot), originalHost)
     lu.assertEquals(discovery.live.getHost(entry), replacement)
@@ -239,6 +244,7 @@ function TestDiscovery:testHostSnapshotWarnsOnceWhenHostStaysMissing()
     local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
     discovery.run()
     exports.host = nil
+    AdamantModpackLib_Internal.liveModuleHosts["test-GodPool"] = nil
 
     discovery.live.captureSnapshot()
     discovery.live.captureSnapshot()

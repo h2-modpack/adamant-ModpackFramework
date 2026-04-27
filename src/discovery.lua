@@ -1,7 +1,7 @@
 -- =============================================================================
 -- MODULE DISCOVERY
 -- =============================================================================
--- Discovers coordinated modules through public.host and snapshots live host pointers
+-- Discovers coordinated modules through the Lib live-host registry and snapshots live host pointers
 -- so UI/runtime work can tolerate hot-replaced hosts safely.
 
 function Framework.createDiscovery(packId, config, lib)
@@ -10,8 +10,8 @@ function Framework.createDiscovery(packId, config, lib)
     local warnIf = lib.logging.warnIf
     local warnedMissingHosts = {}
 
-    local function GetHost(mod)
-        return type(mod) == "table" and type(mod.host) == "table" and mod.host or nil
+    local function GetHost(modName)
+        return lib.getLiveModuleHost(modName)
     end
 
     local function ReadStorage(host)
@@ -100,7 +100,7 @@ function Framework.createDiscovery(packId, config, lib)
 
         local found = {}
         for modName, mod in pairs(rom.mods) do
-            local host = GetHost(mod)
+            local host = GetHost(modName)
             if host then
                 local identity = ReadIdentity(host)
                 if identity.modpack == packId then
@@ -221,7 +221,7 @@ function Framework.createDiscovery(packId, config, lib)
         local snapshot = { hosts = {} }
 
         for _, entry in ipairs(Discovery.modules) do
-            local host = GetHost(rom.mods[entry.modName])
+            local host = GetHost(entry.modName)
             snapshot.hosts[entry] = host or false
             if not host and not warnedMissingHosts[entry.modName] then
                 warnedMissingHosts[entry.modName] = true
@@ -233,7 +233,7 @@ function Framework.createDiscovery(packId, config, lib)
     end
 
     function Discovery.live.getHost(entry)
-        return GetHost(rom.mods[entry.modName])
+        return GetHost(entry.modName)
     end
 
     local function RequireSnapshot(snapshot)

@@ -253,6 +253,7 @@ function MockDiscovery.create(moduleDefs)
         })
         local store, session = lib.createStore(persisted, definition)
         local host = lib.createModuleHost({
+            moduleName = def.modName or ("adamant-" .. def.id),
             definition = definition,
             store = store,
             session = session,
@@ -299,8 +300,7 @@ function MockDiscovery.create(moduleDefs)
         }
 
         for _, module in ipairs(discovery.modules) do
-            local mod = rom.mods[module.modName]
-            local liveHost = type(mod) == "table" and type(mod.host) == "table" and mod.host or nil
+            local liveHost = lib.getLiveModuleHost(module.modName)
             snapshot.hosts[module] = liveHost or false
         end
 
@@ -308,9 +308,7 @@ function MockDiscovery.create(moduleDefs)
     end
 
     function discovery.live.getHost(entry)
-        local mod = rom.mods[entry.modName]
-        local liveHost = type(mod) == "table" and type(mod.host) == "table" and mod.host or nil
-        return liveHost
+        return lib.getLiveModuleHost(entry.modName)
     end
 
     function discovery.snapshot.getHost(entry, snapshot)
