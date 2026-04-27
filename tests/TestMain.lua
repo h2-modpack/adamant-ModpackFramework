@@ -111,6 +111,7 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
     rom.game.SetupRunData = function()
         setupRunDataCalls = setupRunDataCalls + 1
     end
+    lib.lifecycle.registerCoordinator("startup-pack", { ModEnabled = true })
 
     FrameworkTestApi.withFactories({
         createDiscovery = function()
@@ -165,6 +166,7 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
         })
     end)
 
+    lib.lifecycle.registerCoordinator("startup-pack", nil)
     rom.game.SetupRunData = previousSetupRunData
 
     lu.assertEquals(setupRunDataCalls, 1)
@@ -302,6 +304,7 @@ function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
             return false, "startup boom"
         end,
     }
+    lib.lifecycle.registerCoordinator("startup-pack", { ModEnabled = true })
 
     FrameworkTestApi.withFactories({
         createDiscovery = function()
@@ -357,6 +360,7 @@ function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
     end)
 
     local warnings = Warnings
+    lib.lifecycle.registerCoordinator("startup-pack", nil)
     RestoreWarnings()
 
     lu.assertEquals(#warnings, 1)
@@ -858,13 +862,19 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
     local okFirst, errFirst = pcall(builtUi.renderWindow)
 
     local entry = discovery.modules[1]
+    local replacementDefinition = lib.prepareDefinition({}, {
+        id = entry.id,
+        name = entry.name,
+        modpack = entry.modpack,
+        storage = entry.storage,
+    })
     local store, session = lib.createStore({
         Enabled = true,
         DebugMode = false,
         FlagA = false,
-    }, entry.definition)
+    }, replacementDefinition)
     local replacementHost = lib.createModuleHost({
-        definition = entry.definition,
+        definition = replacementDefinition,
         store = store,
         session = session,
         drawTab = function() end,

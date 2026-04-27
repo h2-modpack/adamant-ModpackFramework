@@ -27,8 +27,8 @@ local function attachModule(modName, definition, persisted, exports)
         })
     else
         exports.host = {
-            getDefinition = function()
-                return definition
+            getStorage = function()
+                return definition.storage
             end,
             getIdentity = function()
                 return {
@@ -49,23 +49,17 @@ local function attachModule(modName, definition, persisted, exports)
             affectsRunData = function()
                 return definition.affectsRunData == true
             end,
-            hasDrawTab = function()
-                return type(exports.DrawTab) == "function"
-            end,
             drawTab = function(...)
                 if type(exports.DrawTab) == "function" then
                     return exports.DrawTab(...)
                 end
             end,
-            hasQuickContent = function()
-                return type(exports.DrawQuickContent) == "function"
-            end,
-            drawQuickContent = function(...)
-                if type(exports.DrawQuickContent) == "function" then
-                    return exports.DrawQuickContent(...)
-                end
-            end,
         }
+        if type(exports.DrawQuickContent) == "function" then
+            exports.host.drawQuickContent = function(...)
+                return exports.DrawQuickContent(...)
+            end
+        end
     end
     rom.mods[modName] = exports
     return exports
@@ -126,8 +120,8 @@ function TestDiscovery:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissing()
 
     local entry = discovery.modules[1]
     local replacement = {
-        getDefinition = function()
-            return entry.definition
+        getStorage = function()
+            return entry.storage
         end,
         getIdentity = function()
             return {
@@ -154,10 +148,7 @@ function TestDiscovery:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissing()
         writeAndFlush = function() return true end,
         setEnabled = function() return true end,
         setDebugMode = function() end,
-        hasDrawTab = function() return true end,
         drawTab = function() end,
-        hasQuickContent = function() return false end,
-        drawQuickContent = function() end,
     }
 
     exports.host = replacement
@@ -196,8 +187,8 @@ function TestDiscovery:testCapturedSnapshotIsStableAcrossHostReplacement()
     local capturedSnapshot = discovery.live.captureSnapshot()
 
     local replacement = {
-        getDefinition = function()
-            return entry.definition
+        getStorage = function()
+            return entry.storage
         end,
         getIdentity = function()
             return {
@@ -219,10 +210,7 @@ function TestDiscovery:testCapturedSnapshotIsStableAcrossHostReplacement()
         writeAndFlush = function() return true end,
         setEnabled = function() return true end,
         setDebugMode = function() end,
-        hasDrawTab = function() return true end,
         drawTab = function() end,
-        hasQuickContent = function() return false end,
-        drawQuickContent = function() end,
     }
     exports.host = replacement
 
@@ -299,11 +287,12 @@ function TestDiscovery:testMissingStorageSkipsModule()
 
     lu.assertEquals(#discovery.modules, 0)
     lu.assertEquals(#Warnings, 1)
-    lu.assertStrContains(Warnings[1], "missing definition.storage")
+    lu.assertStrContains(Warnings[1], "missing host storage contract")
 end
 
-function TestDiscovery:testMissingDrawTabSkipsModule()
-    attachModule("test-NoDrawTab", {
+function TestDiscovery:testMissingDrawTabIsRejectedByLibHostCreation()
+    local ok, err = pcall(function()
+        attachModule("test-NoDrawTab", {
         modpack = "test-pack",
         id = "NoDrawTab",
         name = "No DrawTab",
@@ -313,13 +302,10 @@ function TestDiscovery:testMissingDrawTabSkipsModule()
         apply = function() end,
         revert = function() end,
     }, { Enabled = false, DebugMode = false, EnabledFlag = false })
+    end)
 
-    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run()
-
-    lu.assertEquals(#discovery.modules, 0)
-    lu.assertEquals(#Warnings, 1)
-    lu.assertStrContains(Warnings[1], "must expose host.drawTab")
+    lu.assertFalse(ok)
+    lu.assertStrContains(tostring(err), "drawTab is required")
 end
 
 function TestDiscovery:testDuplicateIdsSkipConflictingEntries()

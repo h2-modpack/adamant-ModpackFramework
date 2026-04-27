@@ -1,10 +1,9 @@
 function Framework.createHash(discovery, config, lib, packId)
     local HASH_VERSION = 1
     local Hash = {}
+    local hashGroups = Framework.createHashGroups(lib, packId)
     local contractWarn = lib.logging.warn
     local warnIf = lib.logging.warnIf
-    local getStorageAliases = lib.hashing.getAliases
-    local getPackWidth = lib.hashing.getPackWidth
     local writeBitsValue = lib.hashing.writePackedBits
     local readBitsValue = lib.hashing.readPackedBits
     local getStorageRoots = lib.hashing.getRoots
@@ -47,17 +46,6 @@ function Framework.createHash(discovery, config, lib, packId)
         end
     end
 
-    local function EncodeGroupMemberValue(node, value)
-        if node.type == "bool" then
-            return value == true and 1 or 0
-        end
-        local min = math.floor(node.min or 0)
-        local v = math.floor(tonumber(value) or min)
-        if node.min then v = math.max(math.floor(node.min), v) end
-        if node.max then v = math.min(math.floor(node.max), v) end
-        return v - min
-    end
-
     local function DecodeGroupMemberValue(node, encoded)
         if node.type == "bool" then
             return encoded ~= 0
@@ -65,143 +53,11 @@ function Framework.createHash(discovery, config, lib, packId)
         return encoded + math.floor(node.min or 0)
     end
 
-    local function ValidateGroupAlias(aliasNodes, alias, groupKey)
-        local node = aliasNodes[alias]
-        if not node then
-            contractWarn(packId, "hashGroups: unknown alias '%s' in group '%s'", alias, groupKey)
-            return nil
-        end
-        if node._isBitAlias then
-            contractWarn(packId,
-                "hashGroups: alias '%s' in group '%s' is a packed child alias; only root storage aliases are supported",
-                alias, groupKey)
-            return nil
-        end
-        if node._lifetime == "transient" then
-            contractWarn(packId,
-                "hashGroups: alias '%s' in group '%s' is transient; only persisted root aliases are supported",
-                alias, groupKey)
-            return nil
-        end
-        local width = getPackWidth(node)
-        if not width then
-            contractWarn(packId,
-                "hashGroups: alias '%s' in group '%s' cannot be packed (no derivable width)",
-                alias, groupKey)
-            return nil
-        end
-        return node, width
-    end
-
-    local function FlushPackedGroup(groups, groupedAliases, key, members)
-        if #members == 0 then
-            return
-        end
-
-        local packedDefault = 0
-        for _, member in ipairs(members) do
-            local encoded = EncodeGroupMemberValue(member.node, member.node.default)
-            packedDefault = writeBitsValue(packedDefault, member.offset, member.width, encoded)
-            groupedAliases[member.alias] = true
-        end
-        table.insert(groups, {
-            key = key,
-            members = members,
-            packedDefault = packedDefault,
-        })
-    end
-
-    local function BuildHashGroups(storage, hashHints)
-        local aliasNodes = getStorageAliases(storage)
-        local groups = {}
-        local groupedAliases = {}
-        local seenKeys = {}
-
-        for groupIndex, groupHint in ipairs(hashHints or {}) do
-            local keyPrefix = type(groupHint.keyPrefix) == "string" and groupHint.keyPrefix or ("#" .. groupIndex)
-            local groupNumber = 1
-            local offset = 0
-            local members = {}
-
-            local function flushCurrentGroup()
-                local key = keyPrefix .. "_" .. tostring(groupNumber)
-                if seenKeys[key] then
-                    contractWarn(packId,
-                        "hashGroups: duplicate group key '%s' at index %d; group will be skipped",
-                        key, groupIndex)
-                    members = {}
-                    offset = 0
-                    return
-                end
-                seenKeys[key] = true
-                FlushPackedGroup(groups, groupedAliases, key, members)
-                members = {}
-                offset = 0
-                groupNumber = groupNumber + 1
-            end
-
-            for _, item in ipairs(groupHint.items or {}) do
-                local aliases = type(item) == "string" and { item } or item
-                if type(aliases) ~= "table" then
-                    goto continue_item
-                end
-
-                local itemMembers = {}
-                local itemWidth = 0
-                local valid = true
-                for _, alias in ipairs(aliases) do
-                    local node, width = ValidateGroupAlias(aliasNodes, alias, keyPrefix)
-                    if not node then
-                        valid = false
-                        break
-                    end
-                    table.insert(itemMembers, {
-                        alias = alias,
-                        node = node,
-                        width = width,
-                    })
-                    itemWidth = itemWidth + width
-                end
-
-                if not valid then
-                    goto continue_item
-                end
-
-                if itemWidth > 32 then
-                    contractWarn(packId,
-                        "hashGroups: group '%s' exceeds 32 bits at item %d",
-                        keyPrefix, groupIndex)
-                    goto continue_item
-                end
-
-                if offset + itemWidth > 32 then
-                    flushCurrentGroup()
-                end
-
-                for _, member in ipairs(itemMembers) do
-                    table.insert(members, {
-                        alias = member.alias,
-                        node = member.node,
-                        width = member.width,
-                        offset = offset,
-                    })
-                    offset = offset + member.width
-                end
-
-                ::continue_item::
-            end
-
-            flushCurrentGroup()
-        end
-
-        return groups, groupedAliases
-    end
-
     local function GetEntryHashMeta(entry)
         if type(entry.storage) ~= "table" then
             return {}, {}
         end
-        return BuildHashGroups(entry.storage, entry.hashHints)
+        return hashGroups.build(entry.storage, entry.hashHints)
     end
 
     local moduleHashMeta = {}
@@ -383,17 +239,12 @@ function Framework.createHash(discovery, config, lib, packId)
         return decoded
     end
 
-    function Hash.GetConfigHash(source)
+    function Hash.GetConfigHash()
         local kv = {}
-        local snapshot = source and nil or discovery.live.captureSnapshot()
+        local snapshot = discovery.live.captureSnapshot()
 
         for _, m in ipairs(discovery.modules) do
-            local enabled
-            if source then
-                enabled = source.modules and source.modules[m.id]
-            else
-                enabled = discovery.snapshot.isEntryEnabled(m, snapshot)
-            end
+            local enabled = discovery.snapshot.isEntryEnabled(m, snapshot)
             if enabled == nil then enabled = false end
             if enabled then
                 kv[m.id] = "1"
@@ -405,8 +256,8 @@ function Framework.createHash(discovery, config, lib, packId)
                 local isDefault = true
                 for _, member in ipairs(group.members) do
                     local value = ReadPersisted(m, member.alias, snapshot)
-                    local encoded = EncodeGroupMemberValue(member.node, value)
-                    if encoded ~= EncodeGroupMemberValue(member.node, member.node.default) then
+                    local encoded = hashGroups.encodeValue(member.node, value)
+                    if encoded ~= hashGroups.encodeValue(member.node, member.node.default) then
                         isDefault = false
                     end
                     packedValue = writeBitsValue(packedValue, member.offset, member.width, encoded)

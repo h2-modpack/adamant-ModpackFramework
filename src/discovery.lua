@@ -8,17 +8,14 @@ function Framework.createDiscovery(packId, config, lib)
     local Discovery = {}
     local contractWarn = lib.logging.warn
     local warnIf = lib.logging.warnIf
-    local inferMutation = lib.lifecycle.inferMutation
-    local mutatesRunData = lib.lifecycle.mutatesRunData
-
     local warnedMissingHosts = {}
 
     local function GetHost(mod)
         return type(mod) == "table" and type(mod.host) == "table" and mod.host or nil
     end
 
-    local function ReadDefinition(host)
-        return host.getDefinition()
+    local function ReadStorage(host)
+        return host.getStorage()
     end
 
     local function ReadIdentity(host)
@@ -68,14 +65,12 @@ function Framework.createDiscovery(packId, config, lib)
     end
 
     local function BuildEntry(found)
-        local def = found.definition
         local identity = found.identity
         local meta = found.meta
 
         return {
             modName = found.modName,
             mod = found.mod,
-            definition = def,
             id = identity.id,
             modpack = identity.modpack,
             name = meta.name or identity.id,
@@ -83,7 +78,7 @@ function Framework.createDiscovery(packId, config, lib)
             tooltip = meta.tooltip or "",
             affectsRunData = found.affectsRunData,
             hashHints = found.hashHints,
-            storage = def.storage,
+            storage = found.storage,
             _enableLabel = "Enable " .. tostring(meta.name or identity.id or found.modName),
             _debugLabel = tostring(meta.name or identity.id or found.modName)
                 .. "##" .. tostring(identity.id or found.modName),
@@ -113,7 +108,7 @@ function Framework.createDiscovery(packId, config, lib)
                         modName = modName,
                         mod = mod,
                         host = host,
-                        definition = ReadDefinition(host),
+                        storage = ReadStorage(host),
                         identity = identity,
                         meta = ReadMeta(host),
                         hashHints = ReadHashHints(host),
@@ -158,31 +153,16 @@ function Framework.createDiscovery(packId, config, lib)
         for _, foundEntry in ipairs(found) do
             local modName = foundEntry.modName
             local host = foundEntry.host
-            local def = foundEntry.definition
             local id = foundEntry.identity.id
             local name = foundEntry.meta.name
-            local inferredMutationShape, mutationInfo = inferMutation(def or {})
-            local hasLifecycle = mutationInfo.hasManual or mutationInfo.hasPatch
-            local lifecycleRequired = foundEntry.affectsRunData
-            local hasDrawTab = host and host.hasDrawTab and host.hasDrawTab() == true
-            local hasQuickContent = host and host.hasQuickContent and host.hasQuickContent() == true
-
-            if mutatesRunData(def) and not inferredMutationShape then
-                contractWarn(packId,
-                    "%s: affectsRunData=true but module exposes neither patchPlan nor apply/revert",
-                    modName)
-            end
+            local hasQuickContent = host and type(host.drawQuickContent) == "function"
 
             if not duplicateNamespaces[id] then
-                if not id or not name or (lifecycleRequired and not hasLifecycle) then
+                if not id or not name then
                     contractWarn(packId,
-                        "Skipping %s: missing id/name or lifecycle (patchPlan/apply/revert)", modName)
-                elseif type(def.storage) ~= "table" then
-                    contractWarn(packId, "Skipping %s: missing definition.storage", modName)
-                elseif not hasDrawTab then
-                    contractWarn(packId,
-                        "%s: coordinated modules must expose host.drawTab under the lean framework contract",
-                        modName)
+                        "Skipping %s: missing id/name", modName)
+                elseif type(foundEntry.storage) ~= "table" then
+                    contractWarn(packId, "Skipping %s: missing host storage contract", modName)
                 else
                     local discovered = BuildEntry(foundEntry)
                     table.insert(Discovery.modules, discovered)

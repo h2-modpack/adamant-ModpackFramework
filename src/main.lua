@@ -15,6 +15,7 @@ internal.packList = internal.packList or {}
 
 import "ui/theme.lua"
 import "discovery.lua"
+import "hash_groups.lua"
 import "hash.lua"
 import "hud.lua"
 import "ui.lua"
@@ -46,6 +47,8 @@ end
 function Framework.init(params)
     local lib = rom.mods["adamant-ModpackLib"]
     ValidateInitParams(params)
+    assert(lib.isModuleCoordinated(params.packId),
+        "Framework.init: coordinator must register before init; see Core/main.lua")
 
     import_as_fallback(rom.game)
 

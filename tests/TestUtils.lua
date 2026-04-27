@@ -181,6 +181,7 @@ end)
 dofile("src/ui/theme.lua")
 dofile("src/profiles.lua")
 dofile("src/discovery.lua")
+dofile("src/hash_groups.lua")
 dofile("src/hash.lua")
 dofile("src/ui/runtime.lua")
 dofile("src/ui/profiles.lua")
@@ -255,7 +256,7 @@ function MockDiscovery.create(moduleDefs)
             definition = definition,
             store = store,
             session = session,
-            drawTab = def.DrawTab,
+            drawTab = def.DrawTab or function() end,
             drawQuickContent = def.DrawQuickContent,
         })
         local module = {
@@ -280,7 +281,7 @@ function MockDiscovery.create(moduleDefs)
         table.insert(discovery.modules, module)
         discovery.modulesById[module.id] = module
 
-        if host.hasQuickContent() then
+        if type(host.drawQuickContent) == "function" then
             table.insert(discovery.modulesWithQuickContent, module)
         end
 
