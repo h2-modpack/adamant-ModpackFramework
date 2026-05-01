@@ -12,6 +12,86 @@ function TestMain:testGetMenuBarIsSafeBeforeInit()
     lu.assertTrue(pcall(addMenuBar))
 end
 
+function TestMain:testHudRefreshUsesStableHookWrapper()
+    local previousScreenData = ScreenData
+    local previousHudScreen = HUDScreen
+    local previousModifyTextBox = ModifyTextBox
+    local previousModUtil = rom.mods["SGG_Modding-ModUtil"]
+    local previousGlobalModUtil = modutil
+    local previousHooks = AdamantModpackFramework_Internal.__adamantHooks
+    local wrapCalls = 0
+    local wrappedShowHealthUI
+    local modifiedText = nil
+
+    AdamantModpackFramework_Internal.__adamantHooks = nil
+    ScreenData = {
+        HUD = {
+            ComponentData = {},
+        },
+    }
+    HUDScreen = {
+        Components = {
+            ["ModpackMark_test-pack"] = {
+                Id = 123,
+            },
+        },
+    }
+    ModifyTextBox = function(args)
+        modifiedText = args.Text
+    end
+    local testModUtil = {
+        mod = {
+            Path = {
+                Wrap = function(path, handler)
+                    if path == "ShowHealthUI" then
+                        wrapCalls = wrapCalls + 1
+                        wrappedShowHealthUI = handler
+                    end
+                end,
+            },
+        },
+    }
+    rom.mods["SGG_Modding-ModUtil"] = testModUtil
+    modutil = testModUtil
+
+    local theme = FrameworkTestApi.createTheme(lib)
+    local config = { ModEnabled = true }
+    local baseCalls = 0
+    local hashA = {
+        GetConfigHash = function()
+            return "hash-a", "fingerprint-a"
+        end,
+        ApplyConfigHash = function()
+            return true
+        end,
+    }
+    local hashB = {
+        GetConfigHash = function()
+            return "hash-b", "fingerprint-b"
+        end,
+        ApplyConfigHash = function()
+            return true
+        end,
+    }
+
+    FrameworkTestApi.createHud("test-pack", 1, hashA, theme, config, false)
+    FrameworkTestApi.createHud("test-pack", 1, hashB, theme, config, false)
+    wrappedShowHealthUI(function()
+        baseCalls = baseCalls + 1
+    end, {})
+
+    ScreenData = previousScreenData
+    HUDScreen = previousHudScreen
+    ModifyTextBox = previousModifyTextBox
+    rom.mods["SGG_Modding-ModUtil"] = previousModUtil
+    modutil = previousGlobalModUtil
+    AdamantModpackFramework_Internal.__adamantHooks = previousHooks
+
+    lu.assertEquals(wrapCalls, 1)
+    lu.assertEquals(baseCalls, 1)
+    lu.assertEquals(modifiedText, "fingerprint-b")
+end
+
 function TestMain:testRenderWindowCleansUpImguiStacksBeforeRethrow()
     local previousImGui = rom.ImGui
     local endCalls = 0
@@ -286,6 +366,100 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
     lu.assertEquals(setupRunDataCalls, 1)
 end
 
+function TestMain:testRepeatedInitReplacesPackStateAndKeepsStablePackIndex()
+    local packId = "reinit-pack"
+    local internal = AdamantModpackFramework_Internal
+    local previousPack = internal.packs[packId]
+    local previousPackList = {}
+    for i, value in ipairs(internal.packList) do
+        previousPackList[i] = value
+    end
+
+    local hudIndexes = {}
+    local firstPack
+    local secondPack
+
+    lib.lifecycle.registerCoordinator(packId, {
+        ModEnabled = true,
+    })
+
+    FrameworkTestApi.withFactories({
+        createDiscovery = function()
+            return {
+                modules = {},
+                run = function() end,
+                live = {
+                    captureSnapshot = function()
+                        return { hosts = {} }
+                    end,
+                },
+                snapshot = {
+                    getHost = function()
+                        return nil
+                    end,
+                },
+            }
+        end,
+        createHash = function()
+            return {}
+        end,
+        createTheme = function()
+            return { colors = {} }
+        end,
+        createHud = function(_, packIndex)
+            table.insert(hudIndexes, packIndex)
+            return {
+                setModMarker = function() end,
+                setMarkerVisible = function() end,
+            }
+        end,
+        createUI = function()
+            return {
+                renderWindow = function() end,
+                addMenuBar = function() end,
+                flushPending = function() end,
+            }
+        end,
+    }, function()
+        local params = {
+            packId = packId,
+            windowTitle = "Reinit Pack",
+            config = {
+                ModEnabled = true,
+                DebugMode = false,
+                Profiles = {
+                    { Name = "", Hash = "", Tooltip = "" },
+                },
+            },
+            def = {
+                NUM_PROFILES = 1,
+                defaultProfiles = {},
+            },
+        }
+        firstPack = FrameworkTestApi.init(params)
+        secondPack = FrameworkTestApi.init(params)
+    end)
+
+    local packIdCount = 0
+    for _, value in ipairs(internal.packList) do
+        if value == packId then
+            packIdCount = packIdCount + 1
+        end
+    end
+    local activePack = internal.packs[packId]
+
+    internal.packs[packId] = previousPack
+    internal.packList = previousPackList
+    lib.lifecycle.registerCoordinator(packId, nil)
+
+    lu.assertTrue(firstPack ~= secondPack)
+    lu.assertEquals(activePack, secondPack)
+    lu.assertEquals(#hudIndexes, 2)
+    lu.assertEquals(hudIndexes[1], hudIndexes[2])
+    lu.assertEquals(firstPack._index, secondPack._index)
+    lu.assertEquals(packIdCount, 1)
+end
+
 function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
     CaptureWarnings()
 
@@ -505,7 +679,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
         },
     }
 
-    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
+    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, "test-pack", "Test Window")
     builtUi.addMenuBar()
 
     local okFirst, errFirst = pcall(builtUi.renderWindow)
@@ -593,6 +767,17 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
         },
         debug = {},
     }
+    local snapshots = {
+        get = function()
+            return nil
+        end,
+        capture = function()
+            return discovery.live.captureSnapshot()
+        end,
+        getHost = function(entry, snapshot)
+            return discovery.snapshot.getHost(entry, snapshot)
+        end,
+    }
     local runtime = AdamantModpackFramework_Internal.createUIRuntime({
         discovery = discovery,
         hud = hud,
@@ -600,19 +785,10 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
             ModEnabled = true,
             DebugMode = false,
         },
-        lib = lib,
         packId = "test-pack",
         colors = {},
         staging = staging,
-        captureSnapshot = function()
-            return discovery.live.captureSnapshot()
-        end,
-        getSnapshotHost = function(entry, snapshot)
-            return discovery.snapshot.getHost(entry, snapshot)
-        end,
-        getCurrentSnapshot = function()
-            return nil
-        end,
+        snapshots = snapshots,
         snapshotToStaging = function() end,
     })
 
@@ -744,7 +920,7 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
         },
     }
 
-    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
+    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, "test-pack", "Test Window")
     builtUi.addMenuBar()
     local ok, err = pcall(builtUi.renderWindow)
 
@@ -857,7 +1033,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
         },
     }
 
-    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
+    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, "test-pack", "Test Window")
     builtUi.addMenuBar()
     local okFirst, errFirst = pcall(builtUi.renderWindow)
 
@@ -899,7 +1075,6 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     local previousGui = rom.gui
     local guiOpen = true
     local flushCalls = 0
-    local runDataFlushCalls = 0
 
     rom.gui = {
         is_open = function()
@@ -914,15 +1089,9 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     local previousPack = capturedPacks and capturedPacks[packId] or nil
     capturedPacks[packId] = {
         ui = {
-            flushPendingRunData = function()
-                runDataFlushCalls = runDataFlushCalls + 1
-            end,
-        },
-        hud = {
-            flushPendingHash = function()
+            flushPending = function()
                 flushCalls = flushCalls + 1
             end,
-            setMarkerVisible = function() end,
         },
     }
 
@@ -935,7 +1104,6 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     capturedPacks[packId] = previousPack
 
     lu.assertEquals(flushCalls, 1)
-    lu.assertEquals(runDataFlushCalls, 1)
 end
 
 function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
@@ -1049,7 +1217,7 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
         },
     }
 
-    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, lib, "test-pack", "Test Window")
+    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, "test-pack", "Test Window")
     builtUi.addMenuBar()
     local ok, err = pcall(builtUi.renderWindow)
     builtUi.addMenuBar()
@@ -1062,4 +1230,3 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
     lu.assertEquals(revertCalls, 1)
     lu.assertEquals(setupRunDataCalls, 1)
 end
-

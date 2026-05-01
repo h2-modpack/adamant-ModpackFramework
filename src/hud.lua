@@ -9,9 +9,9 @@
 function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMarker)
     assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
         "Framework.createHud: game HUD globals are not ready; call Framework.init after game load")
-    local modutil = rom.mods["SGG_Modding-ModUtil"]
-    assert(modutil and modutil.mod and modutil.mod.Path and type(modutil.mod.Path.Wrap) == "function",
-        "Framework.createHud: SGG_Modding-ModUtil is not available")
+    local lib = rom.mods["adamant-ModpackLib"]
+    assert(lib and lib.hooks and type(lib.hooks.Wrap) == "function",
+        "Framework.createHud: adamant-ModpackLib hooks are not available")
 
     local HUD_LINE_HEIGHT = 24
     local componentName = "ModpackMark_" .. packId
@@ -24,6 +24,10 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
     local markerVisible = true
 
     if not markerHidden then
+        -- Hades creates retained HUD components from ScreenData. Updating this table
+        -- refreshes future HUD creation, but it cannot move an already-created text box.
+        -- Layout changes need a new HUD component/game HUD refresh; text changes can use
+        -- ModifyTextBox through UpdateModMark below.
         ScreenData.HUD.ComponentData[componentName] = {
             RightOffset = 20,
             Y = 250 + (packIndex - 1) * HUD_LINE_HEIGHT,
@@ -61,7 +65,7 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
         displayedHash = nextDisplay
     end
 
-    modutil.mod.Path.Wrap("ShowHealthUI", function(base, args)
+    lib.hooks.Wrap(AdamantModpackFramework_Internal, "ShowHealthUI", "hud:" .. packId, function(base, args)
         base(args)
         if not markerHidden and config.ModEnabled then
             displayedHash = nil

@@ -4,99 +4,111 @@ import "ui/dev.lua"
 import "ui/quick_setup.lua"
 import "ui/module_tabs.lua"
 
-function Framework.createUI(discovery, hud, theme, def, config, lib, packId, windowTitle)
+local lib = rom.mods["adamant-ModpackLib"]
+
+function Framework.createUI(discovery, hud, theme, def, config, packId, windowTitle)
     local internal = AdamantModpackFramework_Internal
     local ui = rom.ImGui
     local DEFAULT_WINDOW_WIDTH = 1280
     local DEFAULT_WINDOW_HEIGHT = 840
+    local SIDEBAR_RATIO = 0.2
 
     local colors = theme.colors
-    local SIDEBAR_RATIO = theme.SIDEBAR_RATIO
-    local FIELD_MEDIUM = theme.FIELD_MEDIUM
-    local FIELD_NARROW = theme.FIELD_NARROW
-    local FIELD_WIDE = theme.FIELD_WIDE
     local PushTheme = theme.PushTheme
     local PopTheme = theme.PopTheme
 
-    local currentSnapshot = nil
     local staging = {
         ModEnabled = config.ModEnabled == true,
         modules = {},
         debug = {},
     }
 
-    local function drawColoredText(color, text)
-        ui.TextColored(color[1], color[2], color[3], color[4], text)
-    end
-
-    local function captureSnapshot()
-        currentSnapshot = discovery.live.captureSnapshot()
-        return currentSnapshot
-    end
-
-    local function getCurrentSnapshot()
-        return currentSnapshot
-    end
-
-    local function getSnapshotHost(entry, snapshot)
-        return discovery.snapshot.getHost(entry, snapshot)
-    end
-
-    local uiContext = {
-        ui = ui,
-        discovery = discovery,
-        hud = hud,
-        theme = theme,
-        def = def,
-        config = config,
-        lib = lib,
-        packId = packId,
-        colors = colors,
-        staging = staging,
-        drawColoredText = drawColoredText,
-        captureSnapshot = captureSnapshot,
-        getSnapshotHost = getSnapshotHost,
-        getCurrentSnapshot = getCurrentSnapshot,
-        fieldMedium = FIELD_MEDIUM,
-        fieldNarrow = FIELD_NARROW,
-        fieldWide = FIELD_WIDE,
+    local snapshots = {
+        current = nil,
     }
+
+    function snapshots.capture()
+        snapshots.current = discovery.live.captureSnapshot()
+        return snapshots.current
+    end
+
+    function snapshots.get()
+        return snapshots.current
+    end
+
+    function snapshots.getHost(entry, snapshot)
+        return discovery.snapshot.getHost(entry, snapshot or snapshots.current)
+    end
+
+    local profiles
 
     local function snapshotToStaging()
         staging.ModEnabled = config.ModEnabled == true
-        local snapshot = captureSnapshot()
+        local snapshot = snapshots.capture()
 
         for _, entry in ipairs(discovery.modules) do
             staging.modules[entry.id] = discovery.snapshot.isEntryEnabled(entry, snapshot)
             staging.debug[entry.id] = discovery.snapshot.isDebugEnabled(entry, snapshot)
 
-            local host = getSnapshotHost(entry, snapshot)
+            local host = snapshots.getHost(entry, snapshot)
             if host then
                 host.reloadFromConfig()
             end
         end
 
-        if uiContext.profiles then
-            uiContext.profiles.snapshot()
+        if profiles then
+            profiles.snapshot()
         end
     end
 
-    uiContext.snapshotToStaging = snapshotToStaging
-    uiContext.onProfileLoaded = function()
-        if uiContext.profiles then
-            uiContext.profiles.markSlotLabelsDirty()
-        end
-    end
+    local runtime = internal.createUIRuntime({
+        discovery = discovery,
+        hud = hud,
+        config = config,
+        packId = packId,
+        colors = colors,
+        staging = staging,
+        snapshots = snapshots,
+        snapshotToStaging = snapshotToStaging,
+        onProfileLoaded = function()
+            if profiles then
+                profiles.markSlotLabelsDirty()
+            end
+        end,
+    })
 
-    local runtime = internal.createUIRuntime(uiContext)
-    uiContext.runtime = runtime
+    profiles = internal.createUIProfiles({
+        config = config,
+        colors = colors,
+        def = def,
+        packId = packId,
+        discovery = discovery,
+        runtime = runtime,
+    })
 
-    local profiles = internal.createUIProfiles(uiContext)
-    uiContext.profiles = profiles
+    local quickSetup = internal.createUIQuickSetup({
+        def = def,
+        theme = theme,
+        profiles = profiles,
+        staging = staging,
+        runtime = runtime,
+        snapshots = snapshots,
+        colors = colors,
+    })
 
-    local quickSetup = internal.createUIQuickSetup(uiContext)
-    local moduleTabs = internal.createUIModuleTabs(uiContext)
-    local dev = internal.createUIDev(uiContext)
+    local moduleTabs = internal.createUIModuleTabs({
+        staging = staging,
+        runtime = runtime,
+        snapshots = snapshots,
+    })
+
+    local dev = internal.createUIDev({
+        config = config,
+        colors = colors,
+        discovery = discovery,
+        staging = staging,
+        runtime = runtime,
+    })
 
     snapshotToStaging()
 
@@ -158,7 +170,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
 
         if not staging.ModEnabled then
             ui.Separator()
-            drawColoredText(colors.warning, "Mod is currently disabled. All changes have been reverted.")
+            lib.imguiHelpers.textColored(ui, colors.warning, "Mod is currently disabled. All changes have been reverted.")
             return
         end
 
@@ -200,6 +212,17 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         ui.SetNextWindowSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, rom.ImGuiCond.FirstUseEver)
     end
 
+    local function flushPending()
+        runtime.flushPendingRunData()
+        hud.flushPendingHash()
+    end
+
+    local function closeWindow()
+        flushPending()
+        hud.setMarkerVisible(true)
+        _showModWindow = false
+    end
+
     local function renderWindow()
         if not _showModWindow then
             return
@@ -217,7 +240,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
             openState, shouldDraw = ui.Begin(windowTitle, _showModWindow)
             beganWindow = true
             if shouldDraw then
-                drawMainWindow(captureSnapshot())
+                drawMainWindow(snapshots.capture())
             end
         end, debug.traceback)
 
@@ -227,10 +250,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         PopTheme()
 
         if openState == false then
-            runtime.flushPendingRunData()
-            hud.flushPendingHash()
-            hud.setMarkerVisible(true)
-            _showModWindow = false
+            closeWindow()
         end
 
         if not ok then
@@ -241,19 +261,17 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local function addMenuBar()
         if ui.MenuItem("Show Mod Menu") then
             if _showModWindow then
-                runtime.flushPendingRunData()
-                hud.flushPendingHash()
-                hud.setMarkerVisible(true)
+                closeWindow()
             else
                 hud.setMarkerVisible(false)
+                _showModWindow = true
             end
-            _showModWindow = not _showModWindow
         end
     end
 
     return {
         renderWindow = renderWindow,
         addMenuBar = addMenuBar,
-        flushPendingRunData = runtime.flushPendingRunData,
+        flushPending = flushPending,
     }
 end

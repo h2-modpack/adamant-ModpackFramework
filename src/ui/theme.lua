@@ -1,7 +1,7 @@
 local internal = AdamantModpackFramework_Internal
 
---- Create the shared theme/layout constants used by the Framework UI and HUD.
---- @return table theme Theme object exposing colors, ImGui flags, layout ratios, and push/pop helpers.
+--- Create the shared theme styling used by the Framework UI and HUD.
+--- @return table theme Theme object exposing colors, ImGui flags, and push/pop helpers.
 function internal.createTheme(lib)
     local ui                 = rom.ImGui
     local uiCol              = rom.ImGuiCol
@@ -36,11 +36,6 @@ function internal.createTheme(lib)
     }
 
     local ImGuiTreeNodeFlags = lib.imguiHelpers.ImGuiTreeNodeFlags
-
-    local SIDEBAR_RATIO      = 0.2 -- sidebar takes 20% of window
-    local FIELD_MEDIUM       = 0.5 -- combos, hash inputs
-    local FIELD_NARROW       = 0.3 -- short inputs (name, slot selector)
-    local FIELD_WIDE         = 0.85 -- long text (tooltip)
 
     local themeColors        = {
         { uiCol.Text,           colors.text },
@@ -78,10 +73,6 @@ function internal.createTheme(lib)
     return {
         colors             = colors,
         ImGuiTreeNodeFlags = ImGuiTreeNodeFlags,
-        SIDEBAR_RATIO      = SIDEBAR_RATIO,
-        FIELD_MEDIUM       = FIELD_MEDIUM,
-        FIELD_NARROW       = FIELD_NARROW,
-        FIELD_WIDE         = FIELD_WIDE,
         PushTheme          = PushTheme,
         PopTheme           = PopTheme,
     }

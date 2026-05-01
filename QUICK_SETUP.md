@@ -35,7 +35,8 @@ Current `ctx` fields:
 - `ui`
 - `colors`
 - `theme`
-- `drawColoredText`
+- `getModulesStatus(moduleIds)`
+- `setModulesEnabled(moduleIds, enabled)`
 
 Keep coordinator quick content coordinator-scoped. Module controls belong in that module's draw/host surface.
 

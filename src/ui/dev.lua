@@ -1,19 +1,18 @@
 local internal = AdamantModpackFramework_Internal
+local lib = rom.mods["adamant-ModpackLib"]
 
 function internal.createUIDev(ctx)
-    local ui = ctx.ui
+    local ui = rom.ImGui
     local config = ctx.config
-    local lib = ctx.lib
     local colors = ctx.colors
     local discovery = ctx.discovery
     local staging = ctx.staging
     local runtime = ctx.runtime
-    local drawColoredText = ctx.drawColoredText
 
     local Dev = {}
 
     function Dev.draw(snapshot)
-        drawColoredText(colors.info, "Developer options for module authors and debugging.")
+        lib.imguiHelpers.textColored(ui, colors.info, "Developer options for module authors and debugging.")
         ui.Spacing()
 
         -- Framework debug gates framework-owned warnings such as discovery, hash import,
@@ -46,7 +45,7 @@ function internal.createUIDev(ctx)
             runtime.resyncAllSessions()
         end
 
-        drawColoredText(colors.info, "Per-Module Debug")
+        lib.imguiHelpers.textColored(ui, colors.info, "Per-Module Debug")
         ui.Spacing()
 
         for _, entry in ipairs(discovery.modules) do

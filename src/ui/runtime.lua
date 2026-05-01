@@ -1,20 +1,17 @@
 local internal = AdamantModpackFramework_Internal
+local lib = rom.mods["adamant-ModpackLib"]
 
 function internal.createUIRuntime(ctx)
     local discovery = ctx.discovery
     local hud = ctx.hud
     local config = ctx.config
-    local lib = ctx.lib
     local packId = ctx.packId
     local colors = ctx.colors
     local staging = ctx.staging
-    local captureSnapshot = ctx.captureSnapshot
-    local getSnapshotHost = ctx.getSnapshotHost
-    local getCurrentSnapshot = ctx.getCurrentSnapshot
+    local snapshots = ctx.snapshots
     local snapshotToStaging = ctx.snapshotToStaging
     local onProfileLoaded = ctx.onProfileLoaded
 
-    local contractWarn = lib.logging.warn
     local cachedHash = nil
     local cachedFingerprint = nil
     local runDataDirty = false
@@ -92,7 +89,7 @@ function internal.createUIRuntime(ctx)
         local changed = false
         local needsRunData = false
         local touched = {}
-        snapshot = snapshot or getCurrentSnapshot() or captureSnapshot()
+        snapshot = snapshot or snapshots.get() or snapshots.capture()
 
         for _, moduleId in ipairs(moduleIds or {}) do
             local entry = discovery.modulesById[moduleId]
@@ -128,11 +125,11 @@ function internal.createUIRuntime(ctx)
                         end
                     end
 
-                    contractWarn(packId,
+                    lib.logging.warn(packId,
                         "Module batch toggle failed; restoring previous module states: %s",
                         tostring(err))
                     if #rollbackErrors > 0 then
-                        contractWarn(packId,
+                        lib.logging.warn(packId,
                             "Module batch toggle rollback incomplete: %s",
                             table.concat(rollbackErrors, "; "))
                     end
@@ -155,7 +152,7 @@ function internal.createUIRuntime(ctx)
     end
 
     function Runtime.setEntryRuntimeState(entry, state, snapshot)
-        local host = getSnapshotHost(entry, snapshot)
+        local host = snapshots.getHost(entry, snapshot)
         if not host then
             return false, "module host is unavailable"
         end
@@ -167,7 +164,7 @@ function internal.createUIRuntime(ctx)
             ok, err = host.revertMutation()
         end
         if not ok then
-            contractWarn(packId,
+            lib.logging.warn(packId,
                 "%s %s failed: %s", entry.modName or "unknown", state and "apply" or "revert", err)
         end
         return ok, err
@@ -186,7 +183,7 @@ function internal.createUIRuntime(ctx)
             end
         end
         if #rollbackErrors > 0 then
-            contractWarn(packId,
+            lib.logging.warn(packId,
                 "Enable Mod rollback incomplete: %s",
                 table.concat(rollbackErrors, "; "))
         end
@@ -195,13 +192,13 @@ function internal.createUIRuntime(ctx)
     function Runtime.setPackRuntimeState(state, snapshot)
         local previousState = staging.ModEnabled == true
         local touched = {}
-        snapshot = snapshot or getCurrentSnapshot() or captureSnapshot()
+        snapshot = snapshot or snapshots.get() or snapshots.capture()
 
         for _, entry in ipairs(discovery.modules) do
             if staging.modules[entry.id] then
                 local ok, err = Runtime.setEntryRuntimeState(entry, state, snapshot)
                 if not ok then
-                    contractWarn(packId,
+                    lib.logging.warn(packId,
                         "Enable Mod toggle failed; restoring previous runtime state")
                     rollBackTouchedEntries(touched, previousState, snapshot)
                     return false, err
@@ -232,7 +229,7 @@ function internal.createUIRuntime(ctx)
     end
 
     function Runtime.commitEntrySession(entry, snapshot)
-        local host = getSnapshotHost(entry, snapshot)
+        local host = snapshots.getHost(entry, snapshot)
         if not host then
             return
         end
@@ -241,7 +238,7 @@ function internal.createUIRuntime(ctx)
         if ok and committed then
             Runtime.finishUiChange(entry)
         elseif ok == false then
-            contractWarn(packId,
+            lib.logging.warn(packId,
                 "%s session commit failed; restored previous config where possible: %s",
                 tostring(entry.name or entry.id or entry.modName or "module"),
                 tostring(err))
@@ -249,9 +246,9 @@ function internal.createUIRuntime(ctx)
     end
 
     function Runtime.resyncAllSessions()
-        local snapshot = captureSnapshot()
+        local snapshot = snapshots.capture()
         for _, entry in ipairs(discovery.modules) do
-            local host = getSnapshotHost(entry, snapshot)
+            local host = snapshots.getHost(entry, snapshot)
             if host then
                 host.resync()
             end

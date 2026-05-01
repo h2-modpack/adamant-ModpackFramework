@@ -37,7 +37,7 @@ Discovery includes modules that expose:
 
 Framework sidebar behavior is now:
 - one top-level tab per discovered module
-- `moduleOrder` may pin known labels first
+- `moduleOrder` may pin known module ids first
 - no category/subgroup grouping
 - no special-module split
 

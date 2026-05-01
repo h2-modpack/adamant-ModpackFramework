@@ -86,7 +86,7 @@ function Framework.init(params)
 
     local hud = Framework.createHud(params.packId, packIndex, hash, theme, params.config,
         params.hideHashMarker == true)
-    local ui = Framework.createUI(discovery, hud, theme, params.def, params.config, lib, params.packId,
+    local ui = Framework.createUI(discovery, hud, theme, params.def, params.config, params.packId,
         params.windowTitle)
 
     local pack = {
@@ -136,13 +136,7 @@ public.getAlwaysDrawRenderer = function(packId)
         if wasGuiOpen and not isGuiOpen then
             local pack = internal.packs[packId]
             if pack then
-                if pack.ui then
-                    pack.ui.flushPendingRunData()
-                end
-                if pack.hud then
-                    pack.hud.flushPendingHash()
-                    pack.hud.setMarkerVisible(true)
-                end
+                pack.ui.flushPending()
             end
         end
 

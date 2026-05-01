@@ -1,15 +1,15 @@
 local internal = AdamantModpackFramework_Internal
 
 function internal.createUIModuleTabs(ctx)
-    local ui = ctx.ui
+    local ui = rom.ImGui
     local staging = ctx.staging
     local runtime = ctx.runtime
-    local getSnapshotHost = ctx.getSnapshotHost
+    local snapshots = ctx.snapshots
 
     local ModuleTabs = {}
 
     local function drawEntryBody(entry, snapshot)
-        local host = getSnapshotHost(entry, snapshot)
+        local host = snapshots.getHost(entry, snapshot)
         if not host then
             return
         end

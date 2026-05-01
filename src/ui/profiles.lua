@@ -1,18 +1,18 @@
 local internal = AdamantModpackFramework_Internal
+local FIELD_MEDIUM = 0.5
+local FIELD_NARROW = 0.3
+local FIELD_WIDE = 0.85
+
+local lib = rom.mods["adamant-ModpackLib"]
 
 function internal.createUIProfiles(ctx)
-    local ui = ctx.ui
+    local ui = rom.ImGui
     local config = ctx.config
     local colors = ctx.colors
     local def = ctx.def
     local packId = ctx.packId
     local discovery = ctx.discovery
-    local lib = ctx.lib
     local runtime = ctx.runtime
-    local drawColoredText = ctx.drawColoredText
-    local fieldMedium = ctx.fieldMedium
-    local fieldNarrow = ctx.fieldNarrow
-    local fieldWide = ctx.fieldWide
 
     local NUM_PROFILES = def.NUM_PROFILES
     local defaultProfiles = def.defaultProfiles
@@ -74,7 +74,7 @@ function internal.createUIProfiles(ctx)
     function Profiles.drawQuickSelector()
         local winW = ui.GetWindowWidth()
 
-        drawColoredText(colors.info, "Select a profile to automatically configure the modpack:")
+        lib.imguiHelpers.textColored(ui, colors.info, "Select a profile to automatically configure the modpack:")
         ui.Spacing()
 
         if slotLabelsDirty then rebuildSlotLabels() end
@@ -84,7 +84,7 @@ function internal.createUIProfiles(ctx)
             comboPreview = slotLabels[selectedProfileCombo]
         end
 
-        ui.PushItemWidth(winW * fieldMedium)
+        ui.PushItemWidth(winW * FIELD_MEDIUM)
         if ui.BeginCombo("Profile", comboPreview) then
             for i = 1, NUM_PROFILES do
                 if slotOccupied[i] then
@@ -116,13 +116,13 @@ function internal.createUIProfiles(ctx)
     function Profiles.draw()
         local winW = ui.GetWindowWidth()
 
-        drawColoredText(colors.info, "Export / Import")
+        lib.imguiHelpers.textColored(ui, colors.info, "Export / Import")
         ui.Indent()
 
         local canonical, fingerprint = runtime.getCachedHash()
         ui.Text("Config ID:")
         ui.SameLine()
-        drawColoredText(colors.success, fingerprint)
+        lib.imguiHelpers.textColored(ui, colors.success, fingerprint)
         ui.SameLine()
         if ui.Button("Copy") then
             ui.SetClipboardText(canonical)
@@ -132,7 +132,7 @@ function internal.createUIProfiles(ctx)
         ui.Spacing()
         ui.Text("Import Hash:")
         ui.SameLine()
-        ui.PushItemWidth(winW * fieldMedium)
+        ui.PushItemWidth(winW * FIELD_MEDIUM)
         local newText, changed = ui.InputText("##ImportHash", importHashBuffer, 2048)
         if changed then importHashBuffer = newText end
         ui.PopItemWidth()
@@ -155,12 +155,12 @@ function internal.createUIProfiles(ctx)
         ui.Separator()
         ui.Spacing()
 
-        drawColoredText(colors.info, "Saved Profiles")
+        lib.imguiHelpers.textColored(ui, colors.info, "Saved Profiles")
         ui.Indent()
 
         if slotLabelsDirty then rebuildSlotLabels() end
 
-        ui.PushItemWidth(winW * fieldNarrow)
+        ui.PushItemWidth(winW * FIELD_NARROW)
         if ui.BeginCombo("Slot", slotLabels[selectedProfileSlot]) then
             for i, label in ipairs(slotLabels) do
                 if ui.Selectable(label, i == selectedProfileSlot) then
@@ -181,7 +181,7 @@ function internal.createUIProfiles(ctx)
 
         ui.Text("Name:")
         ui.SameLine()
-        ui.PushItemWidth(winW * fieldNarrow)
+        ui.PushItemWidth(winW * FIELD_NARROW)
         local newName, nameChanged = ui.InputText("##SlotName", currentName, 64)
         if nameChanged then
             ps.Name = newName
@@ -191,7 +191,7 @@ function internal.createUIProfiles(ctx)
 
         ui.Text("Tooltip:")
         ui.SameLine()
-        ui.PushItemWidth(winW * fieldWide)
+        ui.PushItemWidth(winW * FIELD_WIDE)
         local newTooltip, tooltipChanged = ui.InputText("##SlotTooltip", currentTooltip, 256)
         if tooltipChanged then
             ps.Tooltip = newTooltip
@@ -282,7 +282,7 @@ function internal.createUIProfiles(ctx)
 
         ui.Spacing()
         if importFeedback then
-            drawColoredText(importFeedbackColor, importFeedback)
+            lib.imguiHelpers.textColored(ui, importFeedbackColor, importFeedback)
         end
     end
 
