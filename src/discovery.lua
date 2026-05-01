@@ -1,6 +1,3 @@
--- =============================================================================
--- MODULE DISCOVERY
--- =============================================================================
 -- Discovers coordinated modules through the Lib live-host registry and snapshots live host pointers
 -- so UI/runtime work can tolerate hot-replaced hosts safely.
 
@@ -150,21 +147,21 @@ function Framework.createDiscovery(packId, config, lib)
             end
         end
 
-        for _, foundEntry in ipairs(found) do
-            local modName = foundEntry.modName
-            local host = foundEntry.host
-            local id = foundEntry.identity.id
-            local name = foundEntry.meta.name
+        for _, foundModule in ipairs(found) do
+            local modName = foundModule.modName
+            local host = foundModule.host
+            local id = foundModule.identity.id
+            local name = foundModule.meta.name
             local hasQuickContent = host and type(host.drawQuickContent) == "function"
 
             if not duplicateNamespaces[id] then
                 if not id or not name then
                     contractWarn(packId,
                         "Skipping %s: missing id/name", modName)
-                elseif type(foundEntry.storage) ~= "table" then
+                elseif type(foundModule.storage) ~= "table" then
                     contractWarn(packId, "Skipping %s: missing host storage contract", modName)
                 else
-                    local discovered = BuildEntry(foundEntry)
+                    local discovered = BuildEntry(foundModule)
                     table.insert(Discovery.modules, discovered)
                     Discovery.modulesById[discovered.id] = discovered
                     if hasQuickContent then
@@ -274,36 +271,6 @@ function Framework.createDiscovery(packId, config, lib)
         end
         host.setDebugMode(value)
         return true
-    end
-
-    function Discovery.isEntryEnabled(entry)
-        local snapshot = Discovery.live.captureSnapshot()
-        return Discovery.snapshot.isEntryEnabled(entry, snapshot)
-    end
-
-    function Discovery.setEntryEnabled(entry, enabled)
-        local snapshot = Discovery.live.captureSnapshot()
-        return Discovery.snapshot.setEntryEnabled(entry, enabled, snapshot)
-    end
-
-    function Discovery.getStorageValue(entry, aliasOrKey)
-        local snapshot = Discovery.live.captureSnapshot()
-        return Discovery.snapshot.getStorageValue(entry, aliasOrKey, snapshot)
-    end
-
-    function Discovery.setStorageValue(entry, aliasOrKey, value)
-        local snapshot = Discovery.live.captureSnapshot()
-        return Discovery.snapshot.setStorageValue(entry, aliasOrKey, value, snapshot)
-    end
-
-    function Discovery.isDebugEnabled(entry)
-        local snapshot = Discovery.live.captureSnapshot()
-        return Discovery.snapshot.isDebugEnabled(entry, snapshot)
-    end
-
-    function Discovery.setDebugEnabled(entry, val)
-        local snapshot = Discovery.live.captureSnapshot()
-        return Discovery.snapshot.setDebugEnabled(entry, val, snapshot)
     end
 
     return Discovery

@@ -1,8 +1,3 @@
--- =============================================================================
--- UI THEME & LAYOUT CONSTANTS
--- =============================================================================
--- Purely declarative - no runtime dependencies.
-
 local internal = AdamantModpackFramework_Internal
 
 --- Create the shared theme/layout constants used by the Framework UI and HUD.
@@ -11,10 +6,6 @@ function internal.createTheme(lib)
     local ui                 = rom.ImGui
     local uiCol              = rom.ImGuiCol
     local unpackColor        = lib.imguiHelpers.unpackColor
-
-    -- -------------------------------------------------------------------------
-    -- COLORS
-    -- -------------------------------------------------------------------------
 
     local colors             = {
         text          = { 0.92, 0.90, 0.95, 1.0 },
@@ -44,15 +35,7 @@ function internal.createTheme(lib)
         border        = { 0.25, 0.18, 0.38, 0.5 },
     }
 
-    -- -------------------------------------------------------------------------
-    -- IMGUI FLAG CONSTANTS
-    -- -------------------------------------------------------------------------
-
     local ImGuiTreeNodeFlags = lib.imguiHelpers.ImGuiTreeNodeFlags
-
-    -- -------------------------------------------------------------------------
-    -- LAYOUT PROPORTIONS
-    -- -------------------------------------------------------------------------
 
     local SIDEBAR_RATIO      = 0.2 -- sidebar takes 20% of window
     local FIELD_MEDIUM       = 0.5 -- combos, hash inputs

@@ -17,51 +17,14 @@ local function attachModule(modName, definition, persisted, exports)
     exports = exports or {}
     definition = lib.prepareDefinition({}, definition)
     local store, session = lib.createStore(persisted or {}, definition)
-    if type(definition.storage) == "table" and session then
-        exports.host = lib.createModuleHost({
-            moduleName = modName,
-            definition = definition,
-            store = store,
-            session = session,
-            drawTab = exports.DrawTab,
-            drawQuickContent = exports.DrawQuickContent,
-        })
-    else
-        exports.host = {
-            getStorage = function()
-                return definition.storage
-            end,
-            getIdentity = function()
-                return {
-                    id = definition.id,
-                    modpack = definition.modpack,
-                }
-            end,
-            getMeta = function()
-                return {
-                    name = definition.name,
-                    shortName = definition.shortName,
-                    tooltip = definition.tooltip,
-                }
-            end,
-            getHashHints = function()
-                return definition.hashGroupPlan
-            end,
-            affectsRunData = function()
-                return definition.affectsRunData == true
-            end,
-            drawTab = function(...)
-                if type(exports.DrawTab) == "function" then
-                    return exports.DrawTab(...)
-                end
-            end,
-        }
-        if type(exports.DrawQuickContent) == "function" then
-            exports.host.drawQuickContent = function(...)
-                return exports.DrawQuickContent(...)
-            end
-        end
-    end
+    exports.host = lib.createModuleHost({
+        moduleName = modName,
+        definition = definition,
+        store = store,
+        session = session,
+        drawTab = exports.DrawTab,
+        drawQuickContent = exports.DrawQuickContent,
+    })
     AdamantModpackLib_Internal.liveModuleHosts[modName] = exports.host
     rom.mods[modName] = exports
     return exports
@@ -278,15 +241,30 @@ function TestDiscovery:testSnapshotAccessRequiresCapturedSnapshot()
 end
 
 function TestDiscovery:testMissingStorageSkipsModule()
-    attachModule("test-MissingStorage", {
-        modpack = "test-pack",
-        id = "MissingStorage",
-        name = "Missing Storage",
-        apply = function() end,
-        revert = function() end,
-    }, { Enabled = false, DebugMode = false }, {
-        DrawTab = function() end,
-    })
+    AdamantModpackLib_Internal.liveModuleHosts["test-MissingStorage"] = {
+        getStorage = function()
+            return nil
+        end,
+        getIdentity = function()
+            return {
+                id = "MissingStorage",
+                modpack = "test-pack",
+            }
+        end,
+        getMeta = function()
+            return {
+                name = "Missing Storage",
+            }
+        end,
+        getHashHints = function()
+            return nil
+        end,
+        affectsRunData = function()
+            return false
+        end,
+        drawTab = function() end,
+    }
+    rom.mods["test-MissingStorage"] = {}
 
     local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
     discovery.run()

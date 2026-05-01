@@ -8,9 +8,8 @@ function internal.createUIProfiles(ctx)
     local packId = ctx.packId
     local discovery = ctx.discovery
     local lib = ctx.lib
+    local runtime = ctx.runtime
     local drawColoredText = ctx.drawColoredText
-    local getCachedHash = ctx.getCachedHash
-    local loadProfile = ctx.loadProfile
     local fieldMedium = ctx.fieldMedium
     local fieldNarrow = ctx.fieldNarrow
     local fieldWide = ctx.fieldWide
@@ -38,6 +37,14 @@ function internal.createUIProfiles(ctx)
         importFeedbackTime = os.clock()
     end
 
+    local function clearExpiredFeedback()
+        if importFeedback and os.clock() - importFeedbackTime > FEEDBACK_DURATION then
+            importFeedback = nil
+            importFeedbackColor = nil
+            importFeedbackTime = nil
+        end
+    end
+
     local function rebuildSlotLabels()
         for i, p in ipairs(config.Profiles) do
             local name = p.Name or ""
@@ -58,6 +65,10 @@ function internal.createUIProfiles(ctx)
 
     function Profiles.markSlotLabelsDirty()
         slotLabelsDirty = true
+    end
+
+    function Profiles.tick()
+        clearExpiredFeedback()
     end
 
     function Profiles.drawQuickSelector()
@@ -97,7 +108,7 @@ function internal.createUIProfiles(ctx)
         if sel > 0 and sel <= NUM_PROFILES then
             local h = config.Profiles[sel].Hash or ""
             if h ~= "" then
-                if ui.Button("Load") then loadProfile(h) end
+                if ui.Button("Load") then runtime.loadProfile(h) end
             end
         end
     end
@@ -105,12 +116,10 @@ function internal.createUIProfiles(ctx)
     function Profiles.draw()
         local winW = ui.GetWindowWidth()
 
-        -- Export / Import
         drawColoredText(colors.info, "Export / Import")
         ui.Indent()
 
-        -- Read cached hash (computed from staging, not Chalk)
-        local canonical, fingerprint = getCachedHash()
+        local canonical, fingerprint = runtime.getCachedHash()
         ui.Text("Config ID:")
         ui.SameLine()
         drawColoredText(colors.success, fingerprint)
@@ -134,7 +143,7 @@ function internal.createUIProfiles(ctx)
         end
         ui.SameLine()
         if ui.Button("Import") then
-            if loadProfile(importHashBuffer) then
+            if runtime.loadProfile(importHashBuffer) then
                 setImportFeedback("Imported successfully!", colors.success)
             else
                 setImportFeedback("Invalid hash.", colors.error)
@@ -146,7 +155,6 @@ function internal.createUIProfiles(ctx)
         ui.Separator()
         ui.Spacing()
 
-        -- Profile Slot Selector
         drawColoredText(colors.info, "Saved Profiles")
         ui.Indent()
 
@@ -193,7 +201,7 @@ function internal.createUIProfiles(ctx)
         ui.Spacing()
 
         if ui.Button("Save Current") then
-            local h = getCachedHash()
+            local h = runtime.getCachedHash()
             ps.Hash = h
             if (ps.Name or "") == "" then
                 ps.Name = "Profile " .. selectedProfileSlot
@@ -205,7 +213,7 @@ function internal.createUIProfiles(ctx)
         if hasData then
             ui.SameLine()
             if ui.Button("Load") then
-                if loadProfile(ps.Hash) then
+                if runtime.loadProfile(ps.Hash) then
                     setImportFeedback("Profile loaded.", colors.success)
                 else
                     setImportFeedback("Failed to load profile.", colors.error)
@@ -272,14 +280,9 @@ function internal.createUIProfiles(ctx)
             ui.SetTooltip("Check all saved profile hashes against the currently discovered module surface.")
         end
 
-        -- Status bar: single feedback line for all profile actions
         ui.Spacing()
         if importFeedback then
-            if os.clock() - importFeedbackTime > FEEDBACK_DURATION then
-                importFeedback = nil
-            else
-                drawColoredText(importFeedbackColor, importFeedback)
-            end
+            drawColoredText(importFeedbackColor, importFeedback)
         end
     end
 

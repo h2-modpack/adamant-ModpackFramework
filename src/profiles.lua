@@ -23,16 +23,16 @@ function internal.auditSavedProfiles(packId, profiles, discovery, lib)
     local knownModules = {}
     local issueCount = 0
 
-    for _, m in ipairs(discovery.modules) do
+    for _, entry in ipairs(discovery.modules) do
         local fields = {}
-        if m.storage then
-            for _, root in ipairs(m.storage) do
+        if entry.storage then
+            for _, root in ipairs(entry.storage) do
                 if root._isRoot and root.alias ~= nil then
                     fields[tostring(root.alias)] = true
                 end
             end
         end
-        knownModules[m.id] = fields
+        knownModules[entry.id] = fields
     end
 
     for i, profile in ipairs(profiles) do

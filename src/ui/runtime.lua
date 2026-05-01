@@ -197,16 +197,16 @@ function internal.createUIRuntime(ctx)
         local touched = {}
         snapshot = snapshot or getCurrentSnapshot() or captureSnapshot()
 
-        for _, m in ipairs(discovery.modules) do
-            if staging.modules[m.id] then
-                local ok, err = Runtime.setEntryRuntimeState(m, state, snapshot)
+        for _, entry in ipairs(discovery.modules) do
+            if staging.modules[entry.id] then
+                local ok, err = Runtime.setEntryRuntimeState(entry, state, snapshot)
                 if not ok then
                     contractWarn(packId,
                         "Enable Mod toggle failed; restoring previous runtime state")
                     rollBackTouchedEntries(touched, previousState, snapshot)
                     return false, err
                 end
-                table.insert(touched, m)
+                table.insert(touched, entry)
             end
         end
 
@@ -250,8 +250,8 @@ function internal.createUIRuntime(ctx)
 
     function Runtime.resyncAllSessions()
         local snapshot = captureSnapshot()
-        for _, m in ipairs(discovery.modules) do
-            local host = getSnapshotHost(m, snapshot)
+        for _, entry in ipairs(discovery.modules) do
+            local host = getSnapshotHost(entry, snapshot)
             if host then
                 host.resync()
             end

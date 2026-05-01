@@ -1,7 +1,3 @@
--- =============================================================================
--- ADAMANT-MODPACK-FRAMEWORK
--- =============================================================================
-
 local mods = rom.mods
 mods["SGG_Modding-ENVY"].auto()
 
@@ -14,6 +10,7 @@ internal.packs = internal.packs or {}
 internal.packList = internal.packList or {}
 
 import "ui/theme.lua"
+import "profiles.lua"
 import "discovery.lua"
 import "hash_groups.lua"
 import "hash.lua"

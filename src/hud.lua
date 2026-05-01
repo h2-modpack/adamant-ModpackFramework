@@ -1,13 +1,3 @@
--- =============================================================================
--- HUD SYSTEM: Mod Mark Display
--- =============================================================================
--- Manages the modpack fingerprint display on the HUD.
--- Hash logic lives in hash.lua (via the hash parameter).
--- Displays the short fingerprint (base62 checksum) of the canonical config string.
---
--- Multiple packs stack vertically: each pack's component is named
--- "ModpackMark_<packId>" and offset by packIndex * 24px.
-
 --- Create the HUD subsystem for one coordinator pack.
 --- @param packId string Pack identifier used for component naming.
 --- @param packIndex number Stable vertical stacking index for this pack.
@@ -25,10 +15,6 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
 
     local HUD_LINE_HEIGHT = 24
     local componentName = "ModpackMark_" .. packId
-
-    -- =============================================================================
-    -- HUD MARK
-    -- =============================================================================
 
     local _, initFingerprint = hash.GetConfigHash()
     local currentHash = config.ModEnabled and initFingerprint or ""
@@ -82,10 +68,6 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
             UpdateModMark()
         end
     end)
-
-    -- =============================================================================
-    -- PUBLIC API
-    -- =============================================================================
 
     local function updateHash()
         local _, fingerprint = hash.GetConfigHash()

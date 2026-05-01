@@ -42,93 +42,61 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         return discovery.snapshot.getHost(entry, snapshot)
     end
 
-    local profiles
-    local runtime
+    local uiContext = {
+        ui = ui,
+        discovery = discovery,
+        hud = hud,
+        theme = theme,
+        def = def,
+        config = config,
+        lib = lib,
+        packId = packId,
+        colors = colors,
+        staging = staging,
+        drawColoredText = drawColoredText,
+        captureSnapshot = captureSnapshot,
+        getSnapshotHost = getSnapshotHost,
+        getCurrentSnapshot = getCurrentSnapshot,
+        fieldMedium = FIELD_MEDIUM,
+        fieldNarrow = FIELD_NARROW,
+        fieldWide = FIELD_WIDE,
+    }
 
     local function snapshotToStaging()
         staging.ModEnabled = config.ModEnabled == true
         local snapshot = captureSnapshot()
 
-        for _, m in ipairs(discovery.modules) do
-            staging.modules[m.id] = discovery.snapshot.isEntryEnabled(m, snapshot)
-            staging.debug[m.id] = discovery.snapshot.isDebugEnabled(m, snapshot)
+        for _, entry in ipairs(discovery.modules) do
+            staging.modules[entry.id] = discovery.snapshot.isEntryEnabled(entry, snapshot)
+            staging.debug[entry.id] = discovery.snapshot.isDebugEnabled(entry, snapshot)
 
-            local host = getSnapshotHost(m, snapshot)
+            local host = getSnapshotHost(entry, snapshot)
             if host then
                 host.reloadFromConfig()
             end
         end
 
-        if profiles then
-            profiles.snapshot()
+        if uiContext.profiles then
+            uiContext.profiles.snapshot()
         end
     end
 
-    runtime = internal.createUIRuntime({
-        discovery = discovery,
-        hud = hud,
-        config = config,
-        lib = lib,
-        packId = packId,
-        colors = colors,
-        staging = staging,
-        captureSnapshot = captureSnapshot,
-        getSnapshotHost = getSnapshotHost,
-        getCurrentSnapshot = getCurrentSnapshot,
-        snapshotToStaging = snapshotToStaging,
-        onProfileLoaded = function()
-            if profiles then
-                profiles.markSlotLabelsDirty()
-            end
-        end,
-    })
+    uiContext.snapshotToStaging = snapshotToStaging
+    uiContext.onProfileLoaded = function()
+        if uiContext.profiles then
+            uiContext.profiles.markSlotLabelsDirty()
+        end
+    end
 
-    profiles = internal.createUIProfiles({
-        ui = ui,
-        config = config,
-        colors = colors,
-        def = def,
-        packId = packId,
-        discovery = discovery,
-        lib = lib,
-        drawColoredText = drawColoredText,
-        getCachedHash = runtime.getCachedHash,
-        loadProfile = runtime.loadProfile,
-        fieldMedium = FIELD_MEDIUM,
-        fieldNarrow = FIELD_NARROW,
-        fieldWide = FIELD_WIDE,
-    })
+    local runtime = internal.createUIRuntime(uiContext)
+    uiContext.runtime = runtime
 
-    local quickSetup = internal.createUIQuickSetup({
-        ui = ui,
-        def = def,
-        profiles = profiles,
-        staging = staging,
-        runtime = runtime,
-        getSnapshotHost = getSnapshotHost,
-        drawColoredText = drawColoredText,
-        colors = colors,
-        theme = theme,
-        getCurrentSnapshot = getCurrentSnapshot,
-    })
+    local profiles = internal.createUIProfiles(uiContext)
+    uiContext.profiles = profiles
 
-    local moduleTabs = internal.createUIModuleTabs({
-        ui = ui,
-        staging = staging,
-        runtime = runtime,
-        getSnapshotHost = getSnapshotHost,
-    })
-
-    local dev = internal.createUIDev({
-        ui = ui,
-        config = config,
-        lib = lib,
-        colors = colors,
-        discovery = discovery,
-        staging = staging,
-        drawColoredText = drawColoredText,
-        resyncAllSessions = runtime.resyncAllSessions,
-    })
+    local quickSetup = internal.createUIQuickSetup(uiContext)
+    local moduleTabs = internal.createUIModuleTabs(uiContext)
+    local dev = internal.createUIDev(uiContext)
 
     snapshotToStaging()
 
@@ -137,7 +105,6 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     local cachedQuickList = nil
     local selectedTab = "Quick Setup"
     local _showModWindow = false
-    local _didSeedWindowSize = false
 
     for _, entry in ipairs(discovery.modules) do
         moduleByTabLabel[entry._tabLabel] = entry
@@ -230,11 +197,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
     end
 
     local function seedWindowSize()
-        if _didSeedWindowSize then
-            return
-        end
         ui.SetNextWindowSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, rom.ImGuiCond.FirstUseEver)
-        _didSeedWindowSize = true
     end
 
     local function renderWindow()
@@ -248,6 +211,7 @@ function Framework.createUI(discovery, hud, theme, def, config, lib, packId, win
         local beganWindow = false
         local openState = _showModWindow
         local ok, err = xpcall(function()
+            profiles.tick()
             seedWindowSize()
             local shouldDraw
             openState, shouldDraw = ui.Begin(windowTitle, _showModWindow)

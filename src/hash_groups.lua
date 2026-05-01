@@ -16,7 +16,15 @@ function Framework.createHashGroups(lib, packId)
         return v - min
     end
 
+    local function DecodeGroupMemberValue(node, encoded)
+        if node.type == "bool" then
+            return encoded ~= 0
+        end
+        return encoded + math.floor(node.min or 0)
+    end
+
     HashGroups.encodeValue = EncodeGroupMemberValue
+    HashGroups.decodeValue = DecodeGroupMemberValue
 
     local function ValidateGroupAlias(aliasNodes, alias, groupKey)
         local node = aliasNodes[alias]

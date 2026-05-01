@@ -7,8 +7,8 @@ function internal.createUIDev(ctx)
     local colors = ctx.colors
     local discovery = ctx.discovery
     local staging = ctx.staging
+    local runtime = ctx.runtime
     local drawColoredText = ctx.drawColoredText
-    local resyncAllSessions = ctx.resyncAllSessions
 
     local Dev = {}
 
@@ -43,7 +43,7 @@ function internal.createUIDev(ctx)
         end
 
         if ui.Button("Resync Sessions") then
-            resyncAllSessions()
+            runtime.resyncAllSessions()
         end
 
         drawColoredText(colors.info, "Per-Module Debug")

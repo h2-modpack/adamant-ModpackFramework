@@ -153,6 +153,30 @@ function TestHashStorage:testApplyConfigHashRollsBackWhenEnableFails()
     lu.assertEquals(revertCalls, 0)
 end
 
+function TestHashStorage:testApplyConfigHashRejectsNewerVersion()
+    CaptureWarnings()
+    local discovery = MockDiscovery.create({
+        {
+            id = "GodPool",
+            enabled = false,
+            storage = {
+                { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+            },
+            values = { EnabledFlag = false },
+        },
+    })
+    local hash = makeHash(discovery)
+    local moduleHost = discovery.live.getHost(discovery.modulesById.GodPool)
+
+    local ok = hash.ApplyConfigHash("_v=999|GodPool=1|GodPool.EnabledFlag=1")
+
+    lu.assertFalse(ok)
+    lu.assertFalse(moduleHost.read("Enabled"))
+    lu.assertFalse(moduleHost.read("EnabledFlag"))
+    assertWarningContains("newer than supported")
+    RestoreWarnings()
+end
+
 function TestHashStorage:testHashGroupsRejectPackedChildAliases()
     CaptureWarnings()
     local discovery = MockDiscovery.create({
