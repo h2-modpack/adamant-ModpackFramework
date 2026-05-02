@@ -99,6 +99,33 @@ function TestHashStorage:testRegularAndSpecialStorageRoundTrip()
     lu.assertEquals(biomeHost.read("Mode"), "Chaos")
 end
 
+function TestHashStorage:testStringStorageEscapesHashDelimiters()
+    local discovery = MockDiscovery.create({
+        {
+            id = "BiomeControl",
+            name = "Biome Control",
+            enabled = true,
+            storage = {
+                { type = "string", alias = "Filter", configKey = "Filter", default = "" },
+            },
+            values = {
+                Filter = "Apollo|Zeus=Poseidon%Chaos",
+            },
+        },
+    })
+    local hash = makeHash(discovery)
+    local canonical = hash.GetConfigHash()
+    local module = discovery.modulesById.BiomeControl
+    local host = discovery.live.getHost(module)
+
+    lu.assertStrContains(canonical, "BiomeControl.Filter=Apollo%7CZeus%3DPoseidon%25Chaos")
+    lu.assertNotStrContains(canonical, "Apollo|Zeus")
+
+    host.writeAndFlush("Filter", "")
+    lu.assertTrue(hash.ApplyConfigHash(canonical))
+    lu.assertEquals(host.read("Filter"), "Apollo|Zeus=Poseidon%Chaos")
+end
+
 function TestHashStorage:testFingerprintChangesWithConfig()
     local discovery = MockDiscovery.create({
         {

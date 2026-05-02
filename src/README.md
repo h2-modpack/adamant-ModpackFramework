@@ -1,49 +1,31 @@
 # adamant-ModpackFramework
 
-Reusable coordinator framework for adamant modpacks.
+Shared coordinator UI framework for adamant Hades II modpacks.
 
-Framework now owns:
-- module discovery for one `packId`
-- config hashing and profile load
-- HUD fingerprint rendering
-- the shared coordinator window
+This package is a dependency used by modpacks. On its own, it does not add gameplay
+content. When a supported modpack is installed, the framework provides the shared
+in-game modpack window, profile/hash import and export, Quick Setup, and HUD
+fingerprint display.
 
-Framework does not define module UI shapes anymore.
-Under the current contract, each discovered coordinated module renders itself through:
-- `host.drawTab(ui)`
-- optional `host.drawQuickContent(ui)`
+## For Players
 
-## Docs
+Install this when a modpack lists it as a dependency. Most mod managers install it
+automatically.
 
-- [COORDINATOR_GUIDE.md](COORDINATOR_GUIDE.md)
-  Bootstrap, discovery, and the live coordinator/module contract.
-- [QUICK_SETUP.md](QUICK_SETUP.md)
-  Current Quick Setup model: coordinator quick content plus module host quick content.
-- [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md)
-  Compatibility rules for module ids, storage aliases/defaults, and hash groups.
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-  Contributor expectations for framework behavior and compatibility-sensitive changes.
+In game, supported modpacks use this framework to expose:
+- one shared modpack menu
+- per-module settings tabs
+- quick setup controls
+- saved profile slots
+- copy/paste config hashes
+- a small HUD fingerprint for the active settings
 
-## Current Framework Contract
+## For Mod Authors
 
-Discovery includes modules that expose:
-- `definition.modpack = PACK_ID`
-- `definition.id`
-- `definition.name`
-- `definition.storage`
-- public `host`
+Author-facing contracts and integration docs live in the repository root:
+- `README.md`
+- `COORDINATOR_GUIDE.md`
+- `QUICK_SETUP.md`
+- `HASH_PROFILE_ABI.md`
 
-`host.drawQuickContent(...)` is optional.
-
-Framework sidebar behavior is now:
-- one top-level tab per discovered module
-- `moduleOrder` may pin known module ids first
-- no category/subgroup grouping
-- no special-module split
-
-## Validation
-
-```bash
-cd adamant-ModpackFramework
-lua5.2 tests/all.lua
-```
+This packaged README is intentionally player/package oriented.

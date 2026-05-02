@@ -163,6 +163,29 @@ function Framework.createHash(discovery, config, lib, packId)
         return n
     end
 
+    local TOKEN_ESCAPE = {
+        ["%"] = "%25",
+        ["|"] = "%7C",
+        ["="] = "%3D",
+    }
+    local TOKEN_UNESCAPE = {
+        ["25"] = "%",
+        ["7C"] = "|",
+        ["3D"] = "=",
+        ["7c"] = "|",
+        ["3d"] = "=",
+    }
+
+    local function EscapeToken(value)
+        return tostring(value):gsub("[%%|=]", TOKEN_ESCAPE)
+    end
+
+    local function UnescapeToken(value)
+        return tostring(value):gsub("%%(%x%x)", function(hex)
+            return TOKEN_UNESCAPE[hex] or ("%" .. hex)
+        end)
+    end
+
     local function Serialize(kv)
         local keys = {}
         for k in pairs(kv) do
@@ -171,7 +194,7 @@ function Framework.createHash(discovery, config, lib, packId)
         table.sort(keys)
         local parts = {}
         for _, k in ipairs(keys) do
-            table.insert(parts, k .. "=" .. kv[k])
+            table.insert(parts, EscapeToken(k) .. "=" .. EscapeToken(kv[k]))
         end
         return table.concat(parts, "|")
     end
@@ -182,7 +205,7 @@ function Framework.createHash(discovery, config, lib, packId)
         for entry in string.gmatch(str .. "|", "([^|]*)|") do
             local k, v = string.match(entry, "^([^=]+)=(.*)$")
             if k and v then
-                kv[k] = v
+                kv[UnescapeToken(k)] = UnescapeToken(v)
             end
         end
         return kv

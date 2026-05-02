@@ -16,8 +16,9 @@ Typical content:
 
 Quick Setup renders in this order:
 
-1. coordinator-owned content from `def.renderQuickSetup(ctx)`
-2. each discovered module discovered with quick content support
+1. built-in profile quick selector
+2. coordinator-owned content from `def.renderQuickSetup(ctx)`
+3. each discovered enabled module with quick content support
 
 This happens inside [`src/ui.lua`](src/ui.lua).
 
@@ -40,6 +41,9 @@ Current `ctx` fields:
 
 Keep coordinator quick content coordinator-scoped. Module controls belong in that module's draw/host surface.
 
+The built-in profile selector always renders before coordinator content. It lets users load saved
+profiles from the main Quick Setup tab without opening the Profiles tab.
+
 ## Module Quick Content
 
 Modules participate in Quick Setup through:
@@ -53,7 +57,7 @@ local definition = lib.prepareDefinition(internal, dataDefaults, {
     ...
 })
 
-public.host = lib.createModuleHost({
+lib.createModuleHost({
     definition = definition,
     store = store,
     session = session,

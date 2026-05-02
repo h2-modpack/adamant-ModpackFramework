@@ -26,5 +26,5 @@ Treat its runtime behavior and warnings as public coordinator contract.
 
 ```bash
 cd adamant-ModpackFramework
-lua5.2 tests/all.lua
+lua52.exe tests/all.lua
 ```

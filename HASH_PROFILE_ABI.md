@@ -33,10 +33,38 @@ Properties:
 - only non-default values are encoded
 - unknown keys are ignored on decode
 - missing keys decode to current defaults
+- keys and values are token-escaped before joining with `=` and `|`
 
 The same string is used for:
 - portable sharing
 - local coordinator profile slots
+
+### Token Escaping
+
+The canonical string uses `=` between each key/value pair and `|` between entries.
+Literal reserved characters inside keys or values are escaped before serialization:
+
+| Raw character | Encoded token |
+| --- | --- |
+| `%` | `%25` |
+| `|` | `%7C` |
+| `=` | `%3D` |
+
+Encoding applies to token contents only. The envelope delimiters remain raw:
+
+```text
+ModuleId.Filter=Apollo%7CZeus%3DPoseidon%25Chaos
+```
+
+decodes to:
+
+```text
+ModuleId.Filter = Apollo|Zeus=Poseidon%Chaos
+```
+
+Always encode `%` before other reserved characters, and decode after splitting the
+canonical string into entries. This keeps persisted string storage values safe when
+they contain hash delimiters.
 
 ## Frozen ABI Surface
 
@@ -100,6 +128,10 @@ Changing:
 - fallback behavior
 
 can change how existing hashes decode or what future hashes look like.
+
+Framework token escaping is also part of the wire envelope. Storage type codecs
+should return their logical token value; Framework owns escaping delimiters in the
+outer key/value format.
 
 ### `definition.hashGroupPlan`
 

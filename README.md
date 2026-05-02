@@ -25,7 +25,7 @@ local definition = lib.prepareDefinition(internal, dataDefaults, {
     ...
 })
 
-public.host = lib.createModuleHost({
+lib.createModuleHost({
     definition = definition,
     store = store,
     session = session,
@@ -37,6 +37,8 @@ public.host = lib.createModuleHost({
 ```
 
 If a module does not register runtime hooks, `hookOwner` and `registerHooks` may be omitted.
+Lib publishes the created host into its live-host registry. Framework discovers modules
+through that registry rather than reading module globals directly.
 
 ## Docs
 
@@ -53,11 +55,12 @@ If a module does not register runtime hooks, `hookOwner` and `registerHooks` may
 
 The framework discovers modules that expose:
 
-- `public.host`
+- a Lib-published live host
 - `host.getIdentity().modpack == PACK_ID`
 - `host.getIdentity().id`
 - `host.getMeta().name`
-- a prepared definition with `storage`
+- `host.getStorage()`
+- `host.drawTab(ui)`
 
 Discovered modules render through:
 
@@ -74,5 +77,5 @@ Sidebar behavior:
 
 ```bash
 cd adamant-ModpackFramework
-lua5.2 tests/all.lua
+lua52.exe tests/all.lua
 ```
