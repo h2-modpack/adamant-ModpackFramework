@@ -217,6 +217,11 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
         hud.flushPendingHash()
     end
 
+    local function handleHostGuiClosed()
+        flushPending()
+        hud.setMarkerVisible(true)
+    end
+
     local function closeWindow()
         flushPending()
         hud.setMarkerVisible(true)
@@ -273,5 +278,6 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
         renderWindow = renderWindow,
         addMenuBar = addMenuBar,
         flushPending = flushPending,
+        handleHostGuiClosed = handleHostGuiClosed,
     }
 end

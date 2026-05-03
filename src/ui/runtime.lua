@@ -119,7 +119,7 @@ function internal.createUIRuntime(ctx)
                         else
                             table.insert(rollbackErrors,
                                 string.format("%s: %s",
-                                    tostring(touchedEntry.modName or touchedEntry.id or "unknown"),
+                                    tostring(touchedEntry.pluginGuid or touchedEntry.id or "unknown"),
                                     tostring(rollbackErr)))
                         end
                     end
@@ -164,7 +164,7 @@ function internal.createUIRuntime(ctx)
         end
         if not ok then
             lib.logging.warn(packId,
-                "%s %s failed: %s", entry.modName or "unknown", state and "apply" or "revert", err)
+                "%s %s failed: %s", entry.pluginGuid or "unknown", state and "apply" or "revert", err)
         end
         return ok, err
     end
@@ -177,7 +177,7 @@ function internal.createUIRuntime(ctx)
             if not rollbackOk then
                 table.insert(rollbackErrors,
                     string.format("%s: %s",
-                        tostring(rollbackEntry.modName or rollbackEntry.id or "unknown"),
+                        tostring(rollbackEntry.pluginGuid or rollbackEntry.id or "unknown"),
                         tostring(rollbackErr)))
             end
         end
@@ -239,7 +239,7 @@ function internal.createUIRuntime(ctx)
         elseif ok == false then
             lib.logging.warn(packId,
                 "%s session commit failed; restored previous config where possible: %s",
-                tostring(entry.name or entry.id or entry.modName or "module"),
+                tostring(entry.name or entry.id or entry.pluginGuid or "module"),
                 tostring(err))
         end
     end

@@ -13,20 +13,20 @@ local function resetMods()
     }
 end
 
-local function attachModule(modName, definition, persisted, exports)
+local function attachModule(pluginGuid, definition, persisted, exports)
     exports = exports or {}
     definition = lib.prepareDefinition({}, definition)
     local store, session = lib.createStore(persisted or {}, definition)
     exports.host = lib.createModuleHost({
-        moduleName = modName,
+        pluginGuid = pluginGuid,
         definition = definition,
         store = store,
         session = session,
         drawTab = exports.DrawTab,
         drawQuickContent = exports.DrawQuickContent,
     })
-    AdamantModpackLib_Internal.liveModuleHosts[modName] = exports.host
-    rom.mods[modName] = exports
+    AdamantModpackLib_Internal.liveModuleHosts[pluginGuid] = exports.host
+    rom.mods[pluginGuid] = exports
     return exports
 end
 

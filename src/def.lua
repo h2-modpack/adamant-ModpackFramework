@@ -49,6 +49,11 @@ local Framework = {}
 ---@field hud table Opaque framework HUD runtime.
 ---@field ui table Opaque framework UI runtime.
 
+---@class AdamantModpackFramework.GuiCallbacks
+---@field render fun() Main Framework window renderer for `rom.gui.add_imgui(...)`.
+---@field alwaysDraw fun() Always-draw callback for `rom.gui.add_always_draw_imgui(...)`.
+---@field menuBar fun() Menu-bar callback for `rom.gui.add_to_menu_bar(...)`.
+
 ---@param packId string Stable coordinator pack id.
 ---@param windowTitle string Main framework window title.
 ---@param config AdamantModpackFramework.Config Chalk-managed coordinator config.
@@ -59,8 +64,9 @@ local Framework = {}
 function Framework.init(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
 end
 
----@param packId string
-function Framework.registerGui(packId)
+---@param packId string Stable coordinator pack id.
+---@return AdamantModpackFramework.GuiCallbacks callbacks Register these from the coordinator so ROM attributes the GUI to the pack plugin, not Framework.
+function Framework.createGuiCallbacks(packId)
 end
 
 return Framework

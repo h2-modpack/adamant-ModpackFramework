@@ -2,31 +2,11 @@ local lu = require('luaunit')
 
 TestMain = {}
 
-function TestMain:testRegisterGuiCallbacksAreSafeBeforeInit()
-    local previousGui = rom.gui
-    local callbacks = {}
-
-    rom.gui = {
-        add_imgui = function(callback)
-            callbacks.imgui = callback
-        end,
-        add_always_draw_imgui = function(callback)
-            callbacks.alwaysDraw = callback
-        end,
-        add_to_menu_bar = function(callback)
-            callbacks.menuBar = callback
-        end,
-        is_open = function()
-            return true
-        end,
-    }
-
-    public.registerGui("missing-pack")
-    local renderOk = pcall(callbacks.imgui)
+function TestMain:testCreateGuiCallbacksAreSafeBeforeInit()
+    local callbacks = public.createGuiCallbacks("missing-pack")
+    local renderOk = pcall(callbacks.render)
     local alwaysDrawOk = pcall(callbacks.alwaysDraw)
     local menuBarOk = pcall(callbacks.menuBar)
-
-    rom.gui = previousGui
 
     lu.assertTrue(renderOk)
     lu.assertTrue(alwaysDrawOk)
@@ -191,7 +171,7 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
     local entry = {
         id = "Alpha",
         name = "Alpha",
-        modName = "Alpha",
+        pluginGuid = "Alpha",
         storage = {},
         affectsRunData = true,
         definition = {
@@ -299,6 +279,7 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
         DebugMode = false,
     }, definition)
     local host = lib.createModuleHost({
+        pluginGuid = "test-pack.Alpha",
         definition = definition,
         store = store,
         session = session,
@@ -313,7 +294,7 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
     local entry = {
         id = definition.id,
         name = definition.name,
-        modName = "Alpha",
+        pluginGuid = "Alpha",
         storage = definition.storage,
         affectsRunData = true,
         definition = definition,
@@ -472,7 +453,7 @@ function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
     local entry = {
         id = "Alpha",
         name = "Alpha",
-        modName = "Alpha",
+        pluginGuid = "Alpha",
         storage = {},
         definition = {
             id = "Alpha",
@@ -623,7 +604,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
 
     local discovery = MockDiscovery.create({
         {
-            modName = "Alpha",
+            pluginGuid = "Alpha",
             id = "Alpha",
             name = "Alpha",
             enabled = true,
@@ -636,7 +617,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
             end,
         },
         {
-            modName = "Bravo",
+            pluginGuid = "Bravo",
             id = "Bravo",
             name = "Bravo",
             enabled = true,
@@ -724,7 +705,7 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
 
     local discovery = MockDiscovery.create({
         {
-            modName = "Alpha",
+            pluginGuid = "Alpha",
             id = "Alpha",
             name = "Alpha",
             enabled = true,
@@ -738,7 +719,7 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
             end,
         },
         {
-            modName = "Bravo",
+            pluginGuid = "Bravo",
             id = "Bravo",
             name = "Bravo",
             enabled = true,
@@ -880,7 +861,7 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
 
     local discovery = MockDiscovery.create({
         {
-            modName = "Alpha",
+            pluginGuid = "Alpha",
             id = "Alpha",
             name = "Alpha",
             enabled = true,
@@ -994,7 +975,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
 
     local discovery = MockDiscovery.create({
         {
-            modName = "Alpha",
+            pluginGuid = "Alpha",
             id = "Alpha",
             name = "Alpha",
             enabled = true,
@@ -1057,7 +1038,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
         FlagA = false,
     }, replacementDefinition)
     local replacementHost = lib.createModuleHost({
-        moduleName = entry.modName,
+        pluginGuid = entry.pluginGuid,
         definition = replacementDefinition,
         store = store,
         session = session,
@@ -1066,7 +1047,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
             secondQuickRenders = secondQuickRenders + 1
         end,
     })
-    rom.mods[entry.modName].host = replacementHost
+    rom.mods[entry.pluginGuid].host = replacementHost
 
     local okSecond, errSecond = pcall(builtUi.renderWindow)
 
@@ -1082,21 +1063,17 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     local previousGui = rom.gui
     local guiOpen = true
     local flushCalls = 0
+    local closeCalls = 0
     local alwaysDraw
 
     rom.gui = {
-        add_imgui = function() end,
-        add_always_draw_imgui = function(callback)
-            alwaysDraw = callback
-        end,
-        add_to_menu_bar = function() end,
         is_open = function()
             return guiOpen
         end,
     }
 
     local packId = "flush-pack"
-    public.registerGui(packId)
+    alwaysDraw = public.createGuiCallbacks(packId).alwaysDraw
 
     local capturedPacks = AdamantModpackFramework_Internal.packs
     local previousPack = capturedPacks and capturedPacks[packId] or nil
@@ -1104,6 +1081,9 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
         ui = {
             flushPending = function()
                 flushCalls = flushCalls + 1
+            end,
+            handleHostGuiClosed = function()
+                closeCalls = closeCalls + 1
             end,
         },
     }
@@ -1116,7 +1096,50 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     rom.gui = previousGui
     capturedPacks[packId] = previousPack
 
+    lu.assertEquals(flushCalls, 0)
+    lu.assertEquals(closeCalls, 1)
+end
+
+function TestMain:testHostGuiCloseRestoresHudMarker()
+    local markerStates = {}
+    local flushCalls = 0
+    local function noop() end
+
+    local discovery = FrameworkTestApi.createDiscovery("test-pack", {
+        ModEnabled = true,
+        DebugMode = false,
+        Profiles = {},
+    }, lib)
+    discovery.modules = {}
+    discovery.modulesById = {}
+    local hud = {
+        flushPendingHash = function()
+            flushCalls = flushCalls + 1
+        end,
+        setMarkerVisible = function(visible)
+            markerStates[#markerStates + 1] = visible
+        end,
+        getConfigHash = function()
+            return "hash", "fingerprint"
+        end,
+        applyConfigHash = function()
+            return true
+        end,
+        markHashDirty = noop,
+    }
+    local theme = FrameworkTestApi.createTheme(lib)
+    local ui = FrameworkTestApi.createUI(discovery, hud, theme, {
+        ModEnabled = true,
+        DebugMode = false,
+        Profiles = {},
+    }, "test-pack", "Test Window", 1, {
+        { Name = "", Hash = "", Tooltip = "" },
+    }, nil)
+
+    ui.handleHostGuiClosed()
+
     lu.assertEquals(flushCalls, 1)
+    lu.assertEquals(markerStates, { true })
 end
 
 function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
@@ -1181,7 +1204,7 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
 
     local discovery = MockDiscovery.create({
         {
-            modName = "Alpha",
+            pluginGuid = "Alpha",
             id = "Alpha",
             name = "Alpha",
             enabled = true,

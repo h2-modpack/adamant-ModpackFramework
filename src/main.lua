@@ -113,40 +113,46 @@ end
 
 public.init = Framework.init
 
-function Framework.registerGui(packId)
+function Framework.createGuiCallbacks(packId)
     assert(type(packId) == "string" and packId ~= "",
-        "Framework.registerGui: packId must be a non-empty string")
+        "Framework.createGuiCallbacks: packId must be a non-empty string")
 
     local wasGuiOpen = rom.gui.is_open() == true
 
-    rom.gui.add_imgui(function()
+    local function render()
         local pack = internal.packs[packId]
         if not pack or not pack.ui then
             return
         end
         pack.ui.renderWindow()
-    end)
+    end
 
-    rom.gui.add_always_draw_imgui(function()
+    local function alwaysDraw()
         local isGuiOpen = rom.gui.is_open() == true
 
         if wasGuiOpen and not isGuiOpen then
             local pack = internal.packs[packId]
             if pack and pack.ui then
-                pack.ui.flushPending()
+                pack.ui.handleHostGuiClosed()
             end
         end
 
         wasGuiOpen = isGuiOpen
-    end)
+    end
 
-    rom.gui.add_to_menu_bar(function()
+    local function menuBar()
         local pack = internal.packs[packId]
         if not pack or not pack.ui then
             return
         end
         pack.ui.addMenuBar()
-    end)
+    end
+
+    return {
+        render = render,
+        alwaysDraw = alwaysDraw,
+        menuBar = menuBar,
+    }
 end
 
-public.registerGui = Framework.registerGui
+public.createGuiCallbacks = Framework.createGuiCallbacks

@@ -7,8 +7,8 @@ function Framework.createDiscovery(packId, config, lib)
     local warnIf = lib.logging.warnIf
     local warnedMissingHosts = {}
 
-    local function GetHost(modName)
-        return lib.getLiveModuleHost(modName)
+    local function GetHost(pluginGuid)
+        return lib.getLiveModuleHost(pluginGuid)
     end
 
     local function ReadStorage(host)
@@ -56,7 +56,7 @@ function Framework.createDiscovery(packId, config, lib)
         local ok, err = host.setEnabled(enabled)
         if not ok then
             contractWarn(packId,
-                "%s %s failed: %s", entry.modName, enabled and "enable" or "disable", err)
+                "%s %s failed: %s", entry.pluginGuid, enabled and "enable" or "disable", err)
         end
         return ok, err
     end
@@ -66,7 +66,7 @@ function Framework.createDiscovery(packId, config, lib)
         local meta = found.meta
 
         return {
-            modName = found.modName,
+            pluginGuid = found.pluginGuid,
             mod = found.mod,
             id = identity.id,
             modpack = identity.modpack,
@@ -76,9 +76,9 @@ function Framework.createDiscovery(packId, config, lib)
             affectsRunData = found.affectsRunData,
             hashHints = found.hashHints,
             storage = found.storage,
-            _enableLabel = "Enable " .. tostring(meta.name or identity.id or found.modName),
-            _debugLabel = tostring(meta.name or identity.id or found.modName)
-                .. "##" .. tostring(identity.id or found.modName),
+            _enableLabel = "Enable " .. tostring(meta.name or identity.id or found.pluginGuid),
+            _debugLabel = tostring(meta.name or identity.id or found.pluginGuid)
+                .. "##" .. tostring(identity.id or found.pluginGuid),
         }
     end
 
@@ -96,13 +96,13 @@ function Framework.createDiscovery(packId, config, lib)
         Discovery.tabOrder = {}
 
         local found = {}
-        for modName, mod in pairs(rom.mods) do
-            local host = GetHost(modName)
+        for pluginGuid, mod in pairs(rom.mods) do
+            local host = GetHost(pluginGuid)
             if host then
                 local identity = ReadIdentity(host)
                 if identity.modpack == packId then
                     table.insert(found, {
-                        modName = modName,
+                        pluginGuid = pluginGuid,
                         mod = mod,
                         host = host,
                         storage = ReadStorage(host),
@@ -116,8 +116,8 @@ function Framework.createDiscovery(packId, config, lib)
         end
 
         table.sort(found, function(a, b)
-            local aName = a.meta.name or a.identity.id or a.modName
-            local bName = b.meta.name or b.identity.id or b.modName
+            local aName = a.meta.name or a.identity.id or a.pluginGuid
+            local bName = b.meta.name or b.identity.id or b.pluginGuid
             return aName < bName
         end)
 
@@ -127,7 +127,7 @@ function Framework.createDiscovery(packId, config, lib)
             local namespace = entry.identity.id
             if namespace ~= nil then
                 namespaceEntries[namespace] = namespaceEntries[namespace] or {}
-                table.insert(namespaceEntries[namespace], entry.modName)
+                table.insert(namespaceEntries[namespace], entry.pluginGuid)
             end
         end
 
@@ -148,7 +148,7 @@ function Framework.createDiscovery(packId, config, lib)
         end
 
         for _, foundModule in ipairs(found) do
-            local modName = foundModule.modName
+            local pluginGuid = foundModule.pluginGuid
             local host = foundModule.host
             local id = foundModule.identity.id
             local name = foundModule.meta.name
@@ -157,9 +157,9 @@ function Framework.createDiscovery(packId, config, lib)
             if not duplicateNamespaces[id] then
                 if not id or not name then
                     contractWarn(packId,
-                        "Skipping %s: missing id/name", modName)
+                        "Skipping %s: missing id/name", pluginGuid)
                 elseif type(foundModule.storage) ~= "table" then
-                    contractWarn(packId, "Skipping %s: missing host storage contract", modName)
+                    contractWarn(packId, "Skipping %s: missing host storage contract", pluginGuid)
                 else
                     local discovered = BuildEntry(foundModule)
                     table.insert(Discovery.modules, discovered)
@@ -185,7 +185,7 @@ function Framework.createDiscovery(packId, config, lib)
                 entry._tabLabel = label .. " (" .. labelIndex[label] .. ")"
                 warnIf(packId, config.DebugMode,
                     "%s: shortName '%s' is shared by multiple modules. Rendering as '%s'.",
-                    entry.modName, label, entry._tabLabel)
+                    entry.pluginGuid, label, entry._tabLabel)
             else
                 entry._tabLabel = label
             end
@@ -218,11 +218,11 @@ function Framework.createDiscovery(packId, config, lib)
         local snapshot = { hosts = {} }
 
         for _, entry in ipairs(Discovery.modules) do
-            local host = GetHost(entry.modName)
+            local host = GetHost(entry.pluginGuid)
             snapshot.hosts[entry] = host or false
-            if not host and not warnedMissingHosts[entry.modName] then
-                warnedMissingHosts[entry.modName] = true
-                contractWarn(packId, "%s: module host is unavailable", entry.modName)
+            if not host and not warnedMissingHosts[entry.pluginGuid] then
+                warnedMissingHosts[entry.pluginGuid] = true
+                contractWarn(packId, "%s: module host is unavailable", entry.pluginGuid)
             end
         end
 
@@ -230,7 +230,7 @@ function Framework.createDiscovery(packId, config, lib)
     end
 
     function Discovery.live.getHost(entry)
-        return GetHost(entry.modName)
+        return GetHost(entry.pluginGuid)
     end
 
     local function RequireSnapshot(snapshot)

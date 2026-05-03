@@ -116,7 +116,7 @@ function Framework.createHash(discovery, config, lib, packId)
             local ok, err = discovery.snapshot.setEntryEnabled(entry, previousEnabled, snapshot)
             if ok == false then
                 table.insert(rollbackErrors,
-                    string.format("%s: %s", tostring(entry.modName or entry.id), tostring(err)))
+                    string.format("%s: %s", tostring(entry.pluginGuid or entry.id), tostring(err)))
             end
         end
 

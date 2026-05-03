@@ -254,7 +254,7 @@ function MockDiscovery.create(moduleDefs)
         })
         local store, session = lib.createStore(persisted, definition)
         local host = lib.createModuleHost({
-            moduleName = def.modName or ("adamant-" .. def.id),
+            pluginGuid = def.pluginGuid or ("adamant-" .. def.id),
             definition = definition,
             store = store,
             session = session,
@@ -262,7 +262,7 @@ function MockDiscovery.create(moduleDefs)
             drawQuickContent = def.DrawQuickContent,
         })
         local module = {
-            modName = def.modName or ("adamant-" .. def.id),
+            pluginGuid = def.pluginGuid or ("adamant-" .. def.id),
             mod = {
                 definition = definition,
                 host = host,
@@ -278,7 +278,7 @@ function MockDiscovery.create(moduleDefs)
             storage = definition.storage,
         }
 
-        rom.mods[module.modName] = module.mod
+        rom.mods[module.pluginGuid] = module.mod
 
         table.insert(discovery.modules, module)
         discovery.modulesById[module.id] = module
@@ -301,7 +301,7 @@ function MockDiscovery.create(moduleDefs)
         }
 
         for _, module in ipairs(discovery.modules) do
-            local liveHost = lib.getLiveModuleHost(module.modName)
+            local liveHost = lib.getLiveModuleHost(module.pluginGuid)
             snapshot.hosts[module] = liveHost or false
         end
 
@@ -309,7 +309,7 @@ function MockDiscovery.create(moduleDefs)
     end
 
     function discovery.live.getHost(entry)
-        return lib.getLiveModuleHost(entry.modName)
+        return lib.getLiveModuleHost(entry.pluginGuid)
     end
 
     function discovery.snapshot.getHost(entry, snapshot)
