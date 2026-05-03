@@ -9,7 +9,6 @@
 function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMarker)
     assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
         "Framework.createHud: game HUD globals are not ready; call Framework.init after game load")
-    local lib = rom.mods["adamant-ModpackLib"]
     assert(lib and lib.hooks and type(lib.hooks.Wrap) == "function",
         "Framework.createHud: adamant-ModpackLib hooks are not available")
 

@@ -1,5 +1,4 @@
 local internal = AdamantModpackFramework_Internal
-local lib = rom.mods["adamant-ModpackLib"]
 
 function internal.createUIRuntime(ctx)
     local discovery = ctx.discovery

@@ -5,6 +5,7 @@ globals = {
     "rom",
     "public",
     "Framework",
+    "lib",
     "_PLUGIN",
     "ScreenData",
     "AdamantModpackFramework_Internal"

@@ -70,8 +70,19 @@ Discovered modules render through:
 Sidebar behavior:
 
 - one top-level tab per discovered module
-- `moduleOrder` may pin known module ids first
-- `moduleOrder` and discovered module order define the tab list
+- `opts.moduleOrder` may pin known module ids first
+- `opts.moduleOrder` and discovered module order define the tab list
+
+Coordinator bootstrap calls:
+
+```lua
+Framework.init(PACK_ID, "My Modpack", config, #config.Profiles, defaultProfiles, {
+    moduleOrder = {
+        "ExampleModule",
+    },
+    renderQuickSetup = renderQuickSetup,
+})
+```
 
 ## Validation
 

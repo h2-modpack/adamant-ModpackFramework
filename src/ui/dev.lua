@@ -1,5 +1,4 @@
 local internal = AdamantModpackFramework_Internal
-local lib = rom.mods["adamant-ModpackLib"]
 
 function internal.createUIDev(ctx)
     local ui = rom.ImGui

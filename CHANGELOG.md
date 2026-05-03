@@ -11,8 +11,9 @@
 - hash serialization now escapes reserved token characters inside keys and values
 - coordinator docs now show the supported bootstrap contract:
   - coordinator registration before `Framework.init(...)`
-  - `rom.gui.add_always_draw_imgui(Framework.getAlwaysDrawRenderer(...))`
+  - `Framework.registerGui(PACK_ID)` for GUI callback registration
   - optional `hideHashMarker`
+- `Framework.init(...)` now uses positional required arguments plus an optional `opts` table instead of nested `params.def`
 
 ## [1.0.0] - 2026-04-20
 

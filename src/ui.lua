@@ -4,9 +4,8 @@ import "ui/dev.lua"
 import "ui/quick_setup.lua"
 import "ui/module_tabs.lua"
 
-local lib = rom.mods["adamant-ModpackLib"]
-
-function Framework.createUI(discovery, hud, theme, def, config, packId, windowTitle)
+function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, numProfiles,
+                            defaultProfiles, renderQuickSetup)
     local internal = AdamantModpackFramework_Internal
     local ui = rom.ImGui
     local DEFAULT_WINDOW_WIDTH = 1280
@@ -80,14 +79,15 @@ function Framework.createUI(discovery, hud, theme, def, config, packId, windowTi
     profiles = internal.createUIProfiles({
         config = config,
         colors = colors,
-        def = def,
+        numProfiles = numProfiles,
+        defaultProfiles = defaultProfiles,
         packId = packId,
         discovery = discovery,
         runtime = runtime,
     })
 
     local quickSetup = internal.createUIQuickSetup({
-        def = def,
+        renderQuickSetup = renderQuickSetup,
         theme = theme,
         profiles = profiles,
         staging = staging,

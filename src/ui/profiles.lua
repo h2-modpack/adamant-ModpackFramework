@@ -3,19 +3,15 @@ local FIELD_MEDIUM = 0.5
 local FIELD_NARROW = 0.3
 local FIELD_WIDE = 0.85
 
-local lib = rom.mods["adamant-ModpackLib"]
-
 function internal.createUIProfiles(ctx)
     local ui = rom.ImGui
     local config = ctx.config
     local colors = ctx.colors
-    local def = ctx.def
+    local NUM_PROFILES = ctx.numProfiles
+    local defaultProfiles = ctx.defaultProfiles
     local packId = ctx.packId
     local discovery = ctx.discovery
     local runtime = ctx.runtime
-
-    local NUM_PROFILES = def.NUM_PROFILES
-    local defaultProfiles = def.defaultProfiles
     local FEEDBACK_DURATION = 2.0
 
     local slotLabels = {}

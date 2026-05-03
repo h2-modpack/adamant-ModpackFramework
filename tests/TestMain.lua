@@ -2,14 +2,35 @@ local lu = require('luaunit')
 
 TestMain = {}
 
-function TestMain:testGetRendererIsSafeBeforeInit()
-    local render = public.getRenderer("missing-pack")
-    lu.assertTrue(pcall(render))
-end
+function TestMain:testRegisterGuiCallbacksAreSafeBeforeInit()
+    local previousGui = rom.gui
+    local callbacks = {}
 
-function TestMain:testGetMenuBarIsSafeBeforeInit()
-    local addMenuBar = public.getMenuBar("missing-pack")
-    lu.assertTrue(pcall(addMenuBar))
+    rom.gui = {
+        add_imgui = function(callback)
+            callbacks.imgui = callback
+        end,
+        add_always_draw_imgui = function(callback)
+            callbacks.alwaysDraw = callback
+        end,
+        add_to_menu_bar = function(callback)
+            callbacks.menuBar = callback
+        end,
+        is_open = function()
+            return true
+        end,
+    }
+
+    public.registerGui("missing-pack")
+    local renderOk = pcall(callbacks.imgui)
+    local alwaysDrawOk = pcall(callbacks.alwaysDraw)
+    local menuBarOk = pcall(callbacks.menuBar)
+
+    rom.gui = previousGui
+
+    lu.assertTrue(renderOk)
+    lu.assertTrue(alwaysDrawOk)
+    lu.assertTrue(menuBarOk)
 end
 
 function TestMain:testHudRefreshUsesStableHookWrapper()
@@ -143,17 +164,14 @@ function TestMain:testRenderWindowCleansUpImguiStacksBeforeRethrow()
     }
     local theme = FrameworkTestApi.createTheme(lib)
     local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, {
-        NUM_PROFILES = 1,
-        defaultProfiles = {
-            { Name = "", Hash = "", Tooltip = "" },
-        },
-    }, {
         ModEnabled = true,
         DebugMode = false,
         Profiles = {
             { Name = "", Hash = "", Tooltip = "" },
         },
-    }, lib, "test-pack", "Test Window")
+    }, "test-pack", "Test Window", 1, {
+        { Name = "", Hash = "", Tooltip = "" },
+    })
 
     builtUi.addMenuBar()
     local ok, err = pcall(builtUi.renderWindow)
@@ -229,21 +247,19 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
             }
         end,
     }, function()
-        FrameworkTestApi.init({
-            packId = "startup-pack",
-            windowTitle = "Startup Pack",
-            config = {
+        FrameworkTestApi.init(
+            "startup-pack",
+            "Startup Pack",
+            {
                 ModEnabled = true,
                 DebugMode = false,
                 Profiles = {
                     { Name = "", Hash = "", Tooltip = "" },
                 },
             },
-            def = {
-                NUM_PROFILES = 1,
-                defaultProfiles = {},
-            },
-        })
+            1,
+            {}
+        )
     end)
 
     lib.lifecycle.registerCoordinator("startup-pack", nil)
@@ -339,21 +355,19 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
             }
         end,
     }, function()
-        FrameworkTestApi.init({
-            packId = packId,
-            windowTitle = "Load Order Pack",
-            config = {
+        FrameworkTestApi.init(
+            packId,
+            "Load Order Pack",
+            {
                 ModEnabled = true,
                 DebugMode = false,
                 Profiles = {
                     { Name = "", Hash = "", Tooltip = "" },
                 },
             },
-            def = {
-                NUM_PROFILES = 1,
-                defaultProfiles = {},
-            },
-        })
+            1,
+            {}
+        )
     end)
 
     local ok, err = host.revertMutation()
@@ -421,23 +435,15 @@ function TestMain:testRepeatedInitReplacesPackStateAndKeepsStablePackIndex()
             }
         end,
     }, function()
-        local params = {
-            packId = packId,
-            windowTitle = "Reinit Pack",
-            config = {
-                ModEnabled = true,
-                DebugMode = false,
-                Profiles = {
-                    { Name = "", Hash = "", Tooltip = "" },
-                },
-            },
-            def = {
-                NUM_PROFILES = 1,
-                defaultProfiles = {},
+        local config = {
+            ModEnabled = true,
+            DebugMode = false,
+            Profiles = {
+                { Name = "", Hash = "", Tooltip = "" },
             },
         }
-        firstPack = FrameworkTestApi.init(params)
-        secondPack = FrameworkTestApi.init(params)
+        firstPack = FrameworkTestApi.init(packId, "Reinit Pack", config, 1, {})
+        secondPack = FrameworkTestApi.init(packId, "Reinit Pack", config, 1, {})
     end)
 
     local packIdCount = 0
@@ -516,21 +522,19 @@ function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
             }
         end,
     }, function()
-        FrameworkTestApi.init({
-            packId = "startup-pack",
-            windowTitle = "Startup Pack",
-            config = {
+        FrameworkTestApi.init(
+            "startup-pack",
+            "Startup Pack",
+            {
                 ModEnabled = true,
                 DebugMode = false,
                 Profiles = {
                     { Name = "", Hash = "", Tooltip = "" },
                 },
             },
-            def = {
-                NUM_PROFILES = 1,
-                defaultProfiles = {},
-            },
-        })
+            1,
+            {}
+        )
     end)
 
     local warnings = Warnings
@@ -665,7 +669,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
     }
 
     local theme = FrameworkTestApi.createTheme(lib)
-    local def = {
+    local setup = {
         NUM_PROFILES = 1,
         defaultProfiles = {
             { Name = "", Hash = "", Tooltip = "" },
@@ -679,7 +683,8 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
         },
     }
 
-    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, "test-pack", "Test Window")
+    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, config, "test-pack", "Test Window",
+        setup.NUM_PROFILES, setup.defaultProfiles, setup.renderQuickSetup)
     builtUi.addMenuBar()
 
     local okFirst, errFirst = pcall(builtUi.renderWindow)
@@ -906,7 +911,7 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
     }
 
     local theme = FrameworkTestApi.createTheme(lib)
-    local def = {
+    local setup = {
         NUM_PROFILES = 1,
         defaultProfiles = {
             { Name = "", Hash = "", Tooltip = "" },
@@ -920,7 +925,8 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
         },
     }
 
-    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, "test-pack", "Test Window")
+    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, config, "test-pack", "Test Window",
+        setup.NUM_PROFILES, setup.defaultProfiles, setup.renderQuickSetup)
     builtUi.addMenuBar()
     local ok, err = pcall(builtUi.renderWindow)
 
@@ -1019,7 +1025,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
     }
 
     local theme = FrameworkTestApi.createTheme(lib)
-    local def = {
+    local setup = {
         NUM_PROFILES = 1,
         defaultProfiles = {
             { Name = "", Hash = "", Tooltip = "" },
@@ -1033,7 +1039,8 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
         },
     }
 
-    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, "test-pack", "Test Window")
+    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, config, "test-pack", "Test Window",
+        setup.NUM_PROFILES, setup.defaultProfiles, setup.renderQuickSetup)
     builtUi.addMenuBar()
     local okFirst, errFirst = pcall(builtUi.renderWindow)
 
@@ -1075,15 +1082,21 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     local previousGui = rom.gui
     local guiOpen = true
     local flushCalls = 0
+    local alwaysDraw
 
     rom.gui = {
+        add_imgui = function() end,
+        add_always_draw_imgui = function(callback)
+            alwaysDraw = callback
+        end,
+        add_to_menu_bar = function() end,
         is_open = function()
             return guiOpen
         end,
     }
 
     local packId = "flush-pack"
-    local alwaysDraw = public.getAlwaysDrawRenderer(packId)
+    public.registerGui(packId)
 
     local capturedPacks = AdamantModpackFramework_Internal.packs
     local previousPack = capturedPacks and capturedPacks[packId] or nil
@@ -1197,7 +1210,7 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
     }
 
     local theme = FrameworkTestApi.createTheme(lib)
-    local def = {
+    local setup = {
         NUM_PROFILES = 1,
         defaultProfiles = {
             { Name = "", Hash = "", Tooltip = "" },
@@ -1217,7 +1230,8 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
         },
     }
 
-    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, def, config, "test-pack", "Test Window")
+    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, config, "test-pack", "Test Window",
+        setup.NUM_PROFILES, setup.defaultProfiles, setup.renderQuickSetup)
     builtUi.addMenuBar()
     local ok, err = pcall(builtUi.renderWindow)
     builtUi.addMenuBar()

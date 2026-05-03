@@ -26,23 +26,26 @@ local Framework = rom.mods["adamant-ModpackFramework"]
 local lib = rom.mods["adamant-ModpackLib"]
 local config = chalk.auto("config.lua")
 local loader = reload.auto_single()
+local defaultProfiles = {}
+
+local function renderQuickSetup(ctx)
+    -- Optional coordinator quick controls.
+end
 
 local function init()
     lib.lifecycle.registerCoordinator(PACK_ID, config)
-    Framework.init({
-        packId = PACK_ID,
-        windowTitle = "My Modpack",
-        config = config,
-        def = def,
+    Framework.init(PACK_ID, "My Modpack", config, #config.Profiles, defaultProfiles, {
+        moduleOrder = {
+            "ExampleModule",
+        },
+        renderQuickSetup = renderQuickSetup,
     })
 end
 
 local function registerGui()
     local Framework = rom.mods["adamant-ModpackFramework"]
 
-    rom.gui.add_imgui(Framework.getRenderer(PACK_ID))
-    rom.gui.add_always_draw_imgui(Framework.getAlwaysDrawRenderer(PACK_ID))
-    rom.gui.add_to_menu_bar(Framework.getMenuBar(PACK_ID))
+    Framework.registerGui(PACK_ID)
 end
 
 modutil.once_loaded.game(function()
@@ -50,30 +53,25 @@ modutil.once_loaded.game(function()
 end)
 ```
 
-## `Framework.init(params)`
+## `Framework.init(packId, windowTitle, config, numProfiles, defaultProfiles, opts?)`
 
 Required:
 - `packId`
 - `windowTitle`
 - `config`
-- `def`
+- `numProfiles`
+- `defaultProfiles`
 
 `config` must contain:
 - `ModEnabled`
 - `DebugMode`
 - `Profiles`
 
-`def` must contain:
-- `NUM_PROFILES`
-- `defaultProfiles`
-
-Optional `def` fields:
+Optional `opts` fields:
 - `moduleOrder`
   Ordered list of module ids to pin first in the sidebar. Unknown entries are warned and ignored.
 - `renderQuickSetup(ctx)`
   Coordinator-owned Quick Setup content. See [QUICK_SETUP.md](QUICK_SETUP.md).
-
-Optional top-level params:
 - `hideHashMarker`
   Suppresses the HUD hash marker while keeping the rest of the coordinator surface active.
 
@@ -126,7 +124,7 @@ Module tabs are simple:
 
 Quick Setup renders in this order:
 1. built-in profile quick selector
-2. coordinator-owned content from `def.renderQuickSetup(ctx)`
+2. coordinator-owned content from `opts.renderQuickSetup(ctx)`
 3. each discovered enabled module with quick content support
 
 Quick content is provided by coordinator code or module hosts.
@@ -137,7 +135,7 @@ See [QUICK_SETUP.md](QUICK_SETUP.md).
 
 Coordinator bootstrap normally reruns `Framework.init(...)` from the reload body.
 
-The coordinator owns init parameters and re-calls `Framework.init(params)` when the coordinator/framework layer reloads.
+The coordinator owns init arguments and re-calls `Framework.init(...)` when the coordinator/framework layer reloads.
 Framework replaces the current pack state for the same `packId` while preserving that pack's stable HUD/index slot.
 
 Coordinated module behavior reloads do not rebuild the pack. Instead:

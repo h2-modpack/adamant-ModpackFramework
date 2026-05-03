@@ -1,9 +1,8 @@
 local internal = AdamantModpackFramework_Internal
-local lib = rom.mods["adamant-ModpackLib"]
 
 function internal.createUIQuickSetup(ctx)
     local ui = rom.ImGui
-    local def = ctx.def
+    local renderQuickSetup = ctx.renderQuickSetup
     local profiles = ctx.profiles
     local staging = ctx.staging
     local runtime = ctx.runtime
@@ -29,8 +28,8 @@ function internal.createUIQuickSetup(ctx)
         ui.Separator()
         ui.Spacing()
 
-        if type(def.renderQuickSetup) == "function" then
-            def.renderQuickSetup(quickSetupContext)
+        if type(renderQuickSetup) == "function" then
+            renderQuickSetup(quickSetupContext)
         end
 
         for _, entry in ipairs(quickList or {}) do
