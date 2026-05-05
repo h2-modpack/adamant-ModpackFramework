@@ -44,6 +44,12 @@ function Framework.createHashGroups(lib, packId)
                 alias, groupKey)
             return nil
         end
+        if node._runtime == true then
+            contractWarn(packId,
+                "hashGroups: alias '%s' in group '%s' is runtime-only; runtime storage is excluded from hashes",
+                alias, groupKey)
+            return nil
+        end
         local width = getPackWidth(node)
         if not width then
             contractWarn(packId,

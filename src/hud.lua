@@ -9,68 +9,42 @@
 function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMarker)
     assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
         "Framework.createHud: game HUD globals are not ready; call Framework.init after game load")
-    assert(lib and lib.hooks and type(lib.hooks.Wrap) == "function",
-        "Framework.createHud: adamant-ModpackLib hooks are not available")
+    assert(lib and lib.overlays and type(lib.overlays.registerHudText) == "function",
+        "Framework.createHud: adamant-ModpackLib overlays are not available")
 
     local HUD_LINE_HEIGHT = 24
     local componentName = "ModpackMark_" .. packId
 
     local _, initFingerprint = hash.GetConfigHash()
     local currentHash = config.ModEnabled and initFingerprint or ""
-    local displayedHash = nil
     local hashDirty = false
     local markerHidden = hideHashMarker == true
     local markerVisible = true
+    local marker = nil
 
     if not markerHidden then
-        -- Hades creates retained HUD components from ScreenData. Updating this table
-        -- refreshes future HUD creation, but it cannot move an already-created text box.
-        -- Layout changes need a new HUD component/game HUD refresh; text changes can use
-        -- ModifyTextBox through UpdateModMark below.
-        ScreenData.HUD.ComponentData[componentName] = {
-            RightOffset = 20,
-            Y = 250 + (packIndex - 1) * HUD_LINE_HEIGHT,
-            TextArgs = {
-                Text = "",
-                Font = "MonospaceTypewriterBold",
-                FontSize = 18,
+        marker = lib.overlays.registerStackedText({
+            id = "framework:" .. packId .. ":hash",
+            componentName = componentName,
+            region = "middleRightStack",
+            order = lib.overlays.order.framework + packIndex,
+            textArgs = {
                 Color = theme.colors.text,
-                ShadowRed = 0.1,
-                ShadowBlue = 0.1,
-                ShadowGreen = 0.1,
-                OutlineColor = { 0.113, 0.113, 0.113, 1 },
-                OutlineThickness = 2,
-                ShadowAlpha = 1.0,
-                ShadowBlur = 1,
-                ShadowOffset = { 0, 4 },
-                Justification = "Right",
-                VerticalJustification = "Top",
-                DataProperties = { OpacityWithOwner = true },
             },
-        }
+            text = function()
+                return currentHash
+            end,
+            visible = function()
+                return markerVisible and config.ModEnabled == true and currentHash ~= ""
+            end,
+        })
     end
 
     local function UpdateModMark()
-        if markerHidden then return end
-        if not HUDScreen or not HUDScreen.Components[componentName] then return end
-        local nextDisplay = markerVisible and currentHash or ""
-        if nextDisplay == displayedHash then return end
-
-        if nextDisplay == "" then
-            ModifyTextBox({ Id = HUDScreen.Components[componentName].Id, ClearText = true })
-        else
-            ModifyTextBox({ Id = HUDScreen.Components[componentName].Id, Text = nextDisplay })
+        if marker then
+            marker.refresh()
         end
-        displayedHash = nextDisplay
     end
-
-    lib.hooks.Wrap(AdamantModpackFramework_Internal, "ShowHealthUI", "hud:" .. packId, function(base, args)
-        base(args)
-        if not markerHidden and config.ModEnabled then
-            displayedHash = nil
-            UpdateModMark()
-        end
-    end)
 
     local function updateHash()
         local _, fingerprint = hash.GetConfigHash()
@@ -103,7 +77,6 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
             currentHash = ""
             hashDirty = false
         end
-        displayedHash = nil
         UpdateModMark()
     end
 

@@ -21,7 +21,10 @@
 - The main UI was split into focused runtime, profile, Quick Setup, module-tab, dev, and theme files.
 - Profile/hash updates now flush on menu close instead of periodic HUD refreshes while the main UI is open.
 - HUD fingerprint wrapping now uses Lib's reload-stable hook registration instead of raw ModUtil wrapping.
+- HUD hash markers now use Lib's managed overlay stack instead of direct HUD component mutation.
+- Module-owned overlays are suppressed while that module's full tab or Quick Setup content is being drawn.
 - Hash/profile serialization now escapes reserved token characters inside keys and values.
+- Runtime-only storage aliases are rejected from hash groups so transient runtime markers cannot enter hash/profile output.
 - Hash computation now rejects hashes from newer unsupported hash ABI versions instead of warning and continuing.
 - `Hash.GetConfigHash(...)` now only supports the live pack state path; the unfinished profile-source argument was removed.
 - The HUD hash marker can be suppressed with `opts.hideHashMarker` while keeping the coordinator UI active.

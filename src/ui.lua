@@ -40,6 +40,29 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
     end
 
     local profiles
+    local suppressedOverlayOwners = {}
+    local drawnOverlayOwners = {}
+
+    local function markModuleOverlayDrawn(pluginGuid)
+        if type(pluginGuid) ~= "string" or pluginGuid == "" then
+            return
+        end
+        drawnOverlayOwners[pluginGuid] = true
+        if not suppressedOverlayOwners[pluginGuid] then
+            lib.overlays.setOwnerSuppressed(pluginGuid, true)
+            suppressedOverlayOwners[pluginGuid] = true
+        end
+    end
+
+    local function reconcileModuleOverlaySuppression()
+        for pluginGuid in pairs(suppressedOverlayOwners) do
+            if not drawnOverlayOwners[pluginGuid] then
+                lib.overlays.setOwnerSuppressed(pluginGuid, false)
+                suppressedOverlayOwners[pluginGuid] = nil
+            end
+        end
+        drawnOverlayOwners = {}
+    end
 
     local function snapshotToStaging()
         staging.ModEnabled = config.ModEnabled == true
@@ -94,12 +117,14 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
         runtime = runtime,
         snapshots = snapshots,
         colors = colors,
+        markModuleOverlayDrawn = markModuleOverlayDrawn,
     })
 
     local moduleTabs = internal.createUIModuleTabs({
         staging = staging,
         runtime = runtime,
         snapshots = snapshots,
+        markModuleOverlayDrawn = markModuleOverlayDrawn,
     })
 
     local dev = internal.createUIDev({
@@ -220,16 +245,22 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
     local function handleHostGuiClosed()
         flushPending()
         hud.setMarkerVisible(true)
+        drawnOverlayOwners = {}
+        reconcileModuleOverlaySuppression()
     end
 
     local function closeWindow()
         flushPending()
         hud.setMarkerVisible(true)
+        drawnOverlayOwners = {}
+        reconcileModuleOverlaySuppression()
         _showModWindow = false
     end
 
     local function renderWindow()
         if not _showModWindow then
+            drawnOverlayOwners = {}
+            reconcileModuleOverlaySuppression()
             return
         end
         hud.setMarkerVisible(false)
@@ -254,12 +285,16 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
         end
         PopTheme()
 
-        if openState == false then
-            closeWindow()
+        if not ok then
+            drawnOverlayOwners = {}
+            reconcileModuleOverlaySuppression()
+            error(err)
         end
 
-        if not ok then
-            error(err)
+        reconcileModuleOverlaySuppression()
+
+        if openState == false then
+            closeWindow()
         end
     end
 

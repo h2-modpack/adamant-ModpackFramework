@@ -9,6 +9,7 @@ function internal.createUIQuickSetup(ctx)
     local snapshots = ctx.snapshots
     local colors = ctx.colors
     local theme = ctx.theme
+    local markModuleOverlayDrawn = ctx.markModuleOverlayDrawn or function() end
 
     local quickSetupContext = {
         ui = ui,
@@ -43,6 +44,7 @@ function internal.createUIQuickSetup(ctx)
                 ui.Spacing()
                 lib.imguiHelpers.textColored(ui, colors.info, entry.name or entry.id)
                 ui.Spacing()
+                markModuleOverlayDrawn(entry.pluginGuid)
                 host.drawQuickContent(ui)
                 runtime.commitEntrySession(entry, snapshot)
             end

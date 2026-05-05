@@ -13,84 +13,50 @@ function TestMain:testCreateGuiCallbacksAreSafeBeforeInit()
     lu.assertTrue(menuBarOk)
 end
 
-function TestMain:testHudRefreshUsesStableHookWrapper()
+function TestMain:testCreateHudRegistersFrameworkHashOverlay()
     local previousScreenData = ScreenData
-    local previousHudScreen = HUDScreen
-    local previousModifyTextBox = ModifyTextBox
-    local previousModUtil = rom.mods["SGG_Modding-ModUtil"]
-    local previousGlobalModUtil = modutil
-    local previousHooks = AdamantModpackFramework_Internal.__adamantHooks
-    local wrapCalls = 0
-    local wrappedShowHealthUI
-    local modifiedText = nil
+    local previousRegisterStackedText = lib.overlays.registerStackedText
+    local registeredOpts = nil
+    local refreshCalls = 0
 
-    AdamantModpackFramework_Internal.__adamantHooks = nil
     ScreenData = {
         HUD = {
             ComponentData = {},
         },
     }
-    HUDScreen = {
-        Components = {
-            ["ModpackMark_test-pack"] = {
-                Id = 123,
-            },
-        },
-    }
-    ModifyTextBox = function(args)
-        modifiedText = args.Text
+
+    lib.overlays.registerStackedText = function(opts)
+        registeredOpts = opts
+        return {
+            refresh = function()
+                refreshCalls = refreshCalls + 1
+            end,
+        }
     end
-    local testModUtil = {
-        mod = {
-            Path = {
-                Wrap = function(path, handler)
-                    if path == "ShowHealthUI" then
-                        wrapCalls = wrapCalls + 1
-                        wrappedShowHealthUI = handler
-                    end
-                end,
-            },
-        },
-    }
-    rom.mods["SGG_Modding-ModUtil"] = testModUtil
-    modutil = testModUtil
 
     local theme = FrameworkTestApi.createTheme(lib)
     local config = { ModEnabled = true }
-    local baseCalls = 0
-    local hashA = {
+    local hash = {
         GetConfigHash = function()
-            return "hash-a", "fingerprint-a"
-        end,
-        ApplyConfigHash = function()
-            return true
-        end,
-    }
-    local hashB = {
-        GetConfigHash = function()
-            return "hash-b", "fingerprint-b"
+            return "hash", "fingerprint"
         end,
         ApplyConfigHash = function()
             return true
         end,
     }
 
-    FrameworkTestApi.createHud("test-pack", 1, hashA, theme, config, false)
-    FrameworkTestApi.createHud("test-pack", 1, hashB, theme, config, false)
-    wrappedShowHealthUI(function()
-        baseCalls = baseCalls + 1
-    end, {})
+    local hud = FrameworkTestApi.createHud("test-pack", 1, hash, theme, config, false)
+    hud.setMarkerVisible(false)
 
     ScreenData = previousScreenData
-    HUDScreen = previousHudScreen
-    ModifyTextBox = previousModifyTextBox
-    rom.mods["SGG_Modding-ModUtil"] = previousModUtil
-    modutil = previousGlobalModUtil
-    AdamantModpackFramework_Internal.__adamantHooks = previousHooks
+    lib.overlays.registerStackedText = previousRegisterStackedText
 
-    lu.assertEquals(wrapCalls, 1)
-    lu.assertEquals(baseCalls, 1)
-    lu.assertEquals(modifiedText, "fingerprint-b")
+    lu.assertEquals(registeredOpts.id, "framework:test-pack:hash")
+    lu.assertEquals(registeredOpts.region, "middleRightStack")
+    lu.assertEquals(registeredOpts.order, lib.overlays.order.framework + 1)
+    lu.assertEquals(registeredOpts.text(), "fingerprint")
+    lu.assertFalse(registeredOpts.visible())
+    lu.assertEquals(refreshCalls, 1)
 end
 
 function TestMain:testRenderWindowCleansUpImguiStacksBeforeRethrow()
