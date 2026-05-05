@@ -117,6 +117,7 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
     local cachedQuickList = nil
     local selectedTab = "Quick Setup"
     local _showModWindow = false
+    local uiSuppressionToken = nil
 
     for _, entry in ipairs(discovery.modules) do
         moduleByTabLabel[entry._tabLabel] = entry
@@ -217,22 +218,35 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
         hud.flushPendingHash()
     end
 
+    local function suppressOverlays()
+        if not uiSuppressionToken then
+            uiSuppressionToken = lib.overlays.suppressForUi()
+        end
+    end
+
+    local function releaseOverlaySuppression()
+        if uiSuppressionToken then
+            uiSuppressionToken.release()
+            uiSuppressionToken = nil
+        end
+    end
+
     local function handleHostGuiClosed()
         flushPending()
-        hud.setMarkerVisible(true)
+        releaseOverlaySuppression()
     end
 
     local function closeWindow()
         flushPending()
-        hud.setMarkerVisible(true)
         _showModWindow = false
+        releaseOverlaySuppression()
     end
 
     local function renderWindow()
         if not _showModWindow then
             return
         end
-        hud.setMarkerVisible(false)
+        suppressOverlays()
 
         PushTheme()
 
@@ -268,8 +282,8 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
             if _showModWindow then
                 closeWindow()
             else
-                hud.setMarkerVisible(false)
                 _showModWindow = true
+                suppressOverlays()
             end
         end
     end

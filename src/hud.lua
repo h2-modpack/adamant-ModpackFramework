@@ -18,7 +18,6 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
     local currentHash = config.ModEnabled and initFingerprint or ""
     local hashDirty = false
     local markerHidden = hideHashMarker == true
-    local markerVisible = true
     local marker = nil
 
     if not markerHidden then
@@ -34,7 +33,7 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
                 return currentHash
             end,
             visible = function()
-                return markerVisible and config.ModEnabled == true and currentHash ~= ""
+                return config.ModEnabled == true and currentHash ~= ""
             end,
         })
     end
@@ -62,11 +61,6 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
         end
     end
 
-    local function setMarkerVisible(visible)
-        markerVisible = visible == true
-        UpdateModMark()
-    end
-
     local function setModMarker(enabled)
         if enabled then
             local _, fingerprint = hash.GetConfigHash()
@@ -81,7 +75,6 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
 
     return {
         setModMarker    = setModMarker,
-        setMarkerVisible = setMarkerVisible,
         markHashDirty   = markHashDirty,
         flushPendingHash = flushPendingHash,
         updateHash      = updateHash,

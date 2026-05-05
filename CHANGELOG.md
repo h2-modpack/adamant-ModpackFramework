@@ -22,6 +22,7 @@
 - Profile/hash updates now flush on menu close instead of periodic HUD refreshes while the main UI is open.
 - HUD fingerprint wrapping now uses Lib's reload-stable hook registration instead of raw ModUtil wrapping.
 - HUD hash markers now use Lib's managed overlay stack instead of direct HUD component mutation.
+- Framework UI now uses Lib's global UI overlay suppression gate, making configuration UI and gameplay overlays mutually exclusive on screen.
 - Hash/profile serialization now escapes reserved token characters inside keys and values.
 - Runtime-only storage aliases are rejected from hash groups so transient runtime markers cannot enter hash/profile output.
 - Hash computation now rejects hashes from newer unsupported hash ABI versions instead of warning and continuing.

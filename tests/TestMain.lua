@@ -2,6 +2,20 @@ local lu = require('luaunit')
 
 TestMain = {}
 
+function TestMain:setUp()
+    local overlayState = AdamantModpackLib_Internal.overlays
+    self.previousUiSuppressors = overlayState.uiSuppressors
+    self.previousNextUiSuppressorId = overlayState.nextUiSuppressorId
+    overlayState.uiSuppressors = {}
+    overlayState.nextUiSuppressorId = 0
+end
+
+function TestMain:tearDown()
+    local overlayState = AdamantModpackLib_Internal.overlays
+    overlayState.uiSuppressors = self.previousUiSuppressors
+    overlayState.nextUiSuppressorId = self.previousNextUiSuppressorId
+end
+
 function TestMain:testCreateGuiCallbacksAreSafeBeforeInit()
     local callbacks = public.createGuiCallbacks("missing-pack")
     local renderOk = pcall(callbacks.render)
@@ -46,7 +60,7 @@ function TestMain:testCreateHudRegistersFrameworkHashOverlay()
     }
 
     local hud = FrameworkTestApi.createHud("test-pack", 1, hash, theme, config, false)
-    hud.setMarkerVisible(false)
+    hud.setModMarker(false)
 
     ScreenData = previousScreenData
     lib.overlays.registerStackedText = previousRegisterStackedText
@@ -54,7 +68,7 @@ function TestMain:testCreateHudRegistersFrameworkHashOverlay()
     lu.assertEquals(registeredOpts.id, "framework:test-pack:hash")
     lu.assertEquals(registeredOpts.region, "middleRightStack")
     lu.assertEquals(registeredOpts.order, lib.overlays.order.framework + 1)
-    lu.assertEquals(registeredOpts.text(), "fingerprint")
+    lu.assertEquals(registeredOpts.text(), "")
     lu.assertFalse(registeredOpts.visible())
     lu.assertEquals(refreshCalls, 1)
 end
@@ -1066,10 +1080,27 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     lu.assertEquals(closeCalls, 1)
 end
 
-function TestMain:testHostGuiCloseRestoresHudMarker()
-    local markerStates = {}
+function TestMain:testHostGuiCloseReleasesOverlaySuppression()
     local flushCalls = 0
+    local suppressCalls = 0
+    local releaseCalls = 0
+    local previousSuppressForUi = lib.overlays.suppressForUi
+    local previousImGui = rom.ImGui
     local function noop() end
+
+    lib.overlays.suppressForUi = function()
+        suppressCalls = suppressCalls + 1
+        return {
+            release = function()
+                releaseCalls = releaseCalls + 1
+            end,
+        }
+    end
+    rom.ImGui = {
+        MenuItem = function()
+            return true
+        end,
+    }
 
     local discovery = FrameworkTestApi.createDiscovery("test-pack", {
         ModEnabled = true,
@@ -1081,9 +1112,6 @@ function TestMain:testHostGuiCloseRestoresHudMarker()
     local hud = {
         flushPendingHash = function()
             flushCalls = flushCalls + 1
-        end,
-        setMarkerVisible = function(visible)
-            markerStates[#markerStates + 1] = visible
         end,
         getConfigHash = function()
             return "hash", "fingerprint"
@@ -1102,10 +1130,15 @@ function TestMain:testHostGuiCloseRestoresHudMarker()
         { Name = "", Hash = "", Tooltip = "" },
     }, nil)
 
+    ui.addMenuBar()
     ui.handleHostGuiClosed()
 
+    rom.ImGui = previousImGui
+    lib.overlays.suppressForUi = previousSuppressForUi
+
     lu.assertEquals(flushCalls, 1)
-    lu.assertEquals(markerStates, { true })
+    lu.assertEquals(suppressCalls, 1)
+    lu.assertEquals(releaseCalls, 1)
 end
 
 function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
