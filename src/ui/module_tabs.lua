@@ -5,7 +5,6 @@ function internal.createUIModuleTabs(ctx)
     local staging = ctx.staging
     local runtime = ctx.runtime
     local snapshots = ctx.snapshots
-    local markModuleOverlayDrawn = ctx.markModuleOverlayDrawn or function() end
 
     local ModuleTabs = {}
 
@@ -15,7 +14,6 @@ function internal.createUIModuleTabs(ctx)
             return
         end
 
-        markModuleOverlayDrawn(entry.pluginGuid)
         host.drawTab(ui)
 
         runtime.commitEntrySession(entry, snapshot)

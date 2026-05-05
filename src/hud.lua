@@ -12,7 +12,6 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
     assert(lib and lib.overlays and type(lib.overlays.registerHudText) == "function",
         "Framework.createHud: adamant-ModpackLib overlays are not available")
 
-    local HUD_LINE_HEIGHT = 24
     local componentName = "ModpackMark_" .. packId
 
     local _, initFingerprint = hash.GetConfigHash()
