@@ -206,9 +206,12 @@ local function makePersistedConfig(storage, overrides)
     }
     local transientAliases = {}
     for _, root in ipairs(storage or {}) do
-        if root.lifetime ~= "transient" then
-            persisted[root.configKey] = overrides and overrides[root.alias] or root.default
+        if root.persist == false then
+            transientAliases[root.alias] = true
         else
+            persisted[root.alias] = overrides and overrides[root.alias] or root.default
+        end
+        if root.stage == false then
             transientAliases[root.alias] = true
         end
     end
@@ -327,14 +330,14 @@ function MockDiscovery.create(moduleDefs)
         return host.setEnabled(enabled)
     end
 
-    function discovery.snapshot.getStorageValue(module, aliasOrKey, snapshot)
+    function discovery.snapshot.getStorageValue(module, alias, snapshot)
         local host = discovery.snapshot.getHost(module, snapshot)
-        return host.read(aliasOrKey)
+        return host.read(alias)
     end
 
-    function discovery.snapshot.setStorageValue(module, aliasOrKey, value, snapshot)
+    function discovery.snapshot.setStorageValue(module, alias, value, snapshot)
         local host = discovery.snapshot.getHost(module, snapshot)
-        return host.writeAndFlush(aliasOrKey, value)
+        return host.writeAndFlush(alias, value)
     end
 
     function discovery.snapshot.isDebugEnabled(entry, snapshot)

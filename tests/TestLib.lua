@@ -8,7 +8,7 @@ function TestLibHost:testCommitSessionFlushesManagedAliasState()
         id = "ManagedState",
         name = "Managed State",
         storage = {
-            { type = "bool", alias = "Flag", configKey = "Flag", default = false },
+            { type = "bool", alias = "Flag", default = false },
         },
         affectsRunData = false,
     })
@@ -28,8 +28,8 @@ TestLibValidation = {}
 function TestLibValidation:testDuplicateStorageAliasesWarn()
     CaptureWarnings()
     AdamantModpackLib_Internal.storage.validate({
-        { type = "bool", alias = "Flag", configKey = "FlagA", default = false },
-        { type = "bool", alias = "Flag", configKey = "FlagB", default = false },
+        { type = "bool", alias = "Flag", default = false },
+        { type = "bool", alias = "Flag", default = false },
     }, "DuplicateStorage")
     local warnings = Warnings
     RestoreWarnings()

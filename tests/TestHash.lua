@@ -29,8 +29,8 @@ function TestHashStorage:testAllDefaultsProduceVersionOnlyCanonical()
             id = "GodPool",
             enabled = false,
             storage = {
-                { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
-                { type = "int", alias = "Count", configKey = "Count", default = 3, min = 1, max = 9 },
+                { type = "bool", alias = "EnabledFlag", default = false },
+                { type = "int", alias = "Count", default = 3, min = 1, max = 9 },
             },
             values = {
                 EnabledFlag = false,
@@ -50,8 +50,8 @@ function TestHashStorage:testRegularAndSpecialStorageRoundTrip()
             id = "GodPool",
             enabled = true,
             storage = {
-                { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
-                { type = "int", alias = "Count", configKey = "Count", default = 3, min = 1, max = 9 },
+                { type = "bool", alias = "EnabledFlag", default = false },
+                { type = "int", alias = "Count", default = 3, min = 1, max = 9 },
             },
             values = {
                 EnabledFlag = true,
@@ -63,7 +63,7 @@ function TestHashStorage:testRegularAndSpecialStorageRoundTrip()
             name = "Biome Control",
             enabled = true,
             storage = {
-                { type = "string", alias = "Mode", configKey = "Mode", default = "Vanilla" },
+                { type = "string", alias = "Mode", default = "Vanilla" },
             },
             values = {
                 Mode = "Chaos",
@@ -106,7 +106,7 @@ function TestHashStorage:testStringStorageEscapesHashDelimiters()
             name = "Biome Control",
             enabled = true,
             storage = {
-                { type = "string", alias = "Filter", configKey = "Filter", default = "" },
+                { type = "string", alias = "Filter", default = "" },
             },
             values = {
                 Filter = "Apollo|Zeus=Poseidon%Chaos",
@@ -132,7 +132,7 @@ function TestHashStorage:testFingerprintChangesWithConfig()
             id = "GodPool",
             enabled = false,
             storage = {
-                { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+                { type = "bool", alias = "EnabledFlag", default = false },
             },
             values = { EnabledFlag = false },
         },
@@ -155,7 +155,7 @@ function TestHashStorage:testApplyConfigHashRollsBackWhenEnableFails()
             id = "GodPool",
             enabled = false,
             storage = {
-                { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+                { type = "bool", alias = "EnabledFlag", default = false },
             },
             values = { EnabledFlag = false },
             apply = function()
@@ -187,7 +187,7 @@ function TestHashStorage:testApplyConfigHashRejectsNewerVersion()
             id = "GodPool",
             enabled = false,
             storage = {
-                { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+                { type = "bool", alias = "EnabledFlag", default = false },
             },
             values = { EnabledFlag = false },
         },
@@ -222,7 +222,6 @@ function TestHashStorage:testHashGroupsRejectPackedChildAliases()
                 {
                     type = "packedInt",
                     alias = "PackedRoot",
-                    configKey = "PackedRoot",
                     bits = {
                         { alias = "EnabledBit", offset = 0, width = 1, type = "bool", default = false },
                     },
@@ -255,10 +254,10 @@ function TestHashStorage:testHashGroupsAllowPackedRootAliases()
                 },
             },
             storage = {
-                { type = "packedInt", alias = "PackedA", configKey = "PackedA", width = 12, bits = {
+                { type = "packedInt", alias = "PackedA", width = 12, bits = {
                     { alias = "AFlag", offset = 0, width = 1, type = "bool", default = false },
                 }},
-                { type = "packedInt", alias = "PackedB", configKey = "PackedB", width = 12, bits = {
+                { type = "packedInt", alias = "PackedB", width = 12, bits = {
                     { alias = "BFlag", offset = 0, width = 1, type = "bool", default = false },
                 }},
             },
@@ -280,8 +279,8 @@ function TestHashStorage:testTransientRootsAreExcludedFromHash()
             id = "GodPool",
             enabled = false,
             storage = {
-                { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
-                { type = "string", alias = "FilterText", lifetime = "transient", default = "", maxLen = 64 },
+                { type = "bool", alias = "EnabledFlag", default = false },
+                { type = "string", alias = "FilterText", persist = false, hash = false, default = "", maxLen = 64 },
             },
             values = {
                 EnabledFlag = true,
@@ -312,7 +311,7 @@ function TestHashStorage:testHashGroupsRejectTransientAliases()
                 },
             },
             storage = {
-                { type = "string", alias = "FilterMode", lifetime = "transient", default = "all", maxLen = 16 },
+                { type = "string", alias = "FilterMode", persist = false, hash = false, default = "all", maxLen = 16 },
             },
         },
     })
@@ -320,6 +319,6 @@ function TestHashStorage:testHashGroupsRejectTransientAliases()
     local canonical = makeHash(discovery).GetConfigHash()
 
     lu.assertEquals(canonical, "_v=1")
-    assertWarningContains("is transient; only persisted root aliases are supported")
+    assertWarningContains("is excluded from hashes; only hash root aliases are supported")
     RestoreWarnings()
 end

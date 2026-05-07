@@ -846,7 +846,7 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
             name = "Alpha",
             enabled = true,
             storage = {
-                { type = "bool", alias = "FlagA", configKey = "FlagA", default = false },
+                { type = "bool", alias = "FlagA", default = false },
             },
             DrawTab = function() end,
             DrawQuickContent = function(ui)
@@ -960,7 +960,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
             name = "Alpha",
             enabled = true,
             storage = {
-                { type = "bool", alias = "FlagA", configKey = "FlagA", default = false },
+                { type = "bool", alias = "FlagA", default = false },
             },
             DrawTab = function() end,
             DrawQuickContent = function()
@@ -1010,7 +1010,9 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
         id = entry.id,
         name = entry.name,
         modpack = entry.modpack,
-        storage = entry.storage,
+        storage = {
+            { type = "bool", alias = "FlagA", default = false },
+        },
     })
     local store, session = lib.createStore({
         Enabled = true,

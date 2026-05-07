@@ -35,6 +35,9 @@ Properties:
 - missing keys decode to current defaults
 - keys and values are token-escaped before joining with `=` and `|`
 
+`ModuleId=1` is the Lib-injected `Enabled` alias encoded as module enable
+state. Framework does not also emit `ModuleId.Enabled`.
+
 The same string is used for:
 - portable sharing
 - local coordinator profile slots
@@ -107,9 +110,15 @@ ModuleId.alias=value
 ```
 
 `alias` is the hash key.
-`configKey` is the Chalk persistence path.
 
-If `alias` is omitted, it defaults to the stringified `configKey`, which means `configKey` becomes the hash key and is implicitly frozen.
+Lib also uses `alias` as the managed persistence key for ordinary storage roots.
+Aliases are direct flat storage identifiers.
+
+Only roots with `hash ~= false` participate in hash/profile serialization.
+
+Exception: Lib injects `Enabled` as normal prepared storage, but Framework
+serializes it through the module-level `ModuleId=1` key so module enabled state
+keeps the historical hash format. Lib-injected `DebugMode` has `hash = false`.
 
 ### `default`
 
@@ -153,11 +162,13 @@ Supported members:
 
 Not supported:
 - packed child aliases
-- transient root aliases
+- `Enabled`
+- roots declared with `hash = false`
 
 Reason:
 - packed child aliases already belong to a packed root
-- transient state is intentionally not part of portable/shared config state
+- `Enabled` is encoded as module enable state
+- non-hash state is intentionally not part of portable/shared config state
 
 ## Decode Behavior
 

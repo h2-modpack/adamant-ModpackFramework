@@ -75,7 +75,13 @@ function Framework.createHash(discovery, config, lib, packId)
         if type(entry.storage) ~= "table" then
             return {}
         end
-        return getStorageRoots(entry.storage)
+        local roots = {}
+        for _, root in ipairs(getStorageRoots(entry.storage)) do
+            if root.alias ~= "Enabled" then
+                roots[#roots + 1] = root
+            end
+        end
+        return roots
     end
 
     local function CaptureApplySnapshot(snapshot)

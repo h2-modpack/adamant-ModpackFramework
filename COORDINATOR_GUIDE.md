@@ -116,7 +116,7 @@ The sidebar is module-based: one tab per discovered module, in discovery order.
 
 Module tabs are simple:
 - Framework renders the enable checkbox
-- Framework snapshots the current module hosts at the start of the UI operation
+- Framework snapshots live module hosts at the start of the UI operation
 - Framework calls the selected module host's `drawTab(ui)` when enabled
 - if staged state is dirty after draw, Framework commits it through that snapshot host's `commitIfDirty()`
 
@@ -136,11 +136,11 @@ See [QUICK_SETUP.md](QUICK_SETUP.md).
 Coordinator bootstrap normally reruns `Framework.init(...)` from the reload body.
 
 The coordinator owns init arguments and re-calls `Framework.init(...)` when the coordinator/framework layer reloads.
-Framework replaces the current pack state for the same `packId` while preserving that pack's stable HUD/index slot.
+Framework replaces pack state for the same `packId` while preserving that pack's stable HUD/index slot.
 
 Coordinated module behavior reloads do not rebuild the pack. Instead:
 - discovery metadata remains static for the process
-- UI and hash paths snapshot the module's current live host at the start of each operation
+- UI and hash paths snapshot the module's live host at the start of each operation
 
 Coordinated module structural reloads can request a pack rebuild through Lib's coordinator rebuild callback.
 If no callback is registered or the request is rejected, the module warns that a full reload is required.

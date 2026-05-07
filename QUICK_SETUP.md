@@ -36,7 +36,7 @@ Framework.init(PACK_ID, "My Modpack", config, #config.Profiles, defaultProfiles,
 })
 ```
 
-Current `ctx` fields:
+`ctx` fields:
 - `ui`
 - `colors`
 - `theme`
@@ -74,7 +74,7 @@ lib.createModuleHost({
 
 Framework behavior:
 - only enabled modules render their quick content
-- Framework snapshots the current module hosts at the start of the UI operation
+- Framework snapshots live module hosts at the start of the UI operation
 - module quick content is called through that snapshot host's `drawQuickContent(ui)`
 - the draw callback receives the restricted author `session`
 - if the module dirty-stages persisted state during quick content, Framework commits it after draw

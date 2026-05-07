@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Hash/profile storage filtering now follows Lib's explicit `hash` storage axis instead of the old transient/runtime flags.
+- Updated hash/profile ABI docs for direct alias-owned managed storage keys.
+- Framework now treats Lib-injected `Enabled` storage as the module-level hash key while excluding `DebugMode` and non-hash storage from hash/profile output.
+
 ## [1.1.0] - 2026-05-05
 
 ### Added

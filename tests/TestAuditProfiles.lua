@@ -10,12 +10,12 @@ function TestAuditProfiles:tearDown()
     RestoreWarnings()
 end
 
-function TestAuditProfiles:testKnownStorageKeysProduceNoWarnings()
+function TestAuditProfiles:testKnownStorageAliasesProduceNoWarnings()
     local discovery = MockDiscovery.create({
         {
             id = "GodPool",
             storage = {
-                { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+                { type = "bool", alias = "EnabledFlag", default = false },
             },
         },
     })
@@ -34,7 +34,7 @@ function TestAuditProfiles:testUnknownKeyInKnownNamespaceWarns()
         {
             id = "GodPool",
             storage = {
-                { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+                { type = "bool", alias = "EnabledFlag", default = false },
             },
         },
     })
@@ -52,7 +52,7 @@ function TestAuditProfiles:testUnknownNamespaceIsIgnored()
         {
             id = "GodPool",
             storage = {
-                { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+                { type = "bool", alias = "EnabledFlag", default = false },
             },
         },
     })

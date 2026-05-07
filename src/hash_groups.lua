@@ -32,21 +32,21 @@ function Framework.createHashGroups(lib, packId)
             contractWarn(packId, "hashGroups: unknown alias '%s' in group '%s'", alias, groupKey)
             return nil
         end
+        if alias == "Enabled" then
+            contractWarn(packId,
+                "hashGroups: alias '%s' in group '%s' is encoded as module enable state; storage groups cannot include it",
+                alias, groupKey)
+            return nil
+        end
         if node._isBitAlias then
             contractWarn(packId,
                 "hashGroups: alias '%s' in group '%s' is a packed child alias; only root storage aliases are supported",
                 alias, groupKey)
             return nil
         end
-        if node._lifetime == "transient" then
+        if node._hash ~= true then
             contractWarn(packId,
-                "hashGroups: alias '%s' in group '%s' is transient; only persisted root aliases are supported",
-                alias, groupKey)
-            return nil
-        end
-        if node._runtime == true then
-            contractWarn(packId,
-                "hashGroups: alias '%s' in group '%s' is runtime-only; runtime storage is excluded from hashes",
+                "hashGroups: alias '%s' in group '%s' is excluded from hashes; only hash root aliases are supported",
                 alias, groupKey)
             return nil
         end

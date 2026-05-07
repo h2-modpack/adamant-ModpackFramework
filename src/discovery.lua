@@ -31,20 +31,20 @@ function Framework.createDiscovery(packId, config, lib)
         return host.affectsRunData() == true
     end
 
-    local function ReadPersisted(entry, key, snapshot)
+    local function ReadPersisted(entry, alias, snapshot)
         local host = Discovery.snapshot.getHost(entry, snapshot)
         if not host then
             return nil
         end
-        return host.read(key)
+        return host.read(alias)
     end
 
-    local function WriteStagedAndFlush(entry, key, value, snapshot)
+    local function WriteStagedAndFlush(entry, alias, value, snapshot)
         local host = Discovery.snapshot.getHost(entry, snapshot)
         if not host then
             return false, "module host is unavailable"
         end
-        return host.writeAndFlush(key, value)
+        return host.writeAndFlush(alias, value)
     end
 
     local function SetEntryEnabled(entry, enabled, snapshot)
@@ -252,12 +252,12 @@ function Framework.createDiscovery(packId, config, lib)
         return SetEntryEnabled(entry, enabled, snapshot)
     end
 
-    function Discovery.snapshot.getStorageValue(module, aliasOrKey, snapshot)
-        return ReadPersisted(module, aliasOrKey, snapshot)
+    function Discovery.snapshot.getStorageValue(module, alias, snapshot)
+        return ReadPersisted(module, alias, snapshot)
     end
 
-    function Discovery.snapshot.setStorageValue(module, aliasOrKey, value, snapshot)
-        return WriteStagedAndFlush(module, aliasOrKey, value, snapshot)
+    function Discovery.snapshot.setStorageValue(module, alias, value, snapshot)
+        return WriteStagedAndFlush(module, alias, value, snapshot)
     end
 
     function Discovery.snapshot.isDebugEnabled(entry, snapshot)

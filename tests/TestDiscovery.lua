@@ -48,7 +48,7 @@ function TestDiscovery:testModulesDiscoverDrawTabAndQuickContent()
         name = "God Pool",
         shortName = "Pool",
         storage = {
-            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+            { type = "bool", alias = "EnabledFlag", default = false },
         },
         apply = function() end,
         revert = function() end,
@@ -72,7 +72,7 @@ function TestDiscovery:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissing()
         id = "GodPool",
         name = "God Pool",
         storage = {
-            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+            { type = "bool", alias = "EnabledFlag", default = false },
         },
         apply = function() end,
         revert = function() end,
@@ -138,7 +138,7 @@ function TestDiscovery:testCapturedSnapshotIsStableAcrossHostReplacement()
         id = "GodPool",
         name = "God Pool",
         storage = {
-            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+            { type = "bool", alias = "EnabledFlag", default = false },
         },
         apply = function() end,
         revert = function() end,
@@ -196,7 +196,7 @@ function TestDiscovery:testHostSnapshotWarnsOnceWhenHostStaysMissing()
         id = "GodPool",
         name = "God Pool",
         storage = {
-            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+            { type = "bool", alias = "EnabledFlag", default = false },
         },
         apply = function() end,
         revert = function() end,
@@ -222,7 +222,7 @@ function TestDiscovery:testSnapshotAccessRequiresCapturedSnapshot()
         id = "GodPool",
         name = "God Pool",
         storage = {
-            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+            { type = "bool", alias = "EnabledFlag", default = false },
         },
         apply = function() end,
         revert = function() end,
@@ -281,7 +281,7 @@ function TestDiscovery:testMissingDrawTabIsRejectedByLibHostCreation()
         id = "NoDrawTab",
         name = "No DrawTab",
         storage = {
-            { type = "bool", alias = "EnabledFlag", configKey = "EnabledFlag", default = false },
+            { type = "bool", alias = "EnabledFlag", default = false },
         },
         apply = function() end,
         revert = function() end,
@@ -298,7 +298,7 @@ function TestDiscovery:testDuplicateIdsSkipConflictingEntries()
         id = "SharedId",
         name = "Alpha",
         storage = {
-            { type = "bool", alias = "Flag", configKey = "Flag", default = false },
+            { type = "bool", alias = "Flag", default = false },
         },
         apply = function() end,
         revert = function() end,
@@ -310,7 +310,7 @@ function TestDiscovery:testDuplicateIdsSkipConflictingEntries()
         id = "SharedId",
         name = "Bravo",
         storage = {
-            { type = "bool", alias = "Flag", configKey = "Flag", default = false },
+            { type = "bool", alias = "Flag", default = false },
         },
         apply = function() end,
         revert = function() end,
@@ -332,7 +332,7 @@ function TestDiscovery:testTabOrderPinsKnownIdsFirst()
         id = "GodPool",
         name = "God Pool",
         storage = {
-            { type = "bool", alias = "FlagA", configKey = "FlagA", default = false },
+            { type = "bool", alias = "FlagA", default = false },
         },
         apply = function() end,
         revert = function() end,
@@ -345,7 +345,7 @@ function TestDiscovery:testTabOrderPinsKnownIdsFirst()
         name = "Biome Control",
         shortName = "Biome",
         storage = {
-            { type = "bool", alias = "FlagB", configKey = "FlagB", default = false },
+            { type = "bool", alias = "FlagB", default = false },
         },
         apply = function() end,
         revert = function() end,
@@ -357,7 +357,7 @@ function TestDiscovery:testTabOrderPinsKnownIdsFirst()
         id = "BoonBans",
         name = "Boon Bans",
         storage = {
-            { type = "bool", alias = "FlagC", configKey = "FlagC", default = false },
+            { type = "bool", alias = "FlagC", default = false },
         },
         apply = function() end,
         revert = function() end,
@@ -380,7 +380,7 @@ function TestDiscovery:testTabOrderIgnoresLabels()
         id = "GodPool",
         name = "God Pool",
         storage = {
-            { type = "bool", alias = "FlagA", configKey = "FlagA", default = false },
+            { type = "bool", alias = "FlagA", default = false },
         },
         apply = function() end,
         revert = function() end,
@@ -393,7 +393,7 @@ function TestDiscovery:testTabOrderIgnoresLabels()
         name = "Biome Control",
         shortName = "Biome",
         storage = {
-            { type = "bool", alias = "FlagB", configKey = "FlagB", default = false },
+            { type = "bool", alias = "FlagB", default = false },
         },
         apply = function() end,
         revert = function() end,

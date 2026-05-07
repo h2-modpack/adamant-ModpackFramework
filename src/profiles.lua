@@ -27,7 +27,7 @@ function internal.auditSavedProfiles(packId, profiles, discovery, lib)
         local fields = {}
         if entry.storage then
             for _, root in ipairs(entry.storage) do
-                if root._isRoot and root.alias ~= nil and root._runtime ~= true then
+                if root._isRoot and root.alias ~= nil and root._hash == true then
                     fields[tostring(root.alias)] = true
                 end
             end
