@@ -10,13 +10,12 @@ function TestLibHost:testCommitSessionFlushesManagedAliasState()
         storage = {
             { type = "bool", alias = "Flag", default = false },
         },
-        affectsRunData = false,
     })
     local store, session = lib.createStore(config, definition)
 
     session.write("Flag", true)
 
-    local ok, err = lib.lifecycle.commitSession(definition, store, session)
+    local ok, err = lib.lifecycle.commitSession(definition, nil, nil, store, session)
 
     lu.assertTrue(ok, tostring(err))
     lu.assertTrue(config.Flag)
@@ -25,17 +24,13 @@ end
 
 TestLibValidation = {}
 
-function TestLibValidation:testDuplicateStorageAliasesWarn()
-    CaptureWarnings()
-    AdamantModpackLib_Internal.storage.validate({
-        { type = "bool", alias = "Flag", default = false },
-        { type = "bool", alias = "Flag", default = false },
-    }, "DuplicateStorage")
-    local warnings = Warnings
-    RestoreWarnings()
-
-    lu.assertEquals(#warnings, 1)
-    lu.assertStrContains(warnings[1], "duplicate alias 'Flag'")
+function TestLibValidation:testDuplicateStorageAliasesFail()
+    lu.assertErrorMsgContains("duplicate alias 'Flag'", function()
+        AdamantModpackLib_Internal.storage.validate({
+            { type = "bool", alias = "Flag", default = false },
+            { type = "bool", alias = "Flag", default = false },
+        }, "DuplicateStorage")
+    end)
 end
 
 

@@ -248,24 +248,27 @@ function MockDiscovery.create(moduleDefs)
             modpack = def.modpack or "test-pack",
             storage = def.storage or {},
             hashGroupPlan = def.hashGroupPlan,
-            affectsRunData = def.affectsRunData == true,
-            apply = def.apply,
-            revert = def.revert,
-            patchPlan = def.patchPlan,
             shortName = def.shortName,
             tooltip = def.tooltip,
         })
         local store, session = lib.createStore(persisted, definition)
-        local host = lib.createModuleHost({
-            pluginGuid = def.pluginGuid or ("adamant-" .. def.id),
+        local pluginGuid = def.pluginGuid or ("adamant-" .. def.id)
+        lib.createModuleHost({
+            pluginGuid = pluginGuid,
             definition = definition,
             store = store,
             session = session,
             drawTab = def.DrawTab or function() end,
             drawQuickContent = def.DrawQuickContent,
+            registerPatchMutation = def.patchPlan,
+            registerManualMutation = def.apply and def.revert and {
+                apply = def.apply,
+                revert = def.revert,
+            } or nil,
         })
+        local host = lib.getLiveModuleHost(pluginGuid)
         local module = {
-            pluginGuid = def.pluginGuid or ("adamant-" .. def.id),
+            pluginGuid = pluginGuid,
             mod = {
                 definition = definition,
                 host = host,
@@ -276,7 +279,7 @@ function MockDiscovery.create(moduleDefs)
             shortName = definition.shortName,
             tooltip = definition.tooltip,
             modpack = definition.modpack,
-            affectsRunData = definition.affectsRunData == true,
+            affectsRunData = host.affectsRunData(),
             hashHints = definition.hashGroupPlan,
             storage = definition.storage,
         }

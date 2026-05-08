@@ -15,16 +15,30 @@ end
 
 local function attachModule(pluginGuid, definition, persisted, exports)
     exports = exports or {}
-    definition = lib.prepareDefinition({}, definition)
+    local manualMutation = definition.apply and definition.revert and {
+        apply = definition.apply,
+        revert = definition.revert,
+    } or nil
+    definition = lib.prepareDefinition({}, {
+        modpack = definition.modpack,
+        id = definition.id,
+        name = definition.name,
+        shortName = definition.shortName,
+        tooltip = definition.tooltip,
+        storage = definition.storage,
+        hashGroupPlan = definition.hashGroupPlan,
+    })
     local store, session = lib.createStore(persisted or {}, definition)
-    exports.host = lib.createModuleHost({
+    lib.createModuleHost({
         pluginGuid = pluginGuid,
         definition = definition,
         store = store,
         session = session,
         drawTab = exports.DrawTab,
         drawQuickContent = exports.DrawQuickContent,
+        registerManualMutation = manualMutation,
     })
+    exports.host = lib.getLiveModuleHost(pluginGuid)
     AdamantModpackLib_Internal.liveModuleHosts[pluginGuid] = exports.host
     rom.mods[pluginGuid] = exports
     return exports

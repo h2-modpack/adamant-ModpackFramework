@@ -246,25 +246,27 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
         id = "Alpha",
         name = "Alpha",
         storage = {},
-        affectsRunData = true,
-        apply = function()
-            applyCalls = applyCalls + 1
-        end,
-        revert = function()
-            revertCalls = revertCalls + 1
-        end,
     })
     local store, session = lib.createStore({
         Enabled = true,
         DebugMode = false,
     }, definition)
-    local host = lib.createModuleHost({
+    lib.createModuleHost({
         pluginGuid = "test-pack.Alpha",
         definition = definition,
         store = store,
         session = session,
+        registerManualMutation = {
+            apply = function()
+                applyCalls = applyCalls + 1
+            end,
+            revert = function()
+                revertCalls = revertCalls + 1
+            end,
+        },
         drawTab = function() end,
     })
+    local host = lib.getLiveModuleHost("test-pack.Alpha")
 
     lu.assertEquals(applyCalls, 0)
     lib.lifecycle.registerCoordinator(packId, {

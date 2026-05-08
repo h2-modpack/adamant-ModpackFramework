@@ -20,23 +20,23 @@ It provides:
 Modules participate by exposing a Lib module host:
 
 ```lua
-local definition = lib.prepareDefinition(internal, dataDefaults, {
-    modpack = PACK_ID,
-    ...
-})
-
-lib.createModuleHost({
-    definition = definition,
-    store = store,
-    session = session,
-    hookOwner = internal,
+internal.host, internal.store = lib.createModule({
+    owner = internal,
+    pluginGuid = PLUGIN_GUID,
+    config = config,
+    definition = {
+        modpack = PACK_ID,
+        id = MODULE_ID,
+        name = "Example Module",
+        storage = internal.BuildStorage(),
+    },
     registerHooks = internal.RegisterHooks,
     drawTab = internal.DrawTab,
     drawQuickContent = internal.DrawQuickContent,
 })
 ```
 
-If a module does not register runtime hooks, `hookOwner` and `registerHooks` may be omitted.
+If a module does not register runtime hooks, `registerHooks` may be omitted.
 Lib publishes the created host into its live-host registry. Framework discovers modules
 through that registry rather than reading module globals directly.
 
