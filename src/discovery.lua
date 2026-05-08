@@ -158,8 +158,6 @@ function Framework.createDiscovery(packId, config, lib)
                 if not id or not name then
                     contractWarn(packId,
                         "Skipping %s: missing id/name", pluginGuid)
-                elseif type(foundModule.storage) ~= "table" then
-                    contractWarn(packId, "Skipping %s: missing host storage contract", pluginGuid)
                 else
                     local discovered = BuildEntry(foundModule)
                     table.insert(Discovery.modules, discovered)
@@ -233,13 +231,7 @@ function Framework.createDiscovery(packId, config, lib)
         return GetHost(entry.pluginGuid)
     end
 
-    local function RequireSnapshot(snapshot)
-        assert(type(snapshot) == "table" and type(snapshot.hosts) == "table",
-            "discovery.snapshot access requires a captured host snapshot")
-    end
-
     function Discovery.snapshot.getHost(entry, snapshot)
-        RequireSnapshot(snapshot)
         local host = snapshot.hosts[entry]
         return host or nil
     end

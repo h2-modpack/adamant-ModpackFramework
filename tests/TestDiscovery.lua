@@ -230,62 +230,21 @@ function TestDiscovery:testHostSnapshotWarnsOnceWhenHostStaysMissing()
     lu.assertStrContains(Warnings[1], "module host is unavailable")
 end
 
-function TestDiscovery:testSnapshotAccessRequiresCapturedSnapshot()
-    attachModule("test-GodPool", {
+function TestDiscovery:testModuleWithOnlyBuiltInStorageIsDiscovered()
+    attachModule("test-BuiltInsOnly", {
         modpack = "test-pack",
-        id = "GodPool",
-        name = "God Pool",
-        storage = {
-            { type = "bool", alias = "EnabledFlag", default = false },
-        },
-        apply = function() end,
-        revert = function() end,
-    }, { Enabled = false, DebugMode = false, EnabledFlag = false }, {
+        id = "BuiltInsOnly",
+        name = "Built Ins Only",
+    }, { Enabled = false, DebugMode = false }, {
         DrawTab = function() end,
     })
 
     local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
     discovery.run()
 
-    lu.assertErrorMsgContains(
-        "discovery.snapshot access requires a captured host snapshot",
-        function()
-            discovery.snapshot.getHost(discovery.modules[1])
-        end)
-end
-
-function TestDiscovery:testMissingStorageSkipsModule()
-    AdamantModpackLib_Internal.liveModuleHosts["test-MissingStorage"] = {
-        getStorage = function()
-            return nil
-        end,
-        getIdentity = function()
-            return {
-                id = "MissingStorage",
-                modpack = "test-pack",
-            }
-        end,
-        getMeta = function()
-            return {
-                name = "Missing Storage",
-            }
-        end,
-        getHashHints = function()
-            return nil
-        end,
-        affectsRunData = function()
-            return false
-        end,
-        drawTab = function() end,
-    }
-    rom.mods["test-MissingStorage"] = {}
-
-    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run()
-
-    lu.assertEquals(#discovery.modules, 0)
-    lu.assertEquals(#Warnings, 1)
-    lu.assertStrContains(Warnings[1], "missing host storage contract")
+    lu.assertEquals(#discovery.modules, 1)
+    lu.assertEquals(discovery.modules[1].id, "BuiltInsOnly")
+    lu.assertEquals(#Warnings, 0)
 end
 
 function TestDiscovery:testMissingDrawTabIsRejectedByLibHostCreation()

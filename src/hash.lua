@@ -12,7 +12,6 @@ function Framework.createHash(discovery, config, lib, packId)
     local decodeHashValue = lib.hashing.fromHash
 
     local function ReadPersisted(entry, key, snapshot)
-        assert(snapshot ~= nil, "Hash ReadPersisted requires a captured discovery snapshot")
         return discovery.snapshot.getStorageValue(entry, key, snapshot)
     end
 
@@ -44,9 +43,6 @@ function Framework.createHash(discovery, config, lib, packId)
     end
 
     local function GetEntryHashMeta(entry)
-        if type(entry.storage) ~= "table" then
-            return {}, {}
-        end
         return hashGroups.build(entry.storage, entry.hashHints)
     end
 
@@ -72,9 +68,6 @@ function Framework.createHash(discovery, config, lib, packId)
     end
 
     local function GetRootStorage(entry)
-        if type(entry.storage) ~= "table" then
-            return {}
-        end
         local roots = {}
         for _, root in ipairs(getStorageRoots(entry.storage)) do
             if root.alias ~= "Enabled" then
