@@ -29,7 +29,7 @@ local function attachModule(pluginGuid, definition, persisted, exports)
         hashGroupPlan = definition.hashGroupPlan,
     })
     local store, session = lib.createStore(persisted or {}, definition)
-    lib.createModuleHost({
+    local host, authorHost = lib.createModuleHost({
         pluginGuid = pluginGuid,
         definition = definition,
         store = store,
@@ -38,8 +38,8 @@ local function attachModule(pluginGuid, definition, persisted, exports)
         drawQuickContent = exports.DrawQuickContent,
         registerManualMutation = manualMutation,
     })
-    exports.host = lib.getLiveModuleHost(pluginGuid)
-    AdamantModpackLib_Internal.liveModuleHosts[pluginGuid] = exports.host
+    authorHost.activate()
+    exports.host = host
     rom.mods[pluginGuid] = exports
     return exports
 end

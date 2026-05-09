@@ -251,7 +251,7 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
         Enabled = true,
         DebugMode = false,
     }, definition)
-    lib.createModuleHost({
+    local host, authorHost = lib.createModuleHost({
         pluginGuid = "test-pack.Alpha",
         definition = definition,
         store = store,
@@ -266,7 +266,7 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
         },
         drawTab = function() end,
     })
-    local host = lib.getLiveModuleHost("test-pack.Alpha")
+    authorHost.activate()
 
     lu.assertEquals(applyCalls, 0)
     lib.lifecycle.registerCoordinator(packId, {
@@ -1021,7 +1021,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
         DebugMode = false,
         FlagA = false,
     }, replacementDefinition)
-    local replacementHost = lib.createModuleHost({
+    local replacementHost, replacementAuthorHost = lib.createModuleHost({
         pluginGuid = entry.pluginGuid,
         definition = replacementDefinition,
         store = store,
@@ -1031,6 +1031,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
             secondQuickRenders = secondQuickRenders + 1
         end,
     })
+    replacementAuthorHost.activate()
     rom.mods[entry.pluginGuid].host = replacementHost
 
     local okSecond, errSecond = pcall(builtUi.renderWindow)

@@ -253,7 +253,7 @@ function MockDiscovery.create(moduleDefs)
         })
         local store, session = lib.createStore(persisted, definition)
         local pluginGuid = def.pluginGuid or ("adamant-" .. def.id)
-        lib.createModuleHost({
+        local host, authorHost = lib.createModuleHost({
             pluginGuid = pluginGuid,
             definition = definition,
             store = store,
@@ -266,7 +266,7 @@ function MockDiscovery.create(moduleDefs)
                 revert = def.revert,
             } or nil,
         })
-        local host = lib.getLiveModuleHost(pluginGuid)
+        authorHost.activate()
         local module = {
             pluginGuid = pluginGuid,
             mod = {

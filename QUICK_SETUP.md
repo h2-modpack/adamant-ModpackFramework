@@ -57,7 +57,7 @@ internal.DrawQuickContent = function(ui, session)
     ...
 end
 
-internal.host, internal.store = lib.createModule({
+local host = lib.createModule({
     owner = internal,
     pluginGuid = PLUGIN_GUID,
     config = config,
@@ -71,6 +71,7 @@ internal.host, internal.store = lib.createModule({
     drawTab = internal.DrawTab,
     drawQuickContent = internal.DrawQuickContent,
 })
+host.activate()
 ```
 
 Framework behavior:

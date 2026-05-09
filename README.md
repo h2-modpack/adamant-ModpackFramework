@@ -20,7 +20,7 @@ It provides:
 Modules participate by exposing a Lib module host:
 
 ```lua
-internal.host, internal.store = lib.createModule({
+local host = lib.createModule({
     owner = internal,
     pluginGuid = PLUGIN_GUID,
     config = config,
@@ -34,10 +34,11 @@ internal.host, internal.store = lib.createModule({
     drawTab = internal.DrawTab,
     drawQuickContent = internal.DrawQuickContent,
 })
+host.activate()
 ```
 
 If a module does not register runtime hooks, `registerHooks` may be omitted.
-Lib publishes the created host into its live-host registry. Framework discovers modules
+Host activation publishes the created host into Lib's live-host registry. Framework discovers modules
 through that registry rather than reading module globals directly.
 
 ## Docs
