@@ -15,7 +15,7 @@ function TestLibHost:testCommitSessionFlushesManagedAliasState()
 
     session.write("Flag", true)
 
-    local ok, err = lib.lifecycle.commitSession(definition, nil, nil, store, session)
+    local ok, err = lib.lifecycle.commitSession(definition, nil, nil, nil, store, session)
 
     lu.assertTrue(ok, tostring(err))
     lu.assertTrue(config.Flag)
