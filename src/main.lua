@@ -48,24 +48,38 @@ local function ValidateInitArgs(packId, windowTitle, config, numProfiles, defaul
     return opts
 end
 
+local function ValidateRuntimePrerequisites()
+    assert(rom and type(rom.ImGui) == "table",
+        "Framework.init: rom.ImGui is not ready; call Framework.init after game load")
+    assert(rom.game and type(rom.game.SetupRunData) == "function",
+        "Framework.init: rom.game.SetupRunData is not ready; call Framework.init after game load")
+    assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
+        "Framework.init: game HUD globals are not ready; call Framework.init after game load")
+    assert(lib and lib.overlays and type(lib.overlays.registerStackedText) == "function",
+        "Framework.init: adamant-ModpackLib overlays are not available")
+end
+
 function Framework.init(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
     opts = ValidateInitArgs(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
     assert(lib.isModuleCoordinated(packId),
         "Framework.init: coordinator must register before init; see Core/main.lua")
 
     import_as_fallback(rom.game)
+    ValidateRuntimePrerequisites()
 
-    local packIndex = internal.packs[packId] and internal.packs[packId]._index or nil
-    if not packIndex then
-        table.insert(internal.packList, packId)
-        packIndex = #internal.packList
-    end
+    local existingPack = internal.packs[packId]
+    local packIndex = existingPack and existingPack._index or #internal.packList + 1
 
     local discovery = Framework.createDiscovery(packId, config, lib)
     local hash = Framework.createHash(discovery, config, lib, packId)
     local theme = Framework.createTheme(lib)
 
     discovery.run(opts.moduleOrder)
+
+    local hud = Framework.createHud(packId, packIndex, hash, theme, config,
+        opts.hideHashMarker == true)
+    local ui = Framework.createUI(discovery, hud, theme, config, packId, windowTitle,
+        numProfiles, defaultProfiles, opts.renderQuickSetup)
 
     local startupSnapshot = discovery.live.captureSnapshot()
     local needsRunDataSetup = false
@@ -90,11 +104,6 @@ function Framework.init(packId, windowTitle, config, numProfiles, defaultProfile
 
     internal.auditSavedProfiles(packId, config.Profiles, discovery, lib)
 
-    local hud = Framework.createHud(packId, packIndex, hash, theme, config,
-        opts.hideHashMarker == true)
-    local ui = Framework.createUI(discovery, hud, theme, config, packId, windowTitle,
-        numProfiles, defaultProfiles, opts.renderQuickSetup)
-
     local pack = {
         discovery = discovery,
         hash = hash,
@@ -102,6 +111,9 @@ function Framework.init(packId, windowTitle, config, numProfiles, defaultProfile
         ui = ui,
         _index = packIndex,
     }
+    if not existingPack then
+        table.insert(internal.packList, packId)
+    end
     internal.packs[packId] = pack
 
     if config.ModEnabled then
@@ -112,6 +124,23 @@ function Framework.init(packId, windowTitle, config, numProfiles, defaultProfile
 end
 
 public.init = Framework.init
+
+function Framework.tryInit(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
+    local ok, pack = xpcall(function()
+        return Framework.init(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
+    end, debug.traceback)
+
+    if ok then
+        return true, pack, nil
+    end
+
+    local err = tostring(pack)
+    local logPackId = type(packId) == "string" and packId ~= "" and packId or "framework"
+    lib.logging.warn(logPackId, "Framework init failed; skipping pack: %s", err)
+    return false, nil, err
+end
+
+public.tryInit = Framework.tryInit
 
 function Framework.createGuiCallbacks(packId)
     assert(type(packId) == "string" and packId ~= "",

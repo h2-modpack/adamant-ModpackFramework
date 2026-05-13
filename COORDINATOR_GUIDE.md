@@ -34,18 +34,24 @@ end
 
 local function init()
     lib.lifecycle.registerCoordinator(PACK_ID, config)
-    Framework.init(PACK_ID, "My Modpack", config, #config.Profiles, defaultProfiles, {
+    local ok = Framework.tryInit(PACK_ID, "My Modpack", config, #config.Profiles, defaultProfiles, {
         moduleOrder = {
             "ExampleModule",
         },
         renderQuickSetup = renderQuickSetup,
     })
+    if not ok then
+        return
+    end
 end
 
 local function registerGui()
     local Framework = rom.mods["adamant-ModpackFramework"]
 
-    Framework.registerGui(PACK_ID)
+    local callbacks = Framework.createGuiCallbacks(PACK_ID)
+    rom.gui.add_imgui(callbacks.render)
+    rom.gui.add_always_draw_imgui(callbacks.alwaysDraw)
+    rom.gui.add_to_menu_bar(callbacks.menuBar)
 end
 
 modutil.once_loaded.game(function()
@@ -53,7 +59,15 @@ modutil.once_loaded.game(function()
 end)
 ```
 
-## `Framework.init(packId, windowTitle, config, numProfiles, defaultProfiles, opts?)`
+## `Framework.tryInit(packId, windowTitle, config, numProfiles, defaultProfiles, opts?)`
+
+Coordinator mods should call `Framework.tryInit(...)`. It logs initialization
+failures and skips publishing the pack when construction fails.
+
+`Framework.init(...)` is the strict variant. It has the same arguments, returns
+the pack runtime on success, and raises on failure.
+
+## Init Arguments
 
 Required:
 - `packId`
@@ -137,9 +151,9 @@ See [QUICK_SETUP.md](QUICK_SETUP.md).
 
 ## Reload Behavior
 
-Coordinator bootstrap normally reruns `Framework.init(...)` from the reload body.
+Coordinator bootstrap normally reruns `Framework.tryInit(...)` from the reload body.
 
-The coordinator owns init arguments and re-calls `Framework.init(...)` when the coordinator/framework layer reloads.
+The coordinator owns init arguments and re-calls `Framework.tryInit(...)` when the coordinator/framework layer reloads.
 Framework replaces pack state for the same `packId` while preserving that pack's stable HUD/index slot.
 
 Coordinated module behavior reloads do not rebuild the pack. Instead:

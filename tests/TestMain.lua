@@ -429,6 +429,229 @@ function TestMain:testRepeatedInitReplacesPackStateAndKeepsStablePackIndex()
     lu.assertEquals(packIdCount, 1)
 end
 
+function TestMain:testFailedInitDoesNotRegisterPack()
+    local packId = "failed-init-pack"
+    local internal = AdamantModpackFramework_Internal
+    local previousPack = internal.packs[packId]
+    local previousPackList = {}
+    for i, value in ipairs(internal.packList) do
+        previousPackList[i] = value
+    end
+
+    lib.lifecycle.registerCoordinator(packId, {
+        ModEnabled = true,
+    })
+
+    FrameworkTestApi.withFactories({
+        createDiscovery = function()
+            return {
+                modules = {},
+                run = function() end,
+                live = {
+                    captureSnapshot = function()
+                        return { hosts = {} }
+                    end,
+                },
+                snapshot = {
+                    getHost = function()
+                        return nil
+                    end,
+                },
+            }
+        end,
+        createHash = function()
+            return {}
+        end,
+        createTheme = function()
+            return { colors = {} }
+        end,
+        createHud = function()
+            return {
+                setModMarker = function() end,
+                setMarkerVisible = function() end,
+            }
+        end,
+        createUI = function()
+            error("ui construction boom")
+        end,
+    }, function()
+        local config = {
+            ModEnabled = true,
+            DebugMode = false,
+            Profiles = {
+                { Name = "", Hash = "", Tooltip = "" },
+            },
+        }
+        lu.assertErrorMsgContains("ui construction boom", function()
+            FrameworkTestApi.init(packId, "Failed Init Pack", config, 1, {})
+        end)
+    end)
+
+    local packIdCount = 0
+    for _, value in ipairs(internal.packList) do
+        if value == packId then
+            packIdCount = packIdCount + 1
+        end
+    end
+
+    internal.packs[packId] = previousPack
+    internal.packList = previousPackList
+    lib.lifecycle.registerCoordinator(packId, nil)
+
+    lu.assertEquals(packIdCount, 0)
+    lu.assertEquals(internal.packs[packId], previousPack)
+end
+
+function TestMain:testTryInitReturnsPackOnSuccess()
+    local packId = "try-init-success-pack"
+    local internal = AdamantModpackFramework_Internal
+    local previousPack = internal.packs[packId]
+    local previousPackList = {}
+    for i, value in ipairs(internal.packList) do
+        previousPackList[i] = value
+    end
+
+    lib.lifecycle.registerCoordinator(packId, {
+        ModEnabled = true,
+    })
+
+    local ok, pack, err
+    FrameworkTestApi.withFactories({
+        createDiscovery = function()
+            return {
+                modules = {},
+                run = function() end,
+                live = {
+                    captureSnapshot = function()
+                        return { hosts = {} }
+                    end,
+                },
+                snapshot = {
+                    getHost = function()
+                        return nil
+                    end,
+                },
+            }
+        end,
+        createHash = function()
+            return {}
+        end,
+        createTheme = function()
+            return { colors = {} }
+        end,
+        createHud = function()
+            return {
+                setModMarker = function() end,
+                setMarkerVisible = function() end,
+            }
+        end,
+        createUI = function()
+            return {
+                renderWindow = function() end,
+                addMenuBar = function() end,
+            }
+        end,
+    }, function()
+        ok, pack, err = FrameworkTestApi.tryInit(packId, "Try Init Pack", {
+            ModEnabled = true,
+            DebugMode = false,
+            Profiles = {
+                { Name = "", Hash = "", Tooltip = "" },
+            },
+        }, 1, {})
+    end)
+
+    internal.packs[packId] = previousPack
+    internal.packList = previousPackList
+    lib.lifecycle.registerCoordinator(packId, nil)
+
+    lu.assertTrue(ok)
+    lu.assertNotNil(pack)
+    lu.assertNil(err)
+end
+
+function TestMain:testTryInitReturnsErrorAndDoesNotRegisterPack()
+    CaptureWarnings()
+
+    local packId = "try-init-fail-pack"
+    local internal = AdamantModpackFramework_Internal
+    local previousPack = internal.packs[packId]
+    local previousPackList = {}
+    for i, value in ipairs(internal.packList) do
+        previousPackList[i] = value
+    end
+
+    lib.lifecycle.registerCoordinator(packId, {
+        ModEnabled = true,
+    })
+
+    local ok, pack, err
+    FrameworkTestApi.withFactories({
+        createDiscovery = function()
+            return {
+                modules = {},
+                run = function() end,
+                live = {
+                    captureSnapshot = function()
+                        return { hosts = {} }
+                    end,
+                },
+                snapshot = {
+                    getHost = function()
+                        return nil
+                    end,
+                },
+            }
+        end,
+        createHash = function()
+            return {}
+        end,
+        createTheme = function()
+            return { colors = {} }
+        end,
+        createHud = function()
+            return {
+                setModMarker = function() end,
+                setMarkerVisible = function() end,
+            }
+        end,
+        createUI = function()
+            error("try init boom")
+        end,
+    }, function()
+        ok, pack, err = FrameworkTestApi.tryInit(packId, "Try Init Pack", {
+            ModEnabled = true,
+            DebugMode = false,
+            Profiles = {
+                { Name = "", Hash = "", Tooltip = "" },
+            },
+        }, 1, {})
+    end)
+
+    local warnings = Warnings
+
+    local packIdCount = 0
+    for _, value in ipairs(internal.packList) do
+        if value == packId then
+            packIdCount = packIdCount + 1
+        end
+    end
+
+    internal.packs[packId] = previousPack
+    internal.packList = previousPackList
+    lib.lifecycle.registerCoordinator(packId, nil)
+    RestoreWarnings()
+
+    lu.assertFalse(ok)
+    lu.assertNil(pack)
+    lu.assertStrContains(tostring(err), "try init boom")
+    lu.assertEquals(packIdCount, 0)
+    lu.assertEquals(internal.packs[packId], previousPack)
+    lu.assertEquals(#warnings, 1)
+    lu.assertStrContains(warnings[1], "[try-init-fail-pack] Framework init failed; skipping pack:")
+    lu.assertStrContains(warnings[1], "try init boom")
+end
+
 function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
     CaptureWarnings()
 

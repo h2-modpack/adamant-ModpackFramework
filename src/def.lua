@@ -65,6 +65,18 @@ function Framework.init(packId, windowTitle, config, numProfiles, defaultProfile
 end
 
 ---@param packId string Stable coordinator pack id.
+---@param windowTitle string Main framework window title.
+---@param config AdamantModpackFramework.Config Chalk-managed coordinator config.
+---@param numProfiles integer Number of saved profile slots to normalize and render.
+---@param defaultProfiles table Coordinator-owned default profile data.
+---@param opts? AdamantModpackFramework.InitOpts Optional coordinator setup controls.
+---@return boolean ok
+---@return AdamantModpackFramework.PackRuntime? pack
+---@return string? err
+function Framework.tryInit(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
+end
+
+---@param packId string Stable coordinator pack id.
 ---@return AdamantModpackFramework.GuiCallbacks callbacks Register these from the coordinator so ROM attributes the GUI to the pack plugin, not Framework.
 function Framework.createGuiCallbacks(packId)
 end

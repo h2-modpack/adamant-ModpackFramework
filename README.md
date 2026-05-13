@@ -20,7 +20,7 @@ It provides:
 Modules participate by exposing a Lib module host:
 
 ```lua
-local host = lib.createModule({
+local host = lib.tryCreateModule({
     owner = internal,
     pluginGuid = PLUGIN_GUID,
     config = config,
@@ -34,7 +34,14 @@ local host = lib.createModule({
     drawTab = internal.DrawTab,
     drawQuickContent = internal.DrawQuickContent,
 })
-host.activate()
+if not host then
+    return
+end
+
+local ok = host.tryActivate()
+if not ok then
+    return
+end
 ```
 
 If a module does not register runtime hooks, `registerHooks` may be omitted.
@@ -82,13 +89,20 @@ Sidebar behavior:
 Coordinator bootstrap calls:
 
 ```lua
-Framework.init(PACK_ID, "My Modpack", config, #config.Profiles, defaultProfiles, {
+local ok = Framework.tryInit(PACK_ID, "My Modpack", config, #config.Profiles, defaultProfiles, {
     moduleOrder = {
         "ExampleModule",
     },
     renderQuickSetup = renderQuickSetup,
 })
+if not ok then
+    return
+end
 ```
+
+`Framework.tryInit(...)` is the coordinator-safe entrypoint. It logs init failures
+and skips publishing the pack. `Framework.init(...)` is the strict variant for tests
+or callers that want errors to propagate.
 
 ## Validation
 

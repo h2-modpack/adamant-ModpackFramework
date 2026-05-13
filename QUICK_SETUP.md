@@ -31,7 +31,7 @@ local function renderQuickSetup(ctx)
     ...
 end
 
-Framework.init(PACK_ID, "My Modpack", config, #config.Profiles, defaultProfiles, {
+Framework.tryInit(PACK_ID, "My Modpack", config, #config.Profiles, defaultProfiles, {
     renderQuickSetup = renderQuickSetup,
 })
 ```
@@ -57,7 +57,7 @@ internal.DrawQuickContent = function(imgui, session, host)
     ...
 end
 
-local host = lib.createModule({
+local host = lib.tryCreateModule({
     owner = internal,
     pluginGuid = PLUGIN_GUID,
     config = config,
@@ -71,7 +71,14 @@ local host = lib.createModule({
     drawTab = internal.DrawTab,
     drawQuickContent = internal.DrawQuickContent,
 })
-host.activate()
+if not host then
+    return
+end
+
+local ok = host.tryActivate()
+if not ok then
+    return
+end
 ```
 
 Framework behavior:

@@ -54,6 +54,12 @@ rom = {
     },
 }
 
+ScreenData = {
+    HUD = {
+        ComponentData = {},
+    },
+}
+
 rom.mods['SGG_Modding-ENVY'] = {
     auto = function() return {} end,
 }
