@@ -61,12 +61,17 @@ The framework discovers modules that expose:
 - `host.getIdentity().id`
 - `host.getMeta().name`
 - `host.getStorage()`
-- `host.drawTab(ui)`
+- `host.drawTab(imgui)`
 
 Discovered modules render through:
 
-- `host.drawTab(ui)`
-- optional `host.drawQuickContent(ui)`
+- `host.drawTab(imgui)`
+- optional `host.drawQuickContent(imgui)`
+
+The module-authored callbacks registered with Lib receive
+`drawTab(imgui, session, host)` and
+`drawQuickContent(imgui, session, host)`. Framework calls the full host methods;
+Lib supplies the author session and author host.
 
 Sidebar behavior:
 

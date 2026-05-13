@@ -73,6 +73,7 @@ they contain hash delimiters.
 
 Treat the following as frozen after release unless you are doing deliberate compatibility work:
 - `definition.id`
+- `definition.name` for user-facing module identity
 - persisted storage root `alias`
 - storage `default`
 - storage type `toHash(...)`
@@ -100,6 +101,13 @@ definition.id = "NewName"
 ```
 
 moves the module into a new hash namespace.
+
+### `definition.name`
+
+Lib requires every module to declare a display name. Framework uses it for
+module UI labels when `shortName` is absent and for diagnostics. Changing it does
+not move hash keys, but it is still user-facing metadata and should be treated as
+intentional UI compatibility work.
 
 ### Storage root `alias`
 

@@ -53,7 +53,7 @@ profiles from the main Quick Setup tab without opening the Profiles tab.
 Modules participate in Quick Setup through:
 
 ```lua
-internal.DrawQuickContent = function(ui, session)
+internal.DrawQuickContent = function(imgui, session, host)
     ...
 end
 
@@ -77,8 +77,8 @@ host.activate()
 Framework behavior:
 - only enabled modules render their quick content
 - Framework snapshots live module hosts at the start of the UI operation
-- module quick content is called through that snapshot host's `drawQuickContent(ui)`
-- the draw callback receives the restricted author `session`
+- module quick content is called through that snapshot host's `drawQuickContent(imgui)`
+- the draw callback receives the restricted author `session` and author `host`
 - if the module dirty-stages persisted state during quick content, Framework commits it after draw
 
 ## What Belongs In Quick Setup
