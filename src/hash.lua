@@ -1,6 +1,7 @@
 function Framework.createHash(discovery, config, lib, packId)
     local HASH_VERSION = 1
     local Hash = {}
+    local hashCodec = AdamantModpackFramework_Internal.hashCodec
     local hashGroups = Framework.createHashGroups(lib, packId)
     local contractWarn = lib.logging.warn
     local warnIf = lib.logging.warnIf
@@ -162,54 +163,6 @@ function Framework.createHash(discovery, config, lib, packId)
         return n
     end
 
-    local TOKEN_ESCAPE = {
-        ["%"] = "%25",
-        ["|"] = "%7C",
-        ["="] = "%3D",
-    }
-    local TOKEN_UNESCAPE = {
-        ["25"] = "%",
-        ["7C"] = "|",
-        ["3D"] = "=",
-        ["7c"] = "|",
-        ["3d"] = "=",
-    }
-
-    local function EscapeToken(value)
-        return tostring(value):gsub("[%%|=]", TOKEN_ESCAPE)
-    end
-
-    local function UnescapeToken(value)
-        return tostring(value):gsub("%%(%x%x)", function(hex)
-            return TOKEN_UNESCAPE[hex] or ("%" .. hex)
-        end)
-    end
-
-    local function Serialize(kv)
-        local keys = {}
-        for k in pairs(kv) do
-            table.insert(keys, k)
-        end
-        table.sort(keys)
-        local parts = {}
-        for _, k in ipairs(keys) do
-            table.insert(parts, EscapeToken(k) .. "=" .. EscapeToken(kv[k]))
-        end
-        return table.concat(parts, "|")
-    end
-
-    local function Deserialize(str)
-        local kv = {}
-        if not str or str == "" then return kv end
-        for entry in string.gmatch(str .. "|", "([^|]*)|") do
-            local k, v = string.match(entry, "^([^=]+)=(.*)$")
-            if k and v then
-                kv[UnescapeToken(k)] = UnescapeToken(v)
-            end
-        end
-        return kv
-    end
-
     local function HashChunk(str, seed, multiplier)
         local h = seed
         for i = 1, #str do
@@ -293,7 +246,7 @@ function Framework.createHash(discovery, config, lib, packId)
             end
         end
 
-        local payload = Serialize(kv)
+        local payload = hashCodec.serialize(kv)
         local canonical = "_v=" .. HASH_VERSION .. (payload ~= "" and "|" .. payload or "")
         return canonical, Fingerprint(canonical)
     end
@@ -304,7 +257,7 @@ function Framework.createHash(discovery, config, lib, packId)
             return false
         end
 
-        local kv = Deserialize(hash)
+        local kv = hashCodec.deserialize(hash)
         if kv["_v"] == nil then
             warnIf(packId, config.DebugMode,
                 "ApplyConfigHash: unrecognized format (missing version key)")

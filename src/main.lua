@@ -13,6 +13,7 @@ internal.packs = internal.packs or {}
 internal.packList = internal.packList or {}
 
 import "ui/theme.lua"
+import "hash_codec.lua"
 import "profiles.lua"
 import "discovery.lua"
 import "hash_groups.lua"

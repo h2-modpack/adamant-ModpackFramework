@@ -185,6 +185,7 @@ rawset(FrameworkTestApi, "withFactories", function(overrides, body)
     return result
 end)
 dofile("src/ui/theme.lua")
+dofile("src/hash_codec.lua")
 dofile("src/profiles.lua")
 dofile("src/discovery.lua")
 dofile("src/hash_groups.lua")
