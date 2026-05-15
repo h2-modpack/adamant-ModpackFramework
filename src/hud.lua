@@ -9,7 +9,7 @@
 function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMarker)
     assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
         "Framework.createHud: game HUD globals are not ready; call Framework.init after game load")
-    assert(lib and lib.overlays and type(lib.overlays.registerHudText) == "function",
+    assert(lib and lib.overlays and type(lib.overlays.defineOwned) == "function",
         "Framework.createHud: adamant-ModpackLib overlays are not available")
 
     local componentName = "ModpackMark_" .. packId
@@ -18,29 +18,34 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
     local currentHash = config.ModEnabled and initFingerprint or ""
     local hashDirty = false
     local markerHidden = hideHashMarker == true
-    local marker = nil
+    local markerContext = nil
 
     if not markerHidden then
-        marker = lib.overlays.registerStackedText({
-            id = "framework:" .. packId .. ":hash",
-            componentName = componentName,
-            region = "middleRightStack",
-            order = lib.overlays.order.framework + packIndex,
-            textArgs = {
-                Color = theme.colors.text,
-            },
-            text = function()
-                return currentHash
-            end,
-            visible = function()
-                return config.ModEnabled == true and currentHash ~= ""
-            end,
-        })
+        lib.overlays.defineOwned("adamant-framework." .. packId .. ".hud", function(overlays)
+            overlays.createLine("hash", {
+                componentName = componentName,
+                region = "middleRightStack",
+                order = lib.overlays.order.framework + packIndex,
+                visible = function()
+                    return config.ModEnabled == true and currentHash ~= ""
+                end,
+                minWidth = 120,
+                textArgs = {
+                    Color = theme.colors.text,
+                },
+            })
+            overlays.onCommit(function(ctx)
+                markerContext = ctx
+                ctx.setLine("hash", currentHash)
+                ctx.refresh("hash")
+            end)
+        end)
     end
 
     local function UpdateModMark()
-        if marker then
-            marker.refresh()
+        if markerContext then
+            markerContext.setLine("hash", currentHash)
+            markerContext.refresh("hash")
         end
     end
 

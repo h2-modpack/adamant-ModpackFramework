@@ -29,7 +29,11 @@ end
 
 function TestMain:testCreateHudRegistersFrameworkHashOverlay()
     local previousScreenData = ScreenData
-    local previousRegisterStackedText = lib.overlays.registerStackedText
+    local previousDefineOwned = lib.overlays.defineOwned
+    local previousDispatchCommit = AdamantModpackLib_Internal.overlays.dispatchCommit
+    local registeredOwner = nil
+    local registeredLine = nil
+    local projectedValue = nil
     local registeredOpts = nil
     local refreshCalls = 0
 
@@ -39,13 +43,37 @@ function TestMain:testCreateHudRegistersFrameworkHashOverlay()
         },
     }
 
-    lib.overlays.registerStackedText = function(opts)
-        registeredOpts = opts
-        return {
+    lib.overlays.defineOwned = function(owner, register)
+        registeredOwner = owner
+        local registrar = {
+            createLine = function(name, spec)
+                registeredLine = name
+                registeredOpts = spec
+            end,
+            onCommit = function(callback)
+                registeredOpts._commit = callback
+            end,
+        }
+        register(registrar)
+        registeredOpts._commit({
+            setLine = function(_, value)
+                projectedValue = value
+            end,
             refresh = function()
                 refreshCalls = refreshCalls + 1
             end,
-        }
+        }, {})
+        return true
+    end
+    AdamantModpackLib_Internal.overlays.dispatchCommit = function()
+        registeredOpts._commit({
+            setLine = function(_, value)
+                projectedValue = value
+            end,
+            refresh = function()
+                refreshCalls = refreshCalls + 1
+            end,
+        }, {})
     end
 
     local theme = FrameworkTestApi.createTheme(lib)
@@ -63,14 +91,16 @@ function TestMain:testCreateHudRegistersFrameworkHashOverlay()
     hud.setModMarker(false)
 
     ScreenData = previousScreenData
-    lib.overlays.registerStackedText = previousRegisterStackedText
+    lib.overlays.defineOwned = previousDefineOwned
+    AdamantModpackLib_Internal.overlays.dispatchCommit = previousDispatchCommit
 
-    lu.assertEquals(registeredOpts.id, "framework:test-pack:hash")
+    lu.assertEquals(registeredOwner, "adamant-framework.test-pack.hud")
+    lu.assertEquals(registeredLine, "hash")
     lu.assertEquals(registeredOpts.region, "middleRightStack")
     lu.assertEquals(registeredOpts.order, lib.overlays.order.framework + 1)
-    lu.assertEquals(registeredOpts.text(), "")
+    lu.assertEquals(projectedValue, "")
     lu.assertFalse(registeredOpts.visible())
-    lu.assertEquals(refreshCalls, 1)
+    lu.assertEquals(refreshCalls, 2)
 end
 
 function TestMain:testRenderWindowCleansUpImguiStacksBeforeRethrow()
