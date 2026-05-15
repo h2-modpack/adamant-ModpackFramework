@@ -199,7 +199,7 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
     rom.game.SetupRunData = function()
         setupRunDataCalls = setupRunDataCalls + 1
     end
-    lib.lifecycle.registerCoordinator("startup-pack", { ModEnabled = true })
+    lib.coordinator.register("startup-pack", { ModEnabled = true })
 
     FrameworkTestApi.withFactories({
         createDiscovery = function()
@@ -252,7 +252,7 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
         )
     end)
 
-    lib.lifecycle.registerCoordinator("startup-pack", nil)
+    lib.coordinator.register("startup-pack", nil)
     rom.game.SetupRunData = previousSetupRunData
 
     lu.assertEquals(setupRunDataCalls, 1)
@@ -260,7 +260,7 @@ end
 
 function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
     local packId = "load-order-pack"
-    lib.lifecycle.registerCoordinator(packId, nil)
+    lib.coordinator.register(packId, nil)
 
     local previousSetupRunData = rom.game.SetupRunData
     local setupRunDataCalls = 0
@@ -271,17 +271,17 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
         setupRunDataCalls = setupRunDataCalls + 1
     end
 
-    local definition = lib.prepareDefinition({}, {
+    local definition = AdamantModpackLib_Internal.moduleHost.prepareDefinition({}, {
         modpack = packId,
         id = "Alpha",
         name = "Alpha",
         storage = {},
     })
-    local store, session = lib.createStore({
+    local store, session = CreateModuleState({
         Enabled = true,
         DebugMode = false,
     }, definition)
-    local host, authorHost = lib.createModuleHost({
+    local host, authorHost = AdamantModpackLib_Internal.moduleHost.create({
         pluginGuid = "test-pack.Alpha",
         definition = definition,
         store = store,
@@ -296,10 +296,10 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
         },
         drawTab = function() end,
     })
-    authorHost.activate()
+    authorHost.tryActivate()
 
     lu.assertEquals(applyCalls, 0)
-    lib.lifecycle.registerCoordinator(packId, {
+    lib.coordinator.register(packId, {
         ModEnabled = true,
     })
 
@@ -364,7 +364,7 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
     end)
 
     local ok, err = host.revertMutation()
-    lib.lifecycle.registerCoordinator(packId, nil)
+    lib.coordinator.register(packId, nil)
     rom.game.SetupRunData = previousSetupRunData
 
     lu.assertTrue(ok, tostring(err))
@@ -386,7 +386,7 @@ function TestMain:testRepeatedInitReplacesPackStateAndKeepsStablePackIndex()
     local firstPack
     local secondPack
 
-    lib.lifecycle.registerCoordinator(packId, {
+    lib.coordinator.register(packId, {
         ModEnabled = true,
     })
 
@@ -449,7 +449,7 @@ function TestMain:testRepeatedInitReplacesPackStateAndKeepsStablePackIndex()
 
     internal.packs[packId] = previousPack
     internal.packList = previousPackList
-    lib.lifecycle.registerCoordinator(packId, nil)
+    lib.coordinator.register(packId, nil)
 
     lu.assertTrue(firstPack ~= secondPack)
     lu.assertEquals(activePack, secondPack)
@@ -468,7 +468,7 @@ function TestMain:testFailedInitDoesNotRegisterPack()
         previousPackList[i] = value
     end
 
-    lib.lifecycle.registerCoordinator(packId, {
+    lib.coordinator.register(packId, {
         ModEnabled = true,
     })
 
@@ -526,7 +526,7 @@ function TestMain:testFailedInitDoesNotRegisterPack()
 
     internal.packs[packId] = previousPack
     internal.packList = previousPackList
-    lib.lifecycle.registerCoordinator(packId, nil)
+    lib.coordinator.register(packId, nil)
 
     lu.assertEquals(packIdCount, 0)
     lu.assertEquals(internal.packs[packId], previousPack)
@@ -541,7 +541,7 @@ function TestMain:testTryInitReturnsPackOnSuccess()
         previousPackList[i] = value
     end
 
-    lib.lifecycle.registerCoordinator(packId, {
+    lib.coordinator.register(packId, {
         ModEnabled = true,
     })
 
@@ -593,7 +593,7 @@ function TestMain:testTryInitReturnsPackOnSuccess()
 
     internal.packs[packId] = previousPack
     internal.packList = previousPackList
-    lib.lifecycle.registerCoordinator(packId, nil)
+    lib.coordinator.register(packId, nil)
 
     lu.assertTrue(ok)
     lu.assertNotNil(pack)
@@ -611,7 +611,7 @@ function TestMain:testTryInitReturnsErrorAndDoesNotRegisterPack()
         previousPackList[i] = value
     end
 
-    lib.lifecycle.registerCoordinator(packId, {
+    lib.coordinator.register(packId, {
         ModEnabled = true,
     })
 
@@ -669,7 +669,7 @@ function TestMain:testTryInitReturnsErrorAndDoesNotRegisterPack()
 
     internal.packs[packId] = previousPack
     internal.packList = previousPackList
-    lib.lifecycle.registerCoordinator(packId, nil)
+    lib.coordinator.register(packId, nil)
     RestoreWarnings()
 
     lu.assertFalse(ok)
@@ -700,7 +700,7 @@ function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
             return false, "startup boom"
         end,
     }
-    lib.lifecycle.registerCoordinator("startup-pack", { ModEnabled = true })
+    lib.coordinator.register("startup-pack", { ModEnabled = true })
 
     FrameworkTestApi.withFactories({
         createDiscovery = function()
@@ -754,7 +754,7 @@ function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
     end)
 
     local warnings = Warnings
-    lib.lifecycle.registerCoordinator("startup-pack", nil)
+    lib.coordinator.register("startup-pack", nil)
     RestoreWarnings()
 
     lu.assertEquals(#warnings, 1)
@@ -1261,7 +1261,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
     local okFirst, errFirst = pcall(builtUi.renderWindow)
 
     local entry = discovery.modules[1]
-    local replacementDefinition = lib.prepareDefinition({}, {
+    local replacementDefinition = AdamantModpackLib_Internal.moduleHost.prepareDefinition({}, {
         id = entry.id,
         name = entry.name,
         modpack = entry.modpack,
@@ -1269,12 +1269,12 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
             { type = "bool", alias = "FlagA", default = false },
         },
     })
-    local store, session = lib.createStore({
+    local store, session = CreateModuleState({
         Enabled = true,
         DebugMode = false,
         FlagA = false,
     }, replacementDefinition)
-    local replacementHost, replacementAuthorHost = lib.createModuleHost({
+    local replacementHost, replacementAuthorHost = AdamantModpackLib_Internal.moduleHost.create({
         pluginGuid = entry.pluginGuid,
         definition = replacementDefinition,
         store = store,
@@ -1284,7 +1284,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
             secondQuickRenders = secondQuickRenders + 1
         end,
     })
-    replacementAuthorHost.activate()
+    replacementAuthorHost.tryActivate()
     rom.mods[entry.pluginGuid].host = replacementHost
 
     local okSecond, errSecond = pcall(builtUi.renderWindow)

@@ -13,6 +13,7 @@ internal.packs = internal.packs or {}
 internal.packList = internal.packList or {}
 
 import "ui/theme.lua"
+import "logging.lua"
 import "hash_codec.lua"
 import "profiles.lua"
 import "discovery.lua"
@@ -56,13 +57,13 @@ local function ValidateRuntimePrerequisites()
         "Framework.init: rom.game.SetupRunData is not ready; call Framework.init after game load")
     assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
         "Framework.init: game HUD globals are not ready; call Framework.init after game load")
-    assert(lib and lib.overlays and type(lib.overlays.registerStackedText) == "function",
+    assert(lib and lib.overlays and type(lib.overlays.defineOwned) == "function",
         "Framework.init: adamant-ModpackLib overlays are not available")
 end
 
 function Framework.init(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
     opts = ValidateInitArgs(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
-    assert(lib.isModuleCoordinated(packId),
+    assert(lib.coordinator.isRegistered(packId),
         "Framework.init: coordinator must register before init; see Core/main.lua")
 
     import_as_fallback(rom.game)
@@ -89,7 +90,7 @@ function Framework.init(packId, windowTitle, config, numProfiles, defaultProfile
         if host then
             local ok, err = host.applyOnLoad()
             if not ok then
-                lib.logging.warn(packId,
+                Framework.logging.warn(packId,
                     "%s startup lifecycle failed: %s",
                     tostring(entry.name or entry.id or "module"),
                     tostring(err))
@@ -137,7 +138,7 @@ function Framework.tryInit(packId, windowTitle, config, numProfiles, defaultProf
 
     local err = tostring(pack)
     local logPackId = type(packId) == "string" and packId ~= "" and packId or "framework"
-    lib.logging.warn(logPackId, "Framework init failed; skipping pack: %s", err)
+    Framework.logging.warn(logPackId, "Framework init failed; skipping pack: %s", err)
     return false, nil, err
 end
 

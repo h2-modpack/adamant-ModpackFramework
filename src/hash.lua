@@ -3,8 +3,8 @@ function Framework.createHash(discovery, config, lib, packId)
     local Hash = {}
     local hashCodec = AdamantModpackFramework_Internal.hashCodec
     local hashGroups = Framework.createHashGroups(lib, packId)
-    local contractWarn = lib.logging.warn
-    local warnIf = lib.logging.warnIf
+    local contractWarn = Framework.logging.warn
+    local warnIf = Framework.logging.warnIf
     local writeBitsValue = lib.hashing.writePackedBits
     local readBitsValue = lib.hashing.readPackedBits
     local getStorageRoots = lib.hashing.getRoots

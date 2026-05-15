@@ -33,7 +33,7 @@ local function renderQuickSetup(ctx)
 end
 
 local function init()
-    lib.lifecycle.registerCoordinator(PACK_ID, config)
+    lib.coordinator.register(PACK_ID, config)
     local ok = Framework.tryInit(PACK_ID, "My Modpack", config, #config.Profiles, defaultProfiles, {
         moduleOrder = {
             "ExampleModule",
@@ -198,9 +198,7 @@ Framework debug:
 Lib debug:
 - `lib.config.DebugMode`
 
-Framework warnings use:
-- `lib.logging.warn(...)`
-- `lib.logging.warnIf(...)`
+Framework warnings use Framework-owned logging helpers.
 
 ## Related Docs
 

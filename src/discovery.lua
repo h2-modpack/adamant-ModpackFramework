@@ -3,8 +3,8 @@
 
 function Framework.createDiscovery(packId, config, lib)
     local Discovery = {}
-    local contractWarn = lib.logging.warn
-    local warnIf = lib.logging.warnIf
+    local contractWarn = Framework.logging.warn
+    local warnIf = Framework.logging.warnIf
     local warnedMissingHosts = {}
 
     local function GetHost(pluginGuid)

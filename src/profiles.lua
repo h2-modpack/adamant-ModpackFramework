@@ -51,7 +51,7 @@ function internal.auditSavedProfiles(packId, profiles, discovery, lib)
                         local moduleFields = knownModules[moduleId]
                         if moduleFields and not moduleFields[field] then
                             issueCount = issueCount + 1
-                            lib.logging.warn(packId,
+                            Framework.logging.warn(packId,
                                 "Profile '%s': unrecognized key '%s' - possible rename or removed option",
                                 profileLabel, key)
                         end

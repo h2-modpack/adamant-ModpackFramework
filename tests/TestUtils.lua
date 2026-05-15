@@ -104,8 +104,9 @@ ImGuiTreeNodeFlags = {
     CollapsingHeader = 26,
 }
 
-import = function(path)
-    dofile("../adamant-ModpackLib/src/" .. path)
+import = function(path, fenv, ...)
+    local chunk = assert(loadfile("../adamant-ModpackLib/src/" .. path, "t", fenv or _ENV))
+    return chunk(...)
 end
 
 Warnings = {}
@@ -128,6 +129,11 @@ end
 dofile("../adamant-ModpackLib/src/main.lua")
 lib = public
 rom.mods['adamant-ModpackLib'] = lib
+
+function CreateModuleState(config, definition)
+    local state = AdamantModpackLib_Internal.moduleState.create(config, definition)
+    return state.store, state.session
+end
 
 import = function() end
 import_as_fallback = function() end
@@ -185,6 +191,7 @@ rawset(FrameworkTestApi, "withFactories", function(overrides, body)
     return result
 end)
 dofile("src/ui/theme.lua")
+dofile("src/logging.lua")
 dofile("src/hash_codec.lua")
 dofile("src/profiles.lua")
 dofile("src/discovery.lua")
@@ -203,7 +210,7 @@ config = { ModEnabled = true, DebugMode = false }
 MockDiscovery = {}
 
 local function prepareDefinition(definition)
-    return lib.prepareDefinition({}, definition)
+    return AdamantModpackLib_Internal.moduleHost.prepareDefinition({}, definition)
 end
 
 local function makePersistedConfig(storage, overrides)
@@ -258,9 +265,9 @@ function MockDiscovery.create(moduleDefs)
             shortName = def.shortName,
             tooltip = def.tooltip,
         })
-        local store, session = lib.createStore(persisted, definition)
+        local store, session = CreateModuleState(persisted, definition)
         local pluginGuid = def.pluginGuid or ("adamant-" .. def.id)
-        local host, authorHost = lib.createModuleHost({
+        local host, authorHost = AdamantModpackLib_Internal.moduleHost.create({
             pluginGuid = pluginGuid,
             definition = definition,
             store = store,
@@ -273,7 +280,7 @@ function MockDiscovery.create(moduleDefs)
                 revert = def.revert,
             } or nil,
         })
-        authorHost.activate()
+        authorHost.tryActivate()
         local module = {
             pluginGuid = pluginGuid,
             mod = {

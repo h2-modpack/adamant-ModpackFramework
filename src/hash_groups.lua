@@ -1,6 +1,6 @@
 function Framework.createHashGroups(lib, packId)
     local HashGroups = {}
-    local contractWarn = lib.logging.warn
+    local contractWarn = Framework.logging.warn
     local getStorageAliases = lib.hashing.getAliases
     local getPackWidth = lib.hashing.getPackWidth
     local writeBitsValue = lib.hashing.writePackedBits

@@ -124,11 +124,11 @@ function internal.createUIRuntime(ctx)
                         end
                     end
 
-                    lib.logging.warn(packId,
+                    Framework.logging.warn(packId,
                         "Module batch toggle failed; restoring previous module states: %s",
                         tostring(err))
                     if #rollbackErrors > 0 then
-                        lib.logging.warn(packId,
+                        Framework.logging.warn(packId,
                             "Module batch toggle rollback incomplete: %s",
                             table.concat(rollbackErrors, "; "))
                     end
@@ -163,7 +163,7 @@ function internal.createUIRuntime(ctx)
             ok, err = host.revertMutation()
         end
         if not ok then
-            lib.logging.warn(packId,
+            Framework.logging.warn(packId,
                 "%s %s failed: %s", entry.pluginGuid or "unknown", state and "apply" or "revert", err)
         end
         return ok, err
@@ -182,7 +182,7 @@ function internal.createUIRuntime(ctx)
             end
         end
         if #rollbackErrors > 0 then
-            lib.logging.warn(packId,
+                Framework.logging.warn(packId,
                 "Enable Mod rollback incomplete: %s",
                 table.concat(rollbackErrors, "; "))
         end
@@ -197,7 +197,7 @@ function internal.createUIRuntime(ctx)
             if staging.modules[entry.id] then
                 local ok, err = Runtime.setEntryRuntimeState(entry, state, snapshot)
                 if not ok then
-                    lib.logging.warn(packId,
+                    Framework.logging.warn(packId,
                         "Enable Mod toggle failed; restoring previous runtime state")
                     rollBackTouchedEntries(touched, previousState, snapshot)
                     return false, err
@@ -237,7 +237,7 @@ function internal.createUIRuntime(ctx)
         if ok and committed then
             Runtime.finishUiChange(entry)
         elseif ok == false then
-            lib.logging.warn(packId,
+            Framework.logging.warn(packId,
                 "%s session commit failed; restored previous config where possible: %s",
                 tostring(entry.name or entry.id or entry.pluginGuid or "module"),
                 tostring(err))

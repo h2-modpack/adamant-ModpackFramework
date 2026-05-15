@@ -4,18 +4,26 @@ TestLibHost = {}
 
 function TestLibHost:testCommitSessionFlushesManagedAliasState()
     local config = { Flag = false, Enabled = false, DebugMode = false }
-    local definition = lib.prepareDefinition({}, {
+    local definition = AdamantModpackLib_Internal.moduleHost.prepareDefinition({}, {
         id = "ManagedState",
         name = "Managed State",
         storage = {
             { type = "bool", alias = "Flag", default = false },
         },
     })
-    local store, session = lib.createStore(config, definition)
+    local store, session = CreateModuleState(config, definition)
+    local host, authorHost = AdamantModpackLib_Internal.moduleHost.create({
+        pluginGuid = "test-managed-state",
+        definition = definition,
+        store = store,
+        session = session,
+        drawTab = function() end,
+    })
 
     session.write("Flag", true)
 
-    local ok, err = lib.lifecycle.commitSession(definition, nil, nil, nil, store, session)
+    authorHost.tryActivate()
+    local ok, err = host.flush()
 
     lu.assertTrue(ok, tostring(err))
     lu.assertTrue(config.Flag)
