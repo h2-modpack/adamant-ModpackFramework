@@ -1,11 +1,8 @@
-local internal = AdamantModpackFramework_Internal
-
 --- Create the shared theme styling used by the Framework UI and HUD.
 --- @return table theme Theme object exposing colors, ImGui flags, and push/pop helpers.
-function internal.createTheme(lib)
+local function createTheme()
     local ui                 = rom.ImGui
     local uiCol              = rom.ImGuiCol
-    local unpackColor        = lib.imguiHelpers.unpackColor
 
     local colors             = {
         text          = { 0.92, 0.90, 0.95, 1.0 },
@@ -35,8 +32,6 @@ function internal.createTheme(lib)
         border        = { 0.25, 0.18, 0.38, 0.5 },
     }
 
-    local ImGuiTreeNodeFlags = lib.imguiHelpers.ImGuiTreeNodeFlags
-
     local themeColors        = {
         { uiCol.Text,           colors.text },
         { uiCol.TextDisabled,   colors.textDisabled },
@@ -62,7 +57,7 @@ function internal.createTheme(lib)
 
     local function PushTheme()
         for _, entry in ipairs(themeColors) do
-            ui.PushStyleColor(entry[1], unpackColor(entry[2]))
+            ui.PushStyleColor(entry[1], lib.imguiHelpers.unpackColor(entry[2]))
         end
     end
 
@@ -72,10 +67,10 @@ function internal.createTheme(lib)
 
     return {
         colors             = colors,
-        ImGuiTreeNodeFlags = ImGuiTreeNodeFlags,
+        ImGuiTreeNodeFlags = lib.imguiHelpers.ImGuiTreeNodeFlags,
         PushTheme          = PushTheme,
         PopTheme           = PopTheme,
     }
 end
 
-Framework.createTheme = internal.createTheme
+return createTheme

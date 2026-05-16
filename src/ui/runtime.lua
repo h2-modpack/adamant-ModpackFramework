@@ -1,14 +1,15 @@
-local internal = AdamantModpackFramework_Internal
+local ctx = ...
 
-function internal.createUIRuntime(ctx)
-    local discovery = ctx.discovery
+local function createUIRuntime()
+    local moduleRegistry = ctx.moduleRegistry
     local hud = ctx.hud
     local config = ctx.config
     local packId = ctx.packId
     local colors = ctx.colors
     local staging = ctx.staging
-    local snapshots = ctx.snapshots
+    local snapshotAccess = ctx.snapshotAccess
     local snapshotToStaging = ctx.snapshotToStaging
+    local logging = ctx.logging
     local onProfileLoaded = ctx.onProfileLoaded
 
     local cachedHash = nil
@@ -50,7 +51,7 @@ function internal.createUIRuntime(ctx)
     end
 
     function Runtime.toggleEntry(entry, enabled, snapshot)
-        local ok = discovery.snapshot.setEntryEnabled(entry, enabled, snapshot)
+        local ok = moduleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
         if not ok then
             return
         end
@@ -63,7 +64,7 @@ function internal.createUIRuntime(ctx)
         local enabledCount = 0
 
         for _, moduleId in ipairs(moduleIds or {}) do
-            local entry = discovery.modulesById[moduleId]
+            local entry = moduleRegistry.modulesById[moduleId]
             if entry then
                 total = total + 1
                 if staging.modules[moduleId] then
@@ -88,13 +89,13 @@ function internal.createUIRuntime(ctx)
         local changed = false
         local needsRunData = false
         local touched = {}
-        snapshot = snapshot or snapshots.get() or snapshots.capture()
+        snapshot = snapshot or snapshotAccess.get() or snapshotAccess.capture()
 
         for _, moduleId in ipairs(moduleIds or {}) do
-            local entry = discovery.modulesById[moduleId]
+            local entry = moduleRegistry.modulesById[moduleId]
             if entry and staging.modules[moduleId] ~= enabled then
                 local previousEnabled = staging.modules[moduleId] == true
-                local ok, err = discovery.snapshot.setEntryEnabled(entry, enabled, snapshot)
+                local ok, err = moduleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
                 if ok then
                     table.insert(touched, {
                         entry = entry,
@@ -109,7 +110,7 @@ function internal.createUIRuntime(ctx)
                     local rollbackErrors = {}
                     for i = #touched, 1, -1 do
                         local touchedEntry = touched[i].entry
-                        local rollbackOk, rollbackErr = discovery.snapshot.setEntryEnabled(
+                        local rollbackOk, rollbackErr = moduleRegistry.snapshot.setEntryEnabled(
                             touchedEntry,
                             touched[i].previousEnabled,
                             snapshot
@@ -124,11 +125,11 @@ function internal.createUIRuntime(ctx)
                         end
                     end
 
-                    Framework.logging.warn(packId,
+                    logging.warn(packId,
                         "Module batch toggle failed; restoring previous module states: %s",
                         tostring(err))
                     if #rollbackErrors > 0 then
-                        Framework.logging.warn(packId,
+                        logging.warn(packId,
                             "Module batch toggle rollback incomplete: %s",
                             table.concat(rollbackErrors, "; "))
                     end
@@ -151,7 +152,7 @@ function internal.createUIRuntime(ctx)
     end
 
     function Runtime.setEntryRuntimeState(entry, state, snapshot)
-        local host = snapshots.getHost(entry, snapshot)
+        local host = snapshotAccess.getHost(entry, snapshot)
         if not host then
             return false, "module host is unavailable"
         end
@@ -163,7 +164,7 @@ function internal.createUIRuntime(ctx)
             ok, err = host.revertMutation()
         end
         if not ok then
-            Framework.logging.warn(packId,
+            logging.warn(packId,
                 "%s %s failed: %s", entry.pluginGuid or "unknown", state and "apply" or "revert", err)
         end
         return ok, err
@@ -182,7 +183,7 @@ function internal.createUIRuntime(ctx)
             end
         end
         if #rollbackErrors > 0 then
-                Framework.logging.warn(packId,
+                logging.warn(packId,
                 "Enable Mod rollback incomplete: %s",
                 table.concat(rollbackErrors, "; "))
         end
@@ -191,13 +192,13 @@ function internal.createUIRuntime(ctx)
     function Runtime.setPackRuntimeState(state, snapshot)
         local previousState = staging.ModEnabled == true
         local touched = {}
-        snapshot = snapshot or snapshots.get() or snapshots.capture()
+        snapshot = snapshot or snapshotAccess.get() or snapshotAccess.capture()
 
-        for _, entry in ipairs(discovery.modules) do
+        for _, entry in ipairs(moduleRegistry.modules) do
             if staging.modules[entry.id] then
                 local ok, err = Runtime.setEntryRuntimeState(entry, state, snapshot)
                 if not ok then
-                    Framework.logging.warn(packId,
+                    logging.warn(packId,
                         "Enable Mod toggle failed; restoring previous runtime state")
                     rollBackTouchedEntries(touched, previousState, snapshot)
                     return false, err
@@ -228,7 +229,7 @@ function internal.createUIRuntime(ctx)
     end
 
     function Runtime.commitEntrySession(entry, snapshot)
-        local host = snapshots.getHost(entry, snapshot)
+        local host = snapshotAccess.getHost(entry, snapshot)
         if not host then
             return
         end
@@ -237,7 +238,7 @@ function internal.createUIRuntime(ctx)
         if ok and committed then
             Runtime.finishUiChange(entry)
         elseif ok == false then
-            Framework.logging.warn(packId,
+            logging.warn(packId,
                 "%s session commit failed; restored previous config where possible: %s",
                 tostring(entry.name or entry.id or entry.pluginGuid or "module"),
                 tostring(err))
@@ -245,9 +246,9 @@ function internal.createUIRuntime(ctx)
     end
 
     function Runtime.resyncAllSessions()
-        local snapshot = snapshots.capture()
-        for _, entry in ipairs(discovery.modules) do
-            local host = snapshots.getHost(entry, snapshot)
+        local snapshot = snapshotAccess.capture()
+        for _, entry in ipairs(moduleRegistry.modules) do
+            local host = snapshotAccess.getHost(entry, snapshot)
             if host then
                 host.resync()
             end
@@ -257,3 +258,5 @@ function internal.createUIRuntime(ctx)
 
     return Runtime
 end
+
+return createUIRuntime()

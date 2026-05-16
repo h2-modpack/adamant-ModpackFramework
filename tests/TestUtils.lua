@@ -135,54 +135,53 @@ function CreateModuleState(config, definition)
     return state.store, state.session
 end
 
-import = function() end
+import = function(path, fenv, ...)
+    local chunk = assert(loadfile("src/" .. path, "t", fenv or _ENV))
+    return chunk(...)
+end
 import_as_fallback = function() end
 
 dofile("src/main.lua")
-AdamantModpackFramework_Internal = AdamantModpackFramework_Internal or {}
-setmetatable(public, {
-    __index = Framework,
-})
+FrameworkPackRegistry = FrameworkPackRegistry or {}
 rom.mods['adamant-ModpackFramework'] = public
 FrameworkTestApi = setmetatable({}, {
     __index = function(_, key)
-        local internal = AdamantModpackFramework_Internal
-        if internal[key] ~= nil then
-            return internal[key]
-        end
-        if Framework and Framework[key] ~= nil then
-            return Framework[key]
-        end
         return public[key]
     end,
     __newindex = function(_, key, value)
-        AdamantModpackFramework_Internal[key] = value
-        if type(Framework) == "table" then
-            Framework[key] = value
-        end
+        rawset(public, key, value)
     end,
 })
-rawset(FrameworkTestApi, "withFactories", function(overrides, body)
-    local previousInternal = {}
-    local previousFramework = {}
+
+local function GetBootConstructors()
+    local index = 1
+    while true do
+        local name, value = debug.getupvalue(public.init, index)
+        if not name then
+            break
+        end
+        if name == "bootConstructors" then
+            return value
+        end
+        index = index + 1
+    end
+    error("public.init missing bootConstructors upvalue")
+end
+
+rawset(FrameworkTestApi, "withBootConstructors", function(overrides, body)
+    local bootConstructors = GetBootConstructors()
+    local previousConstructors = {}
     local keys = {}
     for key in pairs(overrides) do
         table.insert(keys, key)
-        previousInternal[key] = AdamantModpackFramework_Internal[key]
-        previousFramework[key] = Framework and Framework[key] or nil
-        AdamantModpackFramework_Internal[key] = overrides[key]
-        if type(Framework) == "table" then
-            Framework[key] = overrides[key]
-        end
+        previousConstructors[key] = bootConstructors[key]
+        bootConstructors[key] = overrides[key]
     end
 
     local ok, result = pcall(body)
 
     for _, key in ipairs(keys) do
-        AdamantModpackFramework_Internal[key] = previousInternal[key]
-        if type(Framework) == "table" then
-            Framework[key] = previousFramework[key]
-        end
+        bootConstructors[key] = previousConstructors[key]
     end
 
     if not ok then
@@ -190,24 +189,46 @@ rawset(FrameworkTestApi, "withFactories", function(overrides, body)
     end
     return result
 end)
-dofile("src/ui/theme.lua")
-dofile("src/logging.lua")
-dofile("src/hash_codec.lua")
-dofile("src/profiles.lua")
-dofile("src/discovery.lua")
-dofile("src/hash_groups.lua")
-dofile("src/hash.lua")
-dofile("src/hud.lua")
-dofile("src/ui/runtime.lua")
-dofile("src/ui/profiles.lua")
-dofile("src/ui/dev.lua")
-dofile("src/ui/quick_setup.lua")
-dofile("src/ui/module_tabs.lua")
-dofile("src/ui.lua")
+local logging = import("logging.lua")
+local createHashGroupBuilder = import("hash_group_builder.lua", nil, {
+    logging = logging,
+})
+local createModuleRegistry = import("module_registry.lua", nil, {
+    logging = logging,
+})
+local createTheme = import("ui/theme.lua")
+local hashCodec = import("hash_codec.lua")
+local createConfigHash = import("config_hash.lua", nil, {
+    hashCodec = hashCodec,
+    createHashGroupBuilder = createHashGroupBuilder,
+    logging = logging,
+})
+local createHud = import("hud.lua")
+local createUI = import("ui.lua", nil, {
+    logging = logging,
+})
+
+rawset(FrameworkTestApi, "createHashGroupBuilder", createHashGroupBuilder)
+rawset(FrameworkTestApi, "createModuleRegistry", createModuleRegistry)
+rawset(FrameworkTestApi, "createTheme", createTheme)
+rawset(FrameworkTestApi, "createConfigHash", createConfigHash)
+rawset(FrameworkTestApi, "createHud", createHud)
+rawset(FrameworkTestApi, "createUI", createUI)
+rawset(FrameworkTestApi, "logging", logging)
+rawset(FrameworkTestApi, "createUIRuntime", function(ctx)
+    return import("ui/runtime.lua", nil, ctx)
+end)
+local profileTools = import("profiles.lua", nil, {
+    hashCodec = hashCodec,
+    createHashGroupBuilder = createHashGroupBuilder,
+    logging = logging,
+})
+rawset(FrameworkTestApi, "normalizeProfiles", profileTools.normalizeProfiles)
+rawset(FrameworkTestApi, "auditSavedProfiles", profileTools.auditSavedProfiles)
 
 config = { ModEnabled = true, DebugMode = false }
 
-MockDiscovery = {}
+MockModuleRegistry = {}
 
 local function prepareDefinition(definition)
     return AdamantModpackLib_Internal.moduleHost.prepareDefinition({}, definition)
@@ -239,10 +260,10 @@ local function makePersistedConfig(storage, overrides)
     return persisted
 end
 
-function MockDiscovery.create(moduleDefs)
+function MockModuleRegistry.create(moduleDefs)
     moduleDefs = moduleDefs or {}
 
-    local discovery = {
+    local moduleRegistry = {
         modules = {},
         modulesById = {},
         modulesWithQuickContent = {},
@@ -275,10 +296,6 @@ function MockDiscovery.create(moduleDefs)
             drawTab = def.DrawTab or function() end,
             drawQuickContent = def.DrawQuickContent,
             registerPatchMutation = def.patchPlan,
-            registerManualMutation = def.apply and def.revert and {
-                apply = def.apply,
-                revert = def.revert,
-            } or nil,
         })
         authorHost.tryActivate()
         local module = {
@@ -300,27 +317,27 @@ function MockDiscovery.create(moduleDefs)
 
         rom.mods[module.pluginGuid] = module.mod
 
-        table.insert(discovery.modules, module)
-        discovery.modulesById[module.id] = module
+        table.insert(moduleRegistry.modules, module)
+        moduleRegistry.modulesById[module.id] = module
 
         if type(host.drawQuickContent) == "function" then
-            table.insert(discovery.modulesWithQuickContent, module)
+            table.insert(moduleRegistry.modulesWithQuickContent, module)
         end
 
         module._tabLabel = definition.shortName or definition.name
-        table.insert(discovery.tabOrder, module)
+        table.insert(moduleRegistry.tabOrder, module)
     end
 
     for _, def in ipairs(moduleDefs) do
         addModule(def)
     end
 
-    function discovery.live.captureSnapshot()
+    function moduleRegistry.live.captureSnapshot()
         local snapshot = {
             hosts = {},
         }
 
-        for _, module in ipairs(discovery.modules) do
+        for _, module in ipairs(moduleRegistry.modules) do
             local liveHost = lib.getLiveModuleHost(module.pluginGuid)
             snapshot.hosts[module] = liveHost or false
         end
@@ -328,44 +345,44 @@ function MockDiscovery.create(moduleDefs)
         return snapshot
     end
 
-    function discovery.live.getHost(entry)
+    function moduleRegistry.live.getHost(entry)
         return lib.getLiveModuleHost(entry.pluginGuid)
     end
 
-    function discovery.snapshot.getHost(entry, snapshot)
+    function moduleRegistry.snapshot.getHost(entry, snapshot)
         local host = snapshot.hosts[entry]
         return host or nil
     end
 
-    function discovery.snapshot.isEntryEnabled(entry, snapshot)
-        local host = discovery.snapshot.getHost(entry, snapshot)
+    function moduleRegistry.snapshot.isEntryEnabled(entry, snapshot)
+        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
         return host.read("Enabled") == true
     end
 
-    function discovery.snapshot.setEntryEnabled(entry, enabled, snapshot)
-        local host = discovery.snapshot.getHost(entry, snapshot)
+    function moduleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
+        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
         return host.setEnabled(enabled)
     end
 
-    function discovery.snapshot.getStorageValue(module, alias, snapshot)
-        local host = discovery.snapshot.getHost(module, snapshot)
+    function moduleRegistry.snapshot.getStorageValue(module, alias, snapshot)
+        local host = moduleRegistry.snapshot.getHost(module, snapshot)
         return host.read(alias)
     end
 
-    function discovery.snapshot.setStorageValue(module, alias, value, snapshot)
-        local host = discovery.snapshot.getHost(module, snapshot)
+    function moduleRegistry.snapshot.setStorageValue(module, alias, value, snapshot)
+        local host = moduleRegistry.snapshot.getHost(module, snapshot)
         return host.writeAndFlush(alias, value)
     end
 
-    function discovery.snapshot.isDebugEnabled(entry, snapshot)
-        local host = discovery.snapshot.getHost(entry, snapshot)
+    function moduleRegistry.snapshot.isDebugEnabled(entry, snapshot)
+        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
         return host.read("DebugMode") == true
     end
 
-    function discovery.snapshot.setDebugEnabled(entry, value, snapshot)
-        local host = discovery.snapshot.getHost(entry, snapshot)
+    function moduleRegistry.snapshot.setDebugEnabled(entry, value, snapshot)
+        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
         host.setDebugMode(value)
     end
 
-    return discovery
+    return moduleRegistry
 end

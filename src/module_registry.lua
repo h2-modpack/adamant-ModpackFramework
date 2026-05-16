@@ -1,10 +1,11 @@
--- Discovers coordinated modules through the Lib live-host registry and snapshots live host pointers
+-- Indexes coordinated modules through the Lib live-host registry and snapshots live host pointers
 -- so UI/runtime work can tolerate hot-replaced hosts safely.
 
-function Framework.createDiscovery(packId, config, lib)
-    local Discovery = {}
-    local contractWarn = Framework.logging.warn
-    local warnIf = Framework.logging.warnIf
+local deps = ...
+local logging = deps.logging
+
+local function createModuleRegistry(packId, config)
+    local ModuleRegistry = {}
     local warnedMissingHosts = {}
 
     local function GetHost(pluginGuid)
@@ -32,7 +33,7 @@ function Framework.createDiscovery(packId, config, lib)
     end
 
     local function ReadPersisted(entry, alias, snapshot)
-        local host = Discovery.snapshot.getHost(entry, snapshot)
+        local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
         if not host then
             return nil
         end
@@ -40,7 +41,7 @@ function Framework.createDiscovery(packId, config, lib)
     end
 
     local function WriteStagedAndFlush(entry, alias, value, snapshot)
-        local host = Discovery.snapshot.getHost(entry, snapshot)
+        local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
         if not host then
             return false, "module host is unavailable"
         end
@@ -48,14 +49,14 @@ function Framework.createDiscovery(packId, config, lib)
     end
 
     local function SetEntryEnabled(entry, enabled, snapshot)
-        local host = Discovery.snapshot.getHost(entry, snapshot)
+        local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
         if not host then
             return false, "module host is unavailable"
         end
 
         local ok, err = host.setEnabled(enabled)
         if not ok then
-            contractWarn(packId,
+            logging.warn(packId,
                 "%s %s failed: %s", entry.pluginGuid, enabled and "enable" or "disable", err)
         end
         return ok, err
@@ -82,18 +83,18 @@ function Framework.createDiscovery(packId, config, lib)
         }
     end
 
-    Discovery.modules = {}
-    Discovery.modulesById = {}
-    Discovery.modulesWithQuickContent = {}
-    Discovery.tabOrder = {}
-    Discovery.live = {}
-    Discovery.snapshot = {}
+    ModuleRegistry.modules = {}
+    ModuleRegistry.modulesById = {}
+    ModuleRegistry.modulesWithQuickContent = {}
+    ModuleRegistry.tabOrder = {}
+    ModuleRegistry.live = {}
+    ModuleRegistry.snapshot = {}
 
-    function Discovery.run(moduleOrder)
-        Discovery.modules = {}
-        Discovery.modulesById = {}
-        Discovery.modulesWithQuickContent = {}
-        Discovery.tabOrder = {}
+    function ModuleRegistry.refresh(moduleOrder)
+        ModuleRegistry.modules = {}
+        ModuleRegistry.modulesById = {}
+        ModuleRegistry.modulesWithQuickContent = {}
+        ModuleRegistry.tabOrder = {}
 
         local found = {}
         for pluginGuid, mod in pairs(rom.mods) do
@@ -135,13 +136,13 @@ function Framework.createDiscovery(packId, config, lib)
             if namespace == "_v" then
                 duplicateNamespaces[namespace] = true
                 table.sort(entries)
-                contractWarn(packId,
+                logging.warn(packId,
                     "reserved hash namespace '%s' is used by: %s; skipping all conflicting entries",
                     tostring(namespace), table.concat(entries, ", "))
             elseif #entries > 1 then
                 duplicateNamespaces[namespace] = true
                 table.sort(entries)
-                contractWarn(packId,
+                logging.warn(packId,
                     "duplicate hash namespace '%s' across entries: %s; skipping all conflicting entries",
                     tostring(namespace), table.concat(entries, ", "))
             end
@@ -156,32 +157,32 @@ function Framework.createDiscovery(packId, config, lib)
 
             if not duplicateNamespaces[id] then
                 if not id or not name then
-                    contractWarn(packId,
+                    logging.warn(packId,
                         "Skipping %s: missing id/name", pluginGuid)
                 else
                     local discovered = BuildEntry(foundModule)
-                    table.insert(Discovery.modules, discovered)
-                    Discovery.modulesById[discovered.id] = discovered
+                    table.insert(ModuleRegistry.modules, discovered)
+                    ModuleRegistry.modulesById[discovered.id] = discovered
                     if hasQuickContent then
-                        table.insert(Discovery.modulesWithQuickContent, discovered)
+                        table.insert(ModuleRegistry.modulesWithQuickContent, discovered)
                     end
                 end
             end
         end
 
         local labelCount = {}
-        for _, entry in ipairs(Discovery.modules) do
+        for _, entry in ipairs(ModuleRegistry.modules) do
             local label = entry.shortName or entry.name
             labelCount[label] = (labelCount[label] or 0) + 1
         end
 
         local labelIndex = {}
-        for _, entry in ipairs(Discovery.modules) do
+        for _, entry in ipairs(ModuleRegistry.modules) do
             local label = entry.shortName or entry.name
             if labelCount[label] > 1 then
                 labelIndex[label] = (labelIndex[label] or 0) + 1
                 entry._tabLabel = label .. " (" .. labelIndex[label] .. ")"
-                warnIf(packId, config.DebugMode,
+                logging.warnIf(packId, config.DebugMode,
                     "%s: shortName '%s' is shared by multiple modules. Rendering as '%s'.",
                     entry.pluginGuid, label, entry._tabLabel)
             else
@@ -192,72 +193,72 @@ function Framework.createDiscovery(packId, config, lib)
         local placed = {}
         if type(moduleOrder) == "table" then
             for _, moduleId in ipairs(moduleOrder) do
-                if type(moduleId) == "string" and Discovery.modulesById[moduleId] then
-                    local entry = Discovery.modulesById[moduleId]
+                if type(moduleId) == "string" and ModuleRegistry.modulesById[moduleId] then
+                    local entry = ModuleRegistry.modulesById[moduleId]
                     if not placed[entry.id] then
                         placed[entry.id] = true
-                        table.insert(Discovery.tabOrder, entry)
+                        table.insert(ModuleRegistry.tabOrder, entry)
                     end
                 elseif type(moduleId) == "string" then
-                    warnIf(packId, config.DebugMode,
+                    logging.warnIf(packId, config.DebugMode,
                         "moduleOrder contains unknown module id '%s'; entry ignored", moduleId)
                 end
             end
         end
 
-        for _, entry in ipairs(Discovery.modules) do
+        for _, entry in ipairs(ModuleRegistry.modules) do
             if not placed[entry.id] then
-                table.insert(Discovery.tabOrder, entry)
+                table.insert(ModuleRegistry.tabOrder, entry)
             end
         end
     end
 
-    function Discovery.live.captureSnapshot()
+    function ModuleRegistry.live.captureSnapshot()
         local snapshot = { hosts = {} }
 
-        for _, entry in ipairs(Discovery.modules) do
+        for _, entry in ipairs(ModuleRegistry.modules) do
             local host = GetHost(entry.pluginGuid)
             snapshot.hosts[entry] = host or false
             if not host and not warnedMissingHosts[entry.pluginGuid] then
                 warnedMissingHosts[entry.pluginGuid] = true
-                contractWarn(packId, "%s: module host is unavailable", entry.pluginGuid)
+                logging.warn(packId, "%s: module host is unavailable", entry.pluginGuid)
             end
         end
 
         return snapshot
     end
 
-    function Discovery.live.getHost(entry)
+    function ModuleRegistry.live.getHost(entry)
         return GetHost(entry.pluginGuid)
     end
 
-    function Discovery.snapshot.getHost(entry, snapshot)
+    function ModuleRegistry.snapshot.getHost(entry, snapshot)
         local host = snapshot.hosts[entry]
         return host or nil
     end
 
-    function Discovery.snapshot.isEntryEnabled(entry, snapshot)
+    function ModuleRegistry.snapshot.isEntryEnabled(entry, snapshot)
         return ReadPersisted(entry, "Enabled", snapshot) == true
     end
 
-    function Discovery.snapshot.setEntryEnabled(entry, enabled, snapshot)
+    function ModuleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
         return SetEntryEnabled(entry, enabled, snapshot)
     end
 
-    function Discovery.snapshot.getStorageValue(module, alias, snapshot)
+    function ModuleRegistry.snapshot.getStorageValue(module, alias, snapshot)
         return ReadPersisted(module, alias, snapshot)
     end
 
-    function Discovery.snapshot.setStorageValue(module, alias, value, snapshot)
+    function ModuleRegistry.snapshot.setStorageValue(module, alias, value, snapshot)
         return WriteStagedAndFlush(module, alias, value, snapshot)
     end
 
-    function Discovery.snapshot.isDebugEnabled(entry, snapshot)
+    function ModuleRegistry.snapshot.isDebugEnabled(entry, snapshot)
         return ReadPersisted(entry, "DebugMode", snapshot) == true
     end
 
-    function Discovery.snapshot.setDebugEnabled(entry, value, snapshot)
-        local host = Discovery.snapshot.getHost(entry, snapshot)
+    function ModuleRegistry.snapshot.setDebugEnabled(entry, value, snapshot)
+        local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
         if not host then
             return false, "module host is unavailable"
         end
@@ -265,5 +266,7 @@ function Framework.createDiscovery(packId, config, lib)
         return true
     end
 
-    return Discovery
+    return ModuleRegistry
 end
+
+return createModuleRegistry

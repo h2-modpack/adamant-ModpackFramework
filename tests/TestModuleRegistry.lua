@@ -15,10 +15,7 @@ end
 
 local function attachModule(pluginGuid, definition, persisted, exports)
     exports = exports or {}
-    local manualMutation = definition.apply and definition.revert and {
-        apply = definition.apply,
-        revert = definition.revert,
-    } or nil
+    local patchPlan = definition.patchPlan
     definition = AdamantModpackLib_Internal.moduleHost.prepareDefinition({}, {
         modpack = definition.modpack,
         id = definition.id,
@@ -36,7 +33,7 @@ local function attachModule(pluginGuid, definition, persisted, exports)
         session = session,
         drawTab = exports.DrawTab,
         drawQuickContent = exports.DrawQuickContent,
-        registerManualMutation = manualMutation,
+        registerPatchMutation = patchPlan,
     })
     authorHost.tryActivate()
     exports.host = host
@@ -44,18 +41,18 @@ local function attachModule(pluginGuid, definition, persisted, exports)
     return exports
 end
 
-TestDiscovery = {}
+TestModuleRegistry = {}
 
-function TestDiscovery:setUp()
+function TestModuleRegistry:setUp()
     resetMods()
     CaptureWarnings()
 end
 
-function TestDiscovery:tearDown()
+function TestModuleRegistry:tearDown()
     RestoreWarnings()
 end
 
-function TestDiscovery:testModulesDiscoverDrawTabAndQuickContent()
+function TestModuleRegistry:testModulesRegisterDrawTabAndQuickContent()
     attachModule("test-GodPool", {
         modpack = "test-pack",
         id = "GodPool",
@@ -64,23 +61,21 @@ function TestDiscovery:testModulesDiscoverDrawTabAndQuickContent()
         storage = {
             { type = "bool", alias = "EnabledFlag", default = false },
         },
-        apply = function() end,
-        revert = function() end,
     }, { Enabled = false, DebugMode = false, EnabledFlag = false }, {
         DrawTab = function() end,
         DrawQuickContent = function() end,
     })
 
-    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run()
+    local moduleRegistry = FrameworkTestApi.createModuleRegistry("test-pack", { DebugMode = false })
+    moduleRegistry.refresh()
 
-    lu.assertEquals(#discovery.modules, 1)
-    lu.assertEquals(#discovery.modulesWithQuickContent, 1)
-    lu.assertEquals(#discovery.tabOrder, 1)
-    lu.assertEquals(discovery.tabOrder[1]._tabLabel, "Pool")
+    lu.assertEquals(#moduleRegistry.modules, 1)
+    lu.assertEquals(#moduleRegistry.modulesWithQuickContent, 1)
+    lu.assertEquals(#moduleRegistry.tabOrder, 1)
+    lu.assertEquals(moduleRegistry.tabOrder[1]._tabLabel, "Pool")
 end
 
-function TestDiscovery:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissing()
+function TestModuleRegistry:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissing()
     local exports = attachModule("test-GodPool", {
         modpack = "test-pack",
         id = "GodPool",
@@ -88,16 +83,14 @@ function TestDiscovery:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissing()
         storage = {
             { type = "bool", alias = "EnabledFlag", default = false },
         },
-        apply = function() end,
-        revert = function() end,
     }, { Enabled = false, DebugMode = false, EnabledFlag = false }, {
         DrawTab = function() end,
     })
 
-    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run()
+    local moduleRegistry = FrameworkTestApi.createModuleRegistry("test-pack", { DebugMode = false })
+    moduleRegistry.refresh()
 
-    local entry = discovery.modules[1]
+    local entry = moduleRegistry.modules[1]
     local replacement = {
         getStorage = function()
             return entry.storage
@@ -133,20 +126,20 @@ function TestDiscovery:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissing()
     exports.host = replacement
     AdamantModpackLib_Internal.liveModuleHosts["test-GodPool"] = replacement
 
-    local liveSnapshot = discovery.live.captureSnapshot()
-    lu.assertEquals(discovery.snapshot.getHost(entry, liveSnapshot), replacement)
-    lu.assertTrue(discovery.snapshot.isEntryEnabled(entry, liveSnapshot))
+    local liveSnapshot = moduleRegistry.live.captureSnapshot()
+    lu.assertEquals(moduleRegistry.snapshot.getHost(entry, liveSnapshot), replacement)
+    lu.assertTrue(moduleRegistry.snapshot.isEntryEnabled(entry, liveSnapshot))
 
     exports.host = nil
     AdamantModpackLib_Internal.liveModuleHosts["test-GodPool"] = nil
 
-    local missingSnapshot = discovery.live.captureSnapshot()
-    lu.assertNil(discovery.snapshot.getHost(entry, missingSnapshot))
+    local missingSnapshot = moduleRegistry.live.captureSnapshot()
+    lu.assertNil(moduleRegistry.snapshot.getHost(entry, missingSnapshot))
     lu.assertEquals(#Warnings, 1)
     lu.assertStrContains(Warnings[1], "module host is unavailable")
 end
 
-function TestDiscovery:testCapturedSnapshotIsStableAcrossHostReplacement()
+function TestModuleRegistry:testCapturedSnapshotIsStableAcrossHostReplacement()
     local exports = attachModule("test-GodPool", {
         modpack = "test-pack",
         id = "GodPool",
@@ -154,18 +147,16 @@ function TestDiscovery:testCapturedSnapshotIsStableAcrossHostReplacement()
         storage = {
             { type = "bool", alias = "EnabledFlag", default = false },
         },
-        apply = function() end,
-        revert = function() end,
     }, { Enabled = false, DebugMode = false, EnabledFlag = false }, {
         DrawTab = function() end,
     })
 
-    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run()
+    local moduleRegistry = FrameworkTestApi.createModuleRegistry("test-pack", { DebugMode = false })
+    moduleRegistry.refresh()
 
-    local entry = discovery.modules[1]
+    local entry = moduleRegistry.modules[1]
     local originalHost = exports.host
-    local capturedSnapshot = discovery.live.captureSnapshot()
+    local capturedSnapshot = moduleRegistry.live.captureSnapshot()
 
     local replacement = {
         getStorage = function()
@@ -196,15 +187,15 @@ function TestDiscovery:testCapturedSnapshotIsStableAcrossHostReplacement()
     exports.host = replacement
     AdamantModpackLib_Internal.liveModuleHosts["test-GodPool"] = replacement
 
-    lu.assertEquals(discovery.snapshot.getHost(entry, capturedSnapshot), originalHost)
-    lu.assertEquals(discovery.live.getHost(entry), replacement)
+    lu.assertEquals(moduleRegistry.snapshot.getHost(entry, capturedSnapshot), originalHost)
+    lu.assertEquals(moduleRegistry.live.getHost(entry), replacement)
 
-    local freshSnapshot = discovery.live.captureSnapshot()
-    lu.assertEquals(discovery.snapshot.getHost(entry, freshSnapshot), replacement)
-    lu.assertEquals(discovery.snapshot.getHost(entry, capturedSnapshot), originalHost)
+    local freshSnapshot = moduleRegistry.live.captureSnapshot()
+    lu.assertEquals(moduleRegistry.snapshot.getHost(entry, freshSnapshot), replacement)
+    lu.assertEquals(moduleRegistry.snapshot.getHost(entry, capturedSnapshot), originalHost)
 end
 
-function TestDiscovery:testHostSnapshotWarnsOnceWhenHostStaysMissing()
+function TestModuleRegistry:testHostSnapshotWarnsOnceWhenHostStaysMissing()
     local exports = attachModule("test-GodPool", {
         modpack = "test-pack",
         id = "GodPool",
@@ -212,25 +203,23 @@ function TestDiscovery:testHostSnapshotWarnsOnceWhenHostStaysMissing()
         storage = {
             { type = "bool", alias = "EnabledFlag", default = false },
         },
-        apply = function() end,
-        revert = function() end,
     }, { Enabled = false, DebugMode = false, EnabledFlag = false }, {
         DrawTab = function() end,
     })
 
-    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run()
+    local moduleRegistry = FrameworkTestApi.createModuleRegistry("test-pack", { DebugMode = false })
+    moduleRegistry.refresh()
     exports.host = nil
     AdamantModpackLib_Internal.liveModuleHosts["test-GodPool"] = nil
 
-    discovery.live.captureSnapshot()
-    discovery.live.captureSnapshot()
+    moduleRegistry.live.captureSnapshot()
+    moduleRegistry.live.captureSnapshot()
 
     lu.assertEquals(#Warnings, 1)
     lu.assertStrContains(Warnings[1], "module host is unavailable")
 end
 
-function TestDiscovery:testModuleWithOnlyBuiltInStorageIsDiscovered()
+function TestModuleRegistry:testModuleWithOnlyBuiltInStorageIsRegistered()
     attachModule("test-BuiltInsOnly", {
         modpack = "test-pack",
         id = "BuiltInsOnly",
@@ -239,15 +228,15 @@ function TestDiscovery:testModuleWithOnlyBuiltInStorageIsDiscovered()
         DrawTab = function() end,
     })
 
-    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run()
+    local moduleRegistry = FrameworkTestApi.createModuleRegistry("test-pack", { DebugMode = false })
+    moduleRegistry.refresh()
 
-    lu.assertEquals(#discovery.modules, 1)
-    lu.assertEquals(discovery.modules[1].id, "BuiltInsOnly")
+    lu.assertEquals(#moduleRegistry.modules, 1)
+    lu.assertEquals(moduleRegistry.modules[1].id, "BuiltInsOnly")
     lu.assertEquals(#Warnings, 0)
 end
 
-function TestDiscovery:testMissingDrawTabIsRejectedByLibHostCreation()
+function TestModuleRegistry:testMissingDrawTabIsRejectedByLibHostCreation()
     local ok, err = pcall(function()
         attachModule("test-NoDrawTab", {
         modpack = "test-pack",
@@ -256,8 +245,6 @@ function TestDiscovery:testMissingDrawTabIsRejectedByLibHostCreation()
         storage = {
             { type = "bool", alias = "EnabledFlag", default = false },
         },
-        apply = function() end,
-        revert = function() end,
     }, { Enabled = false, DebugMode = false, EnabledFlag = false })
     end)
 
@@ -265,7 +252,7 @@ function TestDiscovery:testMissingDrawTabIsRejectedByLibHostCreation()
     lu.assertStrContains(tostring(err), "drawTab is required")
 end
 
-function TestDiscovery:testDuplicateIdsSkipConflictingEntries()
+function TestModuleRegistry:testDuplicateIdsSkipConflictingEntries()
     attachModule("test-Alpha", {
         modpack = "test-pack",
         id = "SharedId",
@@ -273,8 +260,6 @@ function TestDiscovery:testDuplicateIdsSkipConflictingEntries()
         storage = {
             { type = "bool", alias = "Flag", default = false },
         },
-        apply = function() end,
-        revert = function() end,
     }, { Enabled = false, DebugMode = false, Flag = false }, {
         DrawTab = function() end,
     })
@@ -285,21 +270,19 @@ function TestDiscovery:testDuplicateIdsSkipConflictingEntries()
         storage = {
             { type = "bool", alias = "Flag", default = false },
         },
-        apply = function() end,
-        revert = function() end,
     }, { Enabled = false, DebugMode = false, Flag = false }, {
         DrawTab = function() end,
     })
 
-    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run()
+    local moduleRegistry = FrameworkTestApi.createModuleRegistry("test-pack", { DebugMode = false })
+    moduleRegistry.refresh()
 
-    lu.assertEquals(#discovery.modules, 0)
+    lu.assertEquals(#moduleRegistry.modules, 0)
     lu.assertEquals(#Warnings, 1)
     lu.assertStrContains(Warnings[1], "duplicate hash namespace 'SharedId'")
 end
 
-function TestDiscovery:testTabOrderPinsKnownIdsFirst()
+function TestModuleRegistry:testTabOrderPinsKnownIdsFirst()
     attachModule("test-GodPool", {
         modpack = "test-pack",
         id = "GodPool",
@@ -307,8 +290,6 @@ function TestDiscovery:testTabOrderPinsKnownIdsFirst()
         storage = {
             { type = "bool", alias = "FlagA", default = false },
         },
-        apply = function() end,
-        revert = function() end,
     }, { Enabled = false, DebugMode = false, FlagA = false }, {
         DrawTab = function() end,
     })
@@ -320,8 +301,6 @@ function TestDiscovery:testTabOrderPinsKnownIdsFirst()
         storage = {
             { type = "bool", alias = "FlagB", default = false },
         },
-        apply = function() end,
-        revert = function() end,
     }, { Enabled = false, DebugMode = false, FlagB = false }, {
         DrawTab = function() end,
     })
@@ -332,22 +311,20 @@ function TestDiscovery:testTabOrderPinsKnownIdsFirst()
         storage = {
             { type = "bool", alias = "FlagC", default = false },
         },
-        apply = function() end,
-        revert = function() end,
     }, { Enabled = false, DebugMode = false, FlagC = false }, {
         DrawTab = function() end,
     })
 
-    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run({ "BiomeControl", "GodPool" })
+    local moduleRegistry = FrameworkTestApi.createModuleRegistry("test-pack", { DebugMode = false })
+    moduleRegistry.refresh({ "BiomeControl", "GodPool" })
 
-    lu.assertEquals(#discovery.tabOrder, 3)
-    lu.assertEquals(discovery.tabOrder[1].id, "BiomeControl")
-    lu.assertEquals(discovery.tabOrder[2].id, "GodPool")
-    lu.assertEquals(discovery.tabOrder[3].id, "BoonBans")
+    lu.assertEquals(#moduleRegistry.tabOrder, 3)
+    lu.assertEquals(moduleRegistry.tabOrder[1].id, "BiomeControl")
+    lu.assertEquals(moduleRegistry.tabOrder[2].id, "GodPool")
+    lu.assertEquals(moduleRegistry.tabOrder[3].id, "BoonBans")
 end
 
-function TestDiscovery:testTabOrderIgnoresLabels()
+function TestModuleRegistry:testTabOrderIgnoresLabels()
     attachModule("test-GodPool", {
         modpack = "test-pack",
         id = "GodPool",
@@ -355,8 +332,6 @@ function TestDiscovery:testTabOrderIgnoresLabels()
         storage = {
             { type = "bool", alias = "FlagA", default = false },
         },
-        apply = function() end,
-        revert = function() end,
     }, { Enabled = false, DebugMode = false, FlagA = false }, {
         DrawTab = function() end,
     })
@@ -368,16 +343,14 @@ function TestDiscovery:testTabOrderIgnoresLabels()
         storage = {
             { type = "bool", alias = "FlagB", default = false },
         },
-        apply = function() end,
-        revert = function() end,
     }, { Enabled = false, DebugMode = false, FlagB = false }, {
         DrawTab = function() end,
     })
 
-    local discovery = FrameworkTestApi.createDiscovery("test-pack", { DebugMode = false }, lib)
-    discovery.run({ "Biome", "God Pool", "GodPool" })
+    local moduleRegistry = FrameworkTestApi.createModuleRegistry("test-pack", { DebugMode = false })
+    moduleRegistry.refresh({ "Biome", "God Pool", "GodPool" })
 
-    lu.assertEquals(#discovery.tabOrder, 2)
-    lu.assertEquals(discovery.tabOrder[1].id, "GodPool")
-    lu.assertEquals(discovery.tabOrder[2].id, "BiomeControl")
+    lu.assertEquals(#moduleRegistry.tabOrder, 2)
+    lu.assertEquals(moduleRegistry.tabOrder[1].id, "GodPool")
+    lu.assertEquals(moduleRegistry.tabOrder[2].id, "BiomeControl")
 end

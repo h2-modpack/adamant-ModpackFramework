@@ -76,7 +76,7 @@ function TestMain:testCreateHudRegistersFrameworkHashOverlay()
         }, {})
     end
 
-    local theme = FrameworkTestApi.createTheme(lib)
+    local theme = FrameworkTestApi.createTheme()
     local config = { ModEnabled = true }
     local hash = {
         GetConfigHash = function()
@@ -126,7 +126,7 @@ function TestMain:testRenderWindowCleansUpImguiStacksBeforeRethrow()
         end,
     }
 
-    local discovery = {
+    local moduleRegistry = {
         modules = {},
         modulesWithQuickContent = {},
         tabOrder = {},
@@ -152,8 +152,8 @@ function TestMain:testRenderWindowCleansUpImguiStacksBeforeRethrow()
         end,
         markHashDirty = noop,
     }
-    local theme = FrameworkTestApi.createTheme(lib)
-    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, {
+    local theme = FrameworkTestApi.createTheme()
+    local builtUi = FrameworkTestApi.createUI(moduleRegistry, hud, theme, {
         ModEnabled = true,
         DebugMode = false,
         Profiles = {
@@ -201,11 +201,11 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
     end
     lib.coordinator.register("startup-pack", { ModEnabled = true })
 
-    FrameworkTestApi.withFactories({
-        createDiscovery = function()
+    FrameworkTestApi.withBootConstructors({
+        createModuleRegistry = function()
             return {
                 modules = { entry },
-                run = function() end,
+                refresh = function() end,
                 live = {
                     captureSnapshot = function()
                         return { hosts = { [entry] = host } }
@@ -218,7 +218,7 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
                 },
             }
         end,
-        createHash = function()
+        createConfigHash = function()
             return {}
         end,
         createTheme = function()
@@ -264,8 +264,8 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
 
     local previousSetupRunData = rom.game.SetupRunData
     local setupRunDataCalls = 0
-    local applyCalls = 0
-    local revertCalls = 0
+    local buildCalls = 0
+    local target = { Value = "base" }
 
     rom.game.SetupRunData = function()
         setupRunDataCalls = setupRunDataCalls + 1
@@ -286,19 +286,15 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
         definition = definition,
         store = store,
         session = session,
-        registerManualMutation = {
-            apply = function()
-                applyCalls = applyCalls + 1
-            end,
-            revert = function()
-                revertCalls = revertCalls + 1
-            end,
-        },
+        registerPatchMutation = function(plan)
+            buildCalls = buildCalls + 1
+            plan:set(target, "Value", "patched")
+        end,
         drawTab = function() end,
     })
     authorHost.tryActivate()
 
-    lu.assertEquals(applyCalls, 0)
+    lu.assertEquals(buildCalls, 0)
     lib.coordinator.register(packId, {
         ModEnabled = true,
     })
@@ -312,11 +308,11 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
         definition = definition,
     }
 
-    FrameworkTestApi.withFactories({
-        createDiscovery = function()
+    FrameworkTestApi.withBootConstructors({
+        createModuleRegistry = function()
             return {
                 modules = { entry },
-                run = function() end,
+                refresh = function() end,
                 live = {
                     captureSnapshot = function()
                         return { hosts = { [entry] = host } }
@@ -329,7 +325,7 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
                 },
             }
         end,
-        createHash = function()
+        createConfigHash = function()
             return {}
         end,
         createTheme = function()
@@ -368,17 +364,17 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
     rom.game.SetupRunData = previousSetupRunData
 
     lu.assertTrue(ok, tostring(err))
-    lu.assertEquals(applyCalls, 1)
-    lu.assertEquals(revertCalls, 1)
+    lu.assertEquals(buildCalls, 1)
+    lu.assertEquals(target.Value, "base")
     lu.assertEquals(setupRunDataCalls, 1)
 end
 
 function TestMain:testRepeatedInitReplacesPackStateAndKeepsStablePackIndex()
     local packId = "reinit-pack"
-    local internal = AdamantModpackFramework_Internal
-    local previousPack = internal.packs[packId]
+    local packRegistry = FrameworkPackRegistry
+    local previousPack = packRegistry.packs[packId]
     local previousPackList = {}
-    for i, value in ipairs(internal.packList) do
+    for i, value in ipairs(packRegistry.packList) do
         previousPackList[i] = value
     end
 
@@ -390,11 +386,11 @@ function TestMain:testRepeatedInitReplacesPackStateAndKeepsStablePackIndex()
         ModEnabled = true,
     })
 
-    FrameworkTestApi.withFactories({
-        createDiscovery = function()
+    FrameworkTestApi.withBootConstructors({
+        createModuleRegistry = function()
             return {
                 modules = {},
-                run = function() end,
+                refresh = function() end,
                 live = {
                     captureSnapshot = function()
                         return { hosts = {} }
@@ -407,7 +403,7 @@ function TestMain:testRepeatedInitReplacesPackStateAndKeepsStablePackIndex()
                 },
             }
         end,
-        createHash = function()
+        createConfigHash = function()
             return {}
         end,
         createTheme = function()
@@ -440,15 +436,15 @@ function TestMain:testRepeatedInitReplacesPackStateAndKeepsStablePackIndex()
     end)
 
     local packIdCount = 0
-    for _, value in ipairs(internal.packList) do
+    for _, value in ipairs(packRegistry.packList) do
         if value == packId then
             packIdCount = packIdCount + 1
         end
     end
-    local activePack = internal.packs[packId]
+    local activePack = packRegistry.packs[packId]
 
-    internal.packs[packId] = previousPack
-    internal.packList = previousPackList
+    packRegistry.packs[packId] = previousPack
+    packRegistry.packList = previousPackList
     lib.coordinator.register(packId, nil)
 
     lu.assertTrue(firstPack ~= secondPack)
@@ -461,10 +457,10 @@ end
 
 function TestMain:testFailedInitDoesNotRegisterPack()
     local packId = "failed-init-pack"
-    local internal = AdamantModpackFramework_Internal
-    local previousPack = internal.packs[packId]
+    local packRegistry = FrameworkPackRegistry
+    local previousPack = packRegistry.packs[packId]
     local previousPackList = {}
-    for i, value in ipairs(internal.packList) do
+    for i, value in ipairs(packRegistry.packList) do
         previousPackList[i] = value
     end
 
@@ -472,11 +468,11 @@ function TestMain:testFailedInitDoesNotRegisterPack()
         ModEnabled = true,
     })
 
-    FrameworkTestApi.withFactories({
-        createDiscovery = function()
+    FrameworkTestApi.withBootConstructors({
+        createModuleRegistry = function()
             return {
                 modules = {},
-                run = function() end,
+                refresh = function() end,
                 live = {
                     captureSnapshot = function()
                         return { hosts = {} }
@@ -489,7 +485,7 @@ function TestMain:testFailedInitDoesNotRegisterPack()
                 },
             }
         end,
-        createHash = function()
+        createConfigHash = function()
             return {}
         end,
         createTheme = function()
@@ -518,26 +514,26 @@ function TestMain:testFailedInitDoesNotRegisterPack()
     end)
 
     local packIdCount = 0
-    for _, value in ipairs(internal.packList) do
+    for _, value in ipairs(packRegistry.packList) do
         if value == packId then
             packIdCount = packIdCount + 1
         end
     end
 
-    internal.packs[packId] = previousPack
-    internal.packList = previousPackList
+    packRegistry.packs[packId] = previousPack
+    packRegistry.packList = previousPackList
     lib.coordinator.register(packId, nil)
 
     lu.assertEquals(packIdCount, 0)
-    lu.assertEquals(internal.packs[packId], previousPack)
+    lu.assertEquals(packRegistry.packs[packId], previousPack)
 end
 
 function TestMain:testTryInitReturnsPackOnSuccess()
     local packId = "try-init-success-pack"
-    local internal = AdamantModpackFramework_Internal
-    local previousPack = internal.packs[packId]
+    local packRegistry = FrameworkPackRegistry
+    local previousPack = packRegistry.packs[packId]
     local previousPackList = {}
-    for i, value in ipairs(internal.packList) do
+    for i, value in ipairs(packRegistry.packList) do
         previousPackList[i] = value
     end
 
@@ -546,11 +542,11 @@ function TestMain:testTryInitReturnsPackOnSuccess()
     })
 
     local ok, pack, err
-    FrameworkTestApi.withFactories({
-        createDiscovery = function()
+    FrameworkTestApi.withBootConstructors({
+        createModuleRegistry = function()
             return {
                 modules = {},
-                run = function() end,
+                refresh = function() end,
                 live = {
                     captureSnapshot = function()
                         return { hosts = {} }
@@ -563,7 +559,7 @@ function TestMain:testTryInitReturnsPackOnSuccess()
                 },
             }
         end,
-        createHash = function()
+        createConfigHash = function()
             return {}
         end,
         createTheme = function()
@@ -591,8 +587,8 @@ function TestMain:testTryInitReturnsPackOnSuccess()
         }, 1, {})
     end)
 
-    internal.packs[packId] = previousPack
-    internal.packList = previousPackList
+    packRegistry.packs[packId] = previousPack
+    packRegistry.packList = previousPackList
     lib.coordinator.register(packId, nil)
 
     lu.assertTrue(ok)
@@ -604,10 +600,10 @@ function TestMain:testTryInitReturnsErrorAndDoesNotRegisterPack()
     CaptureWarnings()
 
     local packId = "try-init-fail-pack"
-    local internal = AdamantModpackFramework_Internal
-    local previousPack = internal.packs[packId]
+    local packRegistry = FrameworkPackRegistry
+    local previousPack = packRegistry.packs[packId]
     local previousPackList = {}
-    for i, value in ipairs(internal.packList) do
+    for i, value in ipairs(packRegistry.packList) do
         previousPackList[i] = value
     end
 
@@ -616,11 +612,11 @@ function TestMain:testTryInitReturnsErrorAndDoesNotRegisterPack()
     })
 
     local ok, pack, err
-    FrameworkTestApi.withFactories({
-        createDiscovery = function()
+    FrameworkTestApi.withBootConstructors({
+        createModuleRegistry = function()
             return {
                 modules = {},
-                run = function() end,
+                refresh = function() end,
                 live = {
                     captureSnapshot = function()
                         return { hosts = {} }
@@ -633,7 +629,7 @@ function TestMain:testTryInitReturnsErrorAndDoesNotRegisterPack()
                 },
             }
         end,
-        createHash = function()
+        createConfigHash = function()
             return {}
         end,
         createTheme = function()
@@ -661,14 +657,14 @@ function TestMain:testTryInitReturnsErrorAndDoesNotRegisterPack()
     local warnings = Warnings
 
     local packIdCount = 0
-    for _, value in ipairs(internal.packList) do
+    for _, value in ipairs(packRegistry.packList) do
         if value == packId then
             packIdCount = packIdCount + 1
         end
     end
 
-    internal.packs[packId] = previousPack
-    internal.packList = previousPackList
+    packRegistry.packs[packId] = previousPack
+    packRegistry.packList = previousPackList
     lib.coordinator.register(packId, nil)
     RestoreWarnings()
 
@@ -676,7 +672,7 @@ function TestMain:testTryInitReturnsErrorAndDoesNotRegisterPack()
     lu.assertNil(pack)
     lu.assertStrContains(tostring(err), "try init boom")
     lu.assertEquals(packIdCount, 0)
-    lu.assertEquals(internal.packs[packId], previousPack)
+    lu.assertEquals(packRegistry.packs[packId], previousPack)
     lu.assertEquals(#warnings, 1)
     lu.assertStrContains(warnings[1], "[try-init-fail-pack] Framework init failed; skipping pack:")
     lu.assertStrContains(warnings[1], "try init boom")
@@ -702,11 +698,11 @@ function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
     }
     lib.coordinator.register("startup-pack", { ModEnabled = true })
 
-    FrameworkTestApi.withFactories({
-        createDiscovery = function()
+    FrameworkTestApi.withBootConstructors({
+        createModuleRegistry = function()
             return {
                 modules = { entry },
-                run = function() end,
+                refresh = function() end,
                 live = {
                     captureSnapshot = function()
                         return { hosts = { [entry] = host } }
@@ -719,7 +715,7 @@ function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
                 },
             }
         end,
-        createHash = function()
+        createConfigHash = function()
             return {}
         end,
         createTheme = function()
@@ -834,21 +830,19 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
         PopStyleColor = noop,
     }
 
-    local firstState = { applied = 0, reverted = 0 }
-    local secondState = { applied = 0, reverted = 0 }
+    local firstState = { built = 0, target = { Value = "base" } }
+    local secondState = { built = 0, target = { Value = "base" } }
 
-    local discovery = MockDiscovery.create({
+    local moduleRegistry = MockModuleRegistry.create({
         {
             pluginGuid = "Alpha",
             id = "Alpha",
             name = "Alpha",
             enabled = true,
             storage = {},
-            apply = function()
-                firstState.applied = firstState.applied + 1
-            end,
-            revert = function()
-                firstState.reverted = firstState.reverted + 1
+            patchPlan = function(plan)
+                firstState.built = firstState.built + 1
+                plan:set(firstState.target, "Value", "patched")
             end,
         },
         {
@@ -857,12 +851,9 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
             name = "Bravo",
             enabled = true,
             storage = {},
-            apply = function()
-                secondState.applied = secondState.applied + 1
+            patchPlan = function()
+                secondState.built = secondState.built + 1
                 error("apply boom")
-            end,
-            revert = function()
-                secondState.reverted = secondState.reverted + 1
             end,
         },
     })
@@ -884,7 +875,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
         end,
     }
 
-    local theme = FrameworkTestApi.createTheme(lib)
+    local theme = FrameworkTestApi.createTheme()
     local setup = {
         NUM_PROFILES = 1,
         defaultProfiles = {
@@ -899,7 +890,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
         },
     }
 
-    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, config, "test-pack", "Test Window",
+    local builtUi = FrameworkTestApi.createUI(moduleRegistry, hud, theme, config, "test-pack", "Test Window",
         setup.NUM_PROFILES, setup.defaultProfiles, setup.renderQuickSetup)
     builtUi.addMenuBar()
 
@@ -917,10 +908,10 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
     lu.assertEquals(secondPassCurrent, false)
     lu.assertEquals(setupRunDataCalls, 0)
     lu.assertEquals(#hudMarkers, 0)
-    lu.assertEquals(firstState.applied, 1)
-    lu.assertEquals(firstState.reverted, 1)
-    lu.assertEquals(secondState.applied, 1)
-    lu.assertEquals(secondState.reverted, 0)
+    lu.assertEquals(firstState.built, 1)
+    lu.assertEquals(firstState.target.Value, "base")
+    lu.assertEquals(secondState.built, 1)
+    lu.assertEquals(secondState.target.Value, "base")
     lu.assertEquals(#warnings, 2)
     lu.assertStrContains(warnings[1], "[test-pack] Bravo apply failed: ")
     lu.assertStrContains(warnings[2], "[test-pack] Enable Mod toggle failed; restoring previous runtime state")
@@ -935,37 +926,30 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
         setupRunDataCalls = setupRunDataCalls + 1
     end
 
-    local firstState = { applied = 0, reverted = 0 }
-    local secondState = { applied = 0, reverted = 0 }
+    local firstState = { built = 0, target = { Value = "base" } }
+    local secondState = { built = 0, target = { Value = "base" } }
 
-    local discovery = MockDiscovery.create({
+    local moduleRegistry = MockModuleRegistry.create({
         {
             pluginGuid = "Alpha",
             id = "Alpha",
             name = "Alpha",
-            enabled = true,
-            affectsRunData = true,
+            enabled = false,
             storage = {},
-            apply = function()
-                firstState.applied = firstState.applied + 1
-            end,
-            revert = function()
-                firstState.reverted = firstState.reverted + 1
+            patchPlan = function(plan)
+                firstState.built = firstState.built + 1
+                plan:set(firstState.target, "Value", "patched")
             end,
         },
         {
             pluginGuid = "Bravo",
             id = "Bravo",
             name = "Bravo",
-            enabled = true,
-            affectsRunData = true,
+            enabled = false,
             storage = {},
-            apply = function()
-                secondState.applied = secondState.applied + 1
-            end,
-            revert = function()
-                secondState.reverted = secondState.reverted + 1
-                error("revert boom")
+            patchPlan = function()
+                secondState.built = secondState.built + 1
+                error("apply boom")
             end,
         },
     })
@@ -983,24 +967,24 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
     local staging = {
         ModEnabled = true,
         modules = {
-            Alpha = true,
-            Bravo = true,
+            Alpha = false,
+            Bravo = false,
         },
         debug = {},
     }
-    local snapshots = {
+    local snapshotAccess = {
         get = function()
             return nil
         end,
         capture = function()
-            return discovery.live.captureSnapshot()
+            return moduleRegistry.live.captureSnapshot()
         end,
         getHost = function(entry, snapshot)
-            return discovery.snapshot.getHost(entry, snapshot)
+            return moduleRegistry.snapshot.getHost(entry, snapshot)
         end,
     }
-    local runtime = AdamantModpackFramework_Internal.createUIRuntime({
-        discovery = discovery,
+    local runtime = FrameworkTestApi.createUIRuntime({
+        moduleRegistry = moduleRegistry,
         hud = hud,
         config = {
             ModEnabled = true,
@@ -1009,12 +993,13 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
         packId = "test-pack",
         colors = {},
         staging = staging,
-        snapshots = snapshots,
+        snapshotAccess = snapshotAccess,
         snapshotToStaging = function() end,
+        logging = FrameworkTestApi.logging,
     })
 
-    local snapshot = discovery.live.captureSnapshot()
-    local ok, err = runtime.setModulesEnabled({ "Alpha", "Bravo" }, false, snapshot)
+    local snapshot = moduleRegistry.live.captureSnapshot()
+    local ok, err = runtime.setModulesEnabled({ "Alpha", "Bravo" }, true, snapshot)
     runtime.flushPendingRunData()
 
     local warnings = Warnings
@@ -1022,15 +1007,15 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
     RestoreWarnings()
 
     lu.assertFalse(ok)
-    lu.assertStrContains(tostring(err), "revert boom")
-    lu.assertTrue(staging.modules.Alpha)
-    lu.assertTrue(staging.modules.Bravo)
-    lu.assertTrue(discovery.snapshot.isEntryEnabled(discovery.modulesById.Alpha, snapshot))
-    lu.assertTrue(discovery.snapshot.isEntryEnabled(discovery.modulesById.Bravo, snapshot))
-    lu.assertEquals(firstState.reverted, 1)
-    lu.assertEquals(firstState.applied, 1)
-    lu.assertEquals(secondState.reverted, 1)
-    lu.assertEquals(secondState.applied, 0)
+    lu.assertStrContains(tostring(err), "apply boom")
+    lu.assertFalse(staging.modules.Alpha)
+    lu.assertFalse(staging.modules.Bravo)
+    lu.assertFalse(moduleRegistry.snapshot.isEntryEnabled(moduleRegistry.modulesById.Alpha, snapshot))
+    lu.assertFalse(moduleRegistry.snapshot.isEntryEnabled(moduleRegistry.modulesById.Bravo, snapshot))
+    lu.assertEquals(firstState.built, 1)
+    lu.assertEquals(firstState.target.Value, "base")
+    lu.assertEquals(secondState.built, 1)
+    lu.assertEquals(secondState.target.Value, "base")
     lu.assertEquals(markHashDirtyCalls, 0)
     lu.assertEquals(setupRunDataCalls, 0)
     lu.assertEquals(#warnings, 1)
@@ -1094,7 +1079,7 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
         PopStyleColor = noop,
     }
 
-    local discovery = MockDiscovery.create({
+    local moduleRegistry = MockModuleRegistry.create({
         {
             pluginGuid = "Alpha",
             id = "Alpha",
@@ -1107,8 +1092,6 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
             DrawQuickContent = function(ui)
                 ui.Checkbox("Quick B", false)
             end,
-            apply = function() end,
-            revert = function() end,
         },
     })
 
@@ -1126,7 +1109,7 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
         end,
     }
 
-    local theme = FrameworkTestApi.createTheme(lib)
+    local theme = FrameworkTestApi.createTheme()
     local setup = {
         NUM_PROFILES = 1,
         defaultProfiles = {
@@ -1141,7 +1124,7 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
         },
     }
 
-    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, config, "test-pack", "Test Window",
+    local builtUi = FrameworkTestApi.createUI(moduleRegistry, hud, theme, config, "test-pack", "Test Window",
         setup.NUM_PROFILES, setup.defaultProfiles, setup.renderQuickSetup)
     builtUi.addMenuBar()
     local ok, err = pcall(builtUi.renderWindow)
@@ -1208,7 +1191,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
         PopStyleColor = noop,
     }
 
-    local discovery = MockDiscovery.create({
+    local moduleRegistry = MockModuleRegistry.create({
         {
             pluginGuid = "Alpha",
             id = "Alpha",
@@ -1221,8 +1204,6 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
             DrawQuickContent = function()
                 firstQuickRenders = firstQuickRenders + 1
             end,
-            apply = function() end,
-            revert = function() end,
         },
     })
 
@@ -1240,7 +1221,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
         end,
     }
 
-    local theme = FrameworkTestApi.createTheme(lib)
+    local theme = FrameworkTestApi.createTheme()
     local setup = {
         NUM_PROFILES = 1,
         defaultProfiles = {
@@ -1255,12 +1236,12 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
         },
     }
 
-    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, config, "test-pack", "Test Window",
+    local builtUi = FrameworkTestApi.createUI(moduleRegistry, hud, theme, config, "test-pack", "Test Window",
         setup.NUM_PROFILES, setup.defaultProfiles, setup.renderQuickSetup)
     builtUi.addMenuBar()
     local okFirst, errFirst = pcall(builtUi.renderWindow)
 
-    local entry = discovery.modules[1]
+    local entry = moduleRegistry.modules[1]
     local replacementDefinition = AdamantModpackLib_Internal.moduleHost.prepareDefinition({}, {
         id = entry.id,
         name = entry.name,
@@ -1313,7 +1294,7 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     local packId = "flush-pack"
     alwaysDraw = public.createGuiCallbacks(packId).alwaysDraw
 
-    local capturedPacks = AdamantModpackFramework_Internal.packs
+    local capturedPacks = FrameworkPackRegistry.packs
     local previousPack = capturedPacks and capturedPacks[packId] or nil
     capturedPacks[packId] = {
         ui = {
@@ -1360,13 +1341,13 @@ function TestMain:testHostGuiCloseReleasesOverlaySuppression()
         end,
     }
 
-    local discovery = FrameworkTestApi.createDiscovery("test-pack", {
+    local moduleRegistry = FrameworkTestApi.createModuleRegistry("test-pack", {
         ModEnabled = true,
         DebugMode = false,
         Profiles = {},
-    }, lib)
-    discovery.modules = {}
-    discovery.modulesById = {}
+    })
+    moduleRegistry.modules = {}
+    moduleRegistry.modulesById = {}
     local hud = {
         flushPendingHash = function()
             flushCalls = flushCalls + 1
@@ -1379,8 +1360,8 @@ function TestMain:testHostGuiCloseReleasesOverlaySuppression()
         end,
         markHashDirty = noop,
     }
-    local theme = FrameworkTestApi.createTheme(lib)
-    local ui = FrameworkTestApi.createUI(discovery, hud, theme, {
+    local theme = FrameworkTestApi.createTheme()
+    local ui = FrameworkTestApi.createUI(moduleRegistry, hud, theme, {
         ModEnabled = true,
         DebugMode = false,
         Profiles = {},
@@ -1404,7 +1385,6 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
     local previousSetupRunData = rom.game.SetupRunData
     local setupRunDataCalls = 0
     local quickSetupRan = false
-    local revertCalls = 0
 
     rom.game.SetupRunData = function()
         setupRunDataCalls = setupRunDataCalls + 1
@@ -1459,17 +1439,15 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
         PopStyleColor = noop,
     }
 
-    local discovery = MockDiscovery.create({
+    local moduleRegistry = MockModuleRegistry.create({
         {
             pluginGuid = "Alpha",
             id = "Alpha",
             name = "Alpha",
             enabled = true,
-            affectsRunData = true,
             storage = {},
-            apply = function() end,
-            revert = function()
-                revertCalls = revertCalls + 1
+            patchPlan = function(plan)
+                plan:set({}, "unused", true)
             end,
             DrawTab = function() end,
         },
@@ -1489,7 +1467,7 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
         end,
     }
 
-    local theme = FrameworkTestApi.createTheme(lib)
+    local theme = FrameworkTestApi.createTheme()
     local setup = {
         NUM_PROFILES = 1,
         defaultProfiles = {
@@ -1510,7 +1488,7 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
         },
     }
 
-    local builtUi = FrameworkTestApi.createUI(discovery, hud, theme, config, "test-pack", "Test Window",
+    local builtUi = FrameworkTestApi.createUI(moduleRegistry, hud, theme, config, "test-pack", "Test Window",
         setup.NUM_PROFILES, setup.defaultProfiles, setup.renderQuickSetup)
     builtUi.addMenuBar()
     local ok, err = pcall(builtUi.renderWindow)
@@ -1521,6 +1499,5 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
 
     lu.assertTrue(ok, tostring(err))
     lu.assertTrue(quickSetupRan)
-    lu.assertEquals(revertCalls, 1)
     lu.assertEquals(setupRunDataCalls, 1)
 end

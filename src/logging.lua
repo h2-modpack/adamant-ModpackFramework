@@ -1,6 +1,4 @@
-Framework.logging = Framework.logging or {}
-
-local logging = Framework.logging
+local logging = {}
 
 local function FormatMessage(prefix, fmt, ...)
     if select("#", ...) > 0 then
@@ -18,3 +16,5 @@ function logging.warnIf(packId, enabled, fmt, ...)
         logging.warn(packId, fmt, ...)
     end
 end
+
+return logging

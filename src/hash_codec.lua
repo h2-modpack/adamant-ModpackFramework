@@ -1,7 +1,4 @@
-local internal = AdamantModpackFramework_Internal
-
-internal.hashCodec = internal.hashCodec or {}
-local hashCodec = internal.hashCodec
+local hashCodec = {}
 
 local TOKEN_ESCAPE = {
     ["%"] = "%25",
@@ -50,3 +47,5 @@ function hashCodec.deserialize(str)
     end
     return kv
 end
+
+return hashCodec

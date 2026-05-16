@@ -1,12 +1,8 @@
-import "ui/runtime.lua"
-import "ui/profiles.lua"
-import "ui/dev.lua"
-import "ui/quick_setup.lua"
-import "ui/module_tabs.lua"
+local deps = ...
+local logging = deps.logging
 
-function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, numProfiles,
-                            defaultProfiles, renderQuickSetup)
-    local internal = AdamantModpackFramework_Internal
+local function createUI(moduleRegistry, hud, theme, config, packId, windowTitle, numProfiles,
+                        defaultProfiles, renderQuickSetup, auditSavedProfiles)
     local ui = rom.ImGui
     local DEFAULT_WINDOW_WIDTH = 1280
     local DEFAULT_WINDOW_HEIGHT = 840
@@ -22,34 +18,34 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
         debug = {},
     }
 
-    local snapshots = {
+    local snapshotAccess = {
         current = nil,
     }
 
-    function snapshots.capture()
-        snapshots.current = discovery.live.captureSnapshot()
-        return snapshots.current
+    function snapshotAccess.capture()
+        snapshotAccess.current = moduleRegistry.live.captureSnapshot()
+        return snapshotAccess.current
     end
 
-    function snapshots.get()
-        return snapshots.current
+    function snapshotAccess.get()
+        return snapshotAccess.current
     end
 
-    function snapshots.getHost(entry, snapshot)
-        return discovery.snapshot.getHost(entry, snapshot or snapshots.current)
+    function snapshotAccess.getHost(entry, snapshot)
+        return moduleRegistry.snapshot.getHost(entry, snapshot or snapshotAccess.current)
     end
 
     local profiles
 
     local function snapshotToStaging()
         staging.ModEnabled = config.ModEnabled == true
-        local snapshot = snapshots.capture()
+        local snapshot = snapshotAccess.capture()
 
-        for _, entry in ipairs(discovery.modules) do
-            staging.modules[entry.id] = discovery.snapshot.isEntryEnabled(entry, snapshot)
-            staging.debug[entry.id] = discovery.snapshot.isDebugEnabled(entry, snapshot)
+        for _, entry in ipairs(moduleRegistry.modules) do
+            staging.modules[entry.id] = moduleRegistry.snapshot.isEntryEnabled(entry, snapshot)
+            staging.debug[entry.id] = moduleRegistry.snapshot.isDebugEnabled(entry, snapshot)
 
-            local host = snapshots.getHost(entry, snapshot)
+            local host = snapshotAccess.getHost(entry, snapshot)
             if host then
                 host.reloadFromConfig()
             end
@@ -60,15 +56,16 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
         end
     end
 
-    local runtime = internal.createUIRuntime({
-        discovery = discovery,
+    local runtime = import("ui/runtime.lua", nil, {
+        moduleRegistry = moduleRegistry,
         hud = hud,
         config = config,
         packId = packId,
         colors = colors,
         staging = staging,
-        snapshots = snapshots,
+        snapshotAccess = snapshotAccess,
         snapshotToStaging = snapshotToStaging,
+        logging = logging,
         onProfileLoaded = function()
             if profiles then
                 profiles.markSlotLabelsDirty()
@@ -76,36 +73,37 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
         end,
     })
 
-    profiles = internal.createUIProfiles({
+    profiles = import("ui/profiles.lua", nil, {
         config = config,
         colors = colors,
         numProfiles = numProfiles,
         defaultProfiles = defaultProfiles,
         packId = packId,
-        discovery = discovery,
+        moduleRegistry = moduleRegistry,
         runtime = runtime,
+        auditSavedProfiles = auditSavedProfiles,
     })
 
-    local quickSetup = internal.createUIQuickSetup({
+    local drawQuickSetup = import("ui/quick_setup.lua", nil, {
         renderQuickSetup = renderQuickSetup,
         theme = theme,
         profiles = profiles,
         staging = staging,
         runtime = runtime,
-        snapshots = snapshots,
+        snapshotAccess = snapshotAccess,
         colors = colors,
     })
 
-    local moduleTabs = internal.createUIModuleTabs({
+    local drawModuleTab = import("ui/module_tabs.lua", nil, {
         staging = staging,
         runtime = runtime,
-        snapshots = snapshots,
+        snapshotAccess = snapshotAccess,
     })
 
-    local dev = internal.createUIDev({
+    local drawDev = import("ui/dev.lua", nil, {
         config = config,
         colors = colors,
-        discovery = discovery,
+        moduleRegistry = moduleRegistry,
         staging = staging,
         runtime = runtime,
     })
@@ -119,7 +117,7 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
     local _showModWindow = false
     local uiSuppressionToken = nil
 
-    for _, entry in ipairs(discovery.modules) do
+    for _, entry in ipairs(moduleRegistry.modules) do
         moduleByTabLabel[entry._tabLabel] = entry
     end
 
@@ -131,11 +129,11 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
         cachedTabList = { "Quick Setup" }
         cachedQuickList = {}
 
-        for _, entry in ipairs(discovery.tabOrder) do
+        for _, entry in ipairs(moduleRegistry.tabOrder) do
             table.insert(cachedTabList, entry._tabLabel)
         end
 
-        for _, entry in ipairs(discovery.modulesWithQuickContent) do
+        for _, entry in ipairs(moduleRegistry.modulesWithQuickContent) do
             table.insert(cachedQuickList, entry)
         end
 
@@ -144,20 +142,8 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
         return cachedTabList
     end
 
-    local function drawQuickSetup(snapshot)
-        quickSetup.draw(cachedQuickList, snapshot)
-    end
-
     local function drawProfiles()
         profiles.draw()
-    end
-
-    local function drawDev(snapshot)
-        dev.draw(snapshot)
-    end
-
-    local function drawModuleTab(entry, snapshot)
-        moduleTabs.draw(entry, snapshot)
     end
 
     local function drawMainWindow(snapshot)
@@ -197,7 +183,7 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
         ui.Spacing()
 
         if selectedTab == "Quick Setup" then
-            drawQuickSetup(snapshot)
+            drawQuickSetup(cachedQuickList, snapshot)
         elseif selectedTab == "Profiles" then
             drawProfiles()
         elseif selectedTab == "Dev" then
@@ -259,7 +245,7 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
             openState, shouldDraw = ui.Begin(windowTitle, _showModWindow)
             beganWindow = true
             if shouldDraw then
-                drawMainWindow(snapshots.capture())
+                drawMainWindow(snapshotAccess.capture())
             end
         end, debug.traceback)
 
@@ -295,3 +281,5 @@ function Framework.createUI(discovery, hud, theme, config, packId, windowTitle, 
         handleHostGuiClosed = handleHostGuiClosed,
     }
 end
+
+return createUI

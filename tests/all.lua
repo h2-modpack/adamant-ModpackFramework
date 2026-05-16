@@ -4,8 +4,8 @@
 -- Usage: lua5.2 tests/all.lua (from the adamant-modpack-Framework directory)
 
 require('tests/TestUtils')
-require('tests/TestDiscovery')
-require('tests/TestHash')
+require('tests/TestModuleRegistry')
+require('tests/TestConfigHash')
 require('tests/TestAuditProfiles')
 require('tests/TestLib')
 require('tests/TestMain')

@@ -44,8 +44,8 @@ local Framework = {}
 ---@field setModulesEnabled fun(moduleIds: string[], enabled: boolean): boolean, string?
 
 ---@class AdamantModpackFramework.PackRuntime
----@field discovery table Opaque framework discovery runtime.
----@field hash table Opaque framework hash runtime.
+---@field moduleRegistry table Opaque framework module registry runtime.
+---@field configHash table Opaque framework config-hash runtime.
 ---@field hud table Opaque framework HUD runtime.
 ---@field ui table Opaque framework UI runtime.
 

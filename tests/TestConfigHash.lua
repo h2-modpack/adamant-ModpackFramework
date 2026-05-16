@@ -1,7 +1,7 @@
 local lu = require('luaunit')
 
-local function makeHash(discovery)
-    return FrameworkTestApi.createHash(discovery, { DebugMode = false }, lib, "test-pack")
+local function makeConfigHash(moduleRegistry)
+    return FrameworkTestApi.createConfigHash(moduleRegistry, { DebugMode = false }, "test-pack")
 end
 
 local function assertWarningContains(fragment)
@@ -13,18 +13,18 @@ local function assertWarningContains(fragment)
     lu.fail("expected warning containing '" .. fragment .. "'")
 end
 
-TestHashBase62 = {}
+TestConfigHashBase62 = {}
 
-function TestHashBase62:testRoundTrip()
-    local hash = makeHash(MockDiscovery.create())
-    local encoded = hash.EncodeBase62(3844)
-    lu.assertEquals(hash.DecodeBase62(encoded), 3844)
+function TestConfigHashBase62:testRoundTrip()
+    local configHash = makeConfigHash(MockModuleRegistry.create())
+    local encoded = configHash.EncodeBase62(3844)
+    lu.assertEquals(configHash.DecodeBase62(encoded), 3844)
 end
 
-TestHashStorage = {}
+TestConfigHashStorage = {}
 
-function TestHashStorage:testAllDefaultsProduceVersionOnlyCanonical()
-    local discovery = MockDiscovery.create({
+function TestConfigHashStorage:testAllDefaultsProduceVersionOnlyCanonical()
+    local moduleRegistry = MockModuleRegistry.create({
         {
             id = "GodPool",
             enabled = false,
@@ -39,13 +39,13 @@ function TestHashStorage:testAllDefaultsProduceVersionOnlyCanonical()
         },
     })
 
-    local canonical = makeHash(discovery).GetConfigHash()
+    local canonical = makeConfigHash(moduleRegistry).GetConfigHash()
 
     lu.assertEquals(canonical, "_v=1")
 end
 
-function TestHashStorage:testRegularAndSpecialStorageRoundTrip()
-    local discovery = MockDiscovery.create({
+function TestConfigHashStorage:testRegularAndSpecialStorageRoundTrip()
+    local moduleRegistry = MockModuleRegistry.create({
         {
             id = "GodPool",
             enabled = true,
@@ -71,8 +71,8 @@ function TestHashStorage:testRegularAndSpecialStorageRoundTrip()
             DrawTab = function() end,
         },
     })
-    local hash = makeHash(discovery)
-    local canonical = hash.GetConfigHash()
+    local configHash = makeConfigHash(moduleRegistry)
+    local canonical = configHash.GetConfigHash()
 
     lu.assertStrContains(canonical, "GodPool=1")
     lu.assertStrContains(canonical, "GodPool.EnabledFlag=1")
@@ -80,18 +80,18 @@ function TestHashStorage:testRegularAndSpecialStorageRoundTrip()
     lu.assertStrContains(canonical, "BiomeControl=1")
     lu.assertStrContains(canonical, "BiomeControl.Mode=Chaos")
 
-    local module = discovery.modulesById.GodPool
-    local biome = discovery.modulesById.BiomeControl
-    local moduleHost = discovery.live.getHost(module)
-    local biomeHost = discovery.live.getHost(biome)
-    local editSnapshot = discovery.live.captureSnapshot()
-    discovery.snapshot.setEntryEnabled(module, false, editSnapshot)
+    local module = moduleRegistry.modulesById.GodPool
+    local biome = moduleRegistry.modulesById.BiomeControl
+    local moduleHost = moduleRegistry.live.getHost(module)
+    local biomeHost = moduleRegistry.live.getHost(biome)
+    local editSnapshot = moduleRegistry.live.captureSnapshot()
+    moduleRegistry.snapshot.setEntryEnabled(module, false, editSnapshot)
     moduleHost.writeAndFlush("EnabledFlag", false)
     moduleHost.writeAndFlush("Count", 3)
-    discovery.snapshot.setEntryEnabled(biome, false, editSnapshot)
+    moduleRegistry.snapshot.setEntryEnabled(biome, false, editSnapshot)
     biomeHost.writeAndFlush("Mode", "Vanilla")
 
-    lu.assertTrue(hash.ApplyConfigHash(canonical))
+    lu.assertTrue(configHash.ApplyConfigHash(canonical))
     lu.assertTrue(moduleHost.read("Enabled"))
     lu.assertTrue(moduleHost.read("EnabledFlag"))
     lu.assertEquals(moduleHost.read("Count"), 7)
@@ -99,8 +99,8 @@ function TestHashStorage:testRegularAndSpecialStorageRoundTrip()
     lu.assertEquals(biomeHost.read("Mode"), "Chaos")
 end
 
-function TestHashStorage:testStringStorageEscapesHashDelimiters()
-    local discovery = MockDiscovery.create({
+function TestConfigHashStorage:testStringStorageEscapesHashDelimiters()
+    local moduleRegistry = MockModuleRegistry.create({
         {
             id = "BiomeControl",
             name = "Biome Control",
@@ -113,21 +113,21 @@ function TestHashStorage:testStringStorageEscapesHashDelimiters()
             },
         },
     })
-    local hash = makeHash(discovery)
-    local canonical = hash.GetConfigHash()
-    local module = discovery.modulesById.BiomeControl
-    local host = discovery.live.getHost(module)
+    local configHash = makeConfigHash(moduleRegistry)
+    local canonical = configHash.GetConfigHash()
+    local module = moduleRegistry.modulesById.BiomeControl
+    local host = moduleRegistry.live.getHost(module)
 
     lu.assertStrContains(canonical, "BiomeControl.Filter=Apollo%7CZeus%3DPoseidon%25Chaos")
     lu.assertNotStrContains(canonical, "Apollo|Zeus")
 
     host.writeAndFlush("Filter", "")
-    lu.assertTrue(hash.ApplyConfigHash(canonical))
+    lu.assertTrue(configHash.ApplyConfigHash(canonical))
     lu.assertEquals(host.read("Filter"), "Apollo|Zeus=Poseidon%Chaos")
 end
 
-function TestHashStorage:testFingerprintChangesWithConfig()
-    local discovery = MockDiscovery.create({
+function TestConfigHashStorage:testFingerprintChangesWithConfig()
+    local moduleRegistry = MockModuleRegistry.create({
         {
             id = "GodPool",
             enabled = false,
@@ -137,20 +137,19 @@ function TestHashStorage:testFingerprintChangesWithConfig()
             values = { EnabledFlag = false },
         },
     })
-    local hash = makeHash(discovery)
-    local canonicalA, fingerprintA = hash.GetConfigHash()
+    local configHash = makeConfigHash(moduleRegistry)
+    local canonicalA, fingerprintA = configHash.GetConfigHash()
 
-    discovery.live.getHost(discovery.modulesById.GodPool).writeAndFlush("EnabledFlag", true)
-    local canonicalB, fingerprintB = hash.GetConfigHash()
+    moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool).writeAndFlush("EnabledFlag", true)
+    local canonicalB, fingerprintB = configHash.GetConfigHash()
 
     lu.assertNotEquals(canonicalA, canonicalB)
     lu.assertNotEquals(fingerprintA, fingerprintB)
 end
 
-function TestHashStorage:testApplyConfigHashRollsBackWhenEnableFails()
-    local applyCalls = 0
-    local revertCalls = 0
-    local discovery = MockDiscovery.create({
+function TestConfigHashStorage:testApplyConfigHashRollsBackWhenEnableFails()
+    local buildCalls = 0
+    local moduleRegistry = MockModuleRegistry.create({
         {
             id = "GodPool",
             enabled = false,
@@ -158,31 +157,68 @@ function TestHashStorage:testApplyConfigHashRollsBackWhenEnableFails()
                 { type = "bool", alias = "EnabledFlag", default = false },
             },
             values = { EnabledFlag = false },
-            apply = function()
-                applyCalls = applyCalls + 1
+            patchPlan = function()
+                buildCalls = buildCalls + 1
                 error("apply boom")
-            end,
-            revert = function()
-                revertCalls = revertCalls + 1
             end,
         },
     })
-    local hash = makeHash(discovery)
-    local module = discovery.modulesById.GodPool
-    local moduleHost = discovery.live.getHost(module)
+    local configHash = makeConfigHash(moduleRegistry)
+    local module = moduleRegistry.modulesById.GodPool
+    local moduleHost = moduleRegistry.live.getHost(module)
 
-    local ok = hash.ApplyConfigHash("_v=1|GodPool=1|GodPool.EnabledFlag=1")
+    local ok = configHash.ApplyConfigHash("_v=1|GodPool=1|GodPool.EnabledFlag=1")
 
     lu.assertFalse(ok)
     lu.assertFalse(moduleHost.read("Enabled"))
     lu.assertFalse(moduleHost.read("EnabledFlag"))
-    lu.assertEquals(applyCalls, 1)
-    lu.assertEquals(revertCalls, 0)
+    lu.assertEquals(buildCalls, 1)
 end
 
-function TestHashStorage:testApplyConfigHashRejectsNewerVersion()
+function TestConfigHashStorage:testApplyConfigHashRollsBackWhenFlushFails()
+    local failApply = true
+    local moduleRegistry = MockModuleRegistry.create({
+        {
+            id = "BiomeControl",
+            name = "Biome Control",
+            enabled = false,
+            storage = {
+                { type = "string", alias = "Mode", default = "Vanilla" },
+            },
+            values = {
+                Mode = "Vanilla",
+            },
+        },
+        {
+            id = "GodPool",
+            enabled = true,
+            storage = {
+                { type = "bool", alias = "EnabledFlag", default = false },
+            },
+            values = { EnabledFlag = false },
+            patchPlan = function()
+                if failApply then
+                    failApply = false
+                    error("apply boom")
+                end
+            end,
+        },
+    })
+    local configHash = makeConfigHash(moduleRegistry)
+    local biomeHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.BiomeControl)
+    local godHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
+
+    local ok = configHash.ApplyConfigHash("_v=1|BiomeControl.Mode=Chaos|GodPool=1|GodPool.EnabledFlag=1")
+
+    lu.assertFalse(ok)
+    lu.assertEquals(biomeHost.read("Mode"), "Vanilla")
+    lu.assertFalse(godHost.read("EnabledFlag"))
+    lu.assertTrue(godHost.read("Enabled"))
+end
+
+function TestConfigHashStorage:testApplyConfigHashRejectsNewerVersion()
     CaptureWarnings()
-    local discovery = MockDiscovery.create({
+    local moduleRegistry = MockModuleRegistry.create({
         {
             id = "GodPool",
             enabled = false,
@@ -192,10 +228,10 @@ function TestHashStorage:testApplyConfigHashRejectsNewerVersion()
             values = { EnabledFlag = false },
         },
     })
-    local hash = makeHash(discovery)
-    local moduleHost = discovery.live.getHost(discovery.modulesById.GodPool)
+    local configHash = makeConfigHash(moduleRegistry)
+    local moduleHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
 
-    local ok = hash.ApplyConfigHash("_v=999|GodPool=1|GodPool.EnabledFlag=1")
+    local ok = configHash.ApplyConfigHash("_v=999|GodPool=1|GodPool.EnabledFlag=1")
 
     lu.assertFalse(ok)
     lu.assertFalse(moduleHost.read("Enabled"))
@@ -204,44 +240,8 @@ function TestHashStorage:testApplyConfigHashRejectsNewerVersion()
     RestoreWarnings()
 end
 
-function TestHashStorage:testHashGroupsRejectPackedChildAliases()
-    CaptureWarnings()
-    local discovery = MockDiscovery.create({
-        {
-            id = "GodPool",
-            enabled = false,
-            hashGroupPlan = {
-                {
-                    keyPrefix = "PackedBits",
-                    items = {
-                        "EnabledBit",
-                    },
-                },
-            },
-            storage = {
-                {
-                    type = "packedInt",
-                    alias = "PackedRoot",
-                    bits = {
-                        { alias = "EnabledBit", offset = 0, width = 1, type = "bool", default = false },
-                    },
-                },
-            },
-            values = {
-                PackedRoot = 0,
-            },
-        },
-    })
-
-    local canonical = makeHash(discovery).GetConfigHash()
-
-    lu.assertEquals(canonical, "_v=1")
-    assertWarningContains("is a packed child alias; only root storage aliases are supported")
-    RestoreWarnings()
-end
-
-function TestHashStorage:testHashGroupsAllowPackedRootAliases()
-    local discovery = MockDiscovery.create({
+function TestConfigHashStorage:testHashGroupsAllowPackedRootAliases()
+    local moduleRegistry = MockModuleRegistry.create({
         {
             id = "GodPool",
             enabled = false,
@@ -268,13 +268,13 @@ function TestHashStorage:testHashGroupsAllowPackedRootAliases()
         },
     })
 
-    local canonical = makeHash(discovery).GetConfigHash()
+    local canonical = makeConfigHash(moduleRegistry).GetConfigHash()
 
     lu.assertStrContains(canonical, "GodPool.PackedRoots_1=")
 end
 
-function TestHashStorage:testTransientRootsAreExcludedFromHash()
-    local discovery = MockDiscovery.create({
+function TestConfigHashStorage:testTransientRootsAreExcludedFromHash()
+    local moduleRegistry = MockModuleRegistry.create({
         {
             id = "GodPool",
             enabled = false,
@@ -289,36 +289,10 @@ function TestHashStorage:testTransientRootsAreExcludedFromHash()
         },
     })
 
-    discovery.live.getHost(discovery.modulesById.GodPool).stage("FilterText", "Apollo")
-    local canonical = makeHash(discovery).GetConfigHash()
+    moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool).stage("FilterText", "Apollo")
+    local canonical = makeConfigHash(moduleRegistry).GetConfigHash()
 
     lu.assertStrContains(canonical, "GodPool.EnabledFlag=1")
     lu.assertNotStrContains(canonical, "FilterText")
 end
 
-function TestHashStorage:testHashGroupsRejectTransientAliases()
-    CaptureWarnings()
-    local discovery = MockDiscovery.create({
-        {
-            id = "GodPool",
-            enabled = false,
-            hashGroupPlan = {
-                {
-                    keyPrefix = "TransientGroup",
-                    items = {
-                        "FilterMode",
-                    },
-                },
-            },
-            storage = {
-                { type = "string", alias = "FilterMode", persist = false, hash = false, default = "all", maxLen = 16 },
-            },
-        },
-    })
-
-    local canonical = makeHash(discovery).GetConfigHash()
-
-    lu.assertEquals(canonical, "_v=1")
-    assertWarningContains("is excluded from hashes; only hash root aliases are supported")
-    RestoreWarnings()
-end

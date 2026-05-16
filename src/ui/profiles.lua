@@ -1,17 +1,18 @@
-local internal = AdamantModpackFramework_Internal
+local ctx = ...
 local FIELD_MEDIUM = 0.5
 local FIELD_NARROW = 0.3
 local FIELD_WIDE = 0.85
 
-function internal.createUIProfiles(ctx)
+local function createUIProfiles()
     local ui = rom.ImGui
     local config = ctx.config
     local colors = ctx.colors
     local NUM_PROFILES = ctx.numProfiles
     local defaultProfiles = ctx.defaultProfiles
     local packId = ctx.packId
-    local discovery = ctx.discovery
+    local moduleRegistry = ctx.moduleRegistry
     local runtime = ctx.runtime
+    local auditSavedProfiles = ctx.auditSavedProfiles
     local FEEDBACK_DURATION = 2.0
 
     local slotLabels = {}
@@ -261,7 +262,7 @@ function internal.createUIProfiles(ctx)
 
         ui.SameLine()
         if ui.Button("Audit Saved Profiles") then
-            local issueCount = internal.auditSavedProfiles(packId, config.Profiles, discovery, lib)
+            local issueCount = auditSavedProfiles(packId, config.Profiles, moduleRegistry)
             if issueCount == 0 then
                 setImportFeedback("All saved profiles look valid.", colors.success)
             else
@@ -285,3 +286,5 @@ function internal.createUIProfiles(ctx)
     Profiles.snapshot()
     return Profiles
 end
+
+return createUIProfiles()

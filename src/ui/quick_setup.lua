@@ -1,54 +1,50 @@
-local internal = AdamantModpackFramework_Internal
+local ctx = ...
 
-function internal.createUIQuickSetup(ctx)
-    local ui = rom.ImGui
-    local renderQuickSetup = ctx.renderQuickSetup
-    local profiles = ctx.profiles
-    local staging = ctx.staging
-    local runtime = ctx.runtime
-    local snapshots = ctx.snapshots
-    local colors = ctx.colors
-    local theme = ctx.theme
+local ui = rom.ImGui
+local renderQuickSetup = ctx.renderQuickSetup
+local profiles = ctx.profiles
+local staging = ctx.staging
+local runtime = ctx.runtime
+local snapshotAccess = ctx.snapshotAccess
+local colors = ctx.colors
+local theme = ctx.theme
 
-    local quickSetupContext = {
-        ui = ui,
-        colors = colors,
-        theme = theme,
-        getModulesStatus = runtime.getModulesStatus,
-        setModulesEnabled = function(moduleIds, enabled)
-            return runtime.setModulesEnabled(moduleIds, enabled, snapshots.get())
-        end,
-    }
+local quickSetupContext = {
+    ui = ui,
+    colors = colors,
+    theme = theme,
+    getModulesStatus = runtime.getModulesStatus,
+    setModulesEnabled = function(moduleIds, enabled)
+        return runtime.setModulesEnabled(moduleIds, enabled, snapshotAccess.get())
+    end,
+}
 
-    local QuickSetup = {}
+local function draw(quickList, snapshot)
+    profiles.drawQuickSelector()
 
-    function QuickSetup.draw(quickList, snapshot)
-        profiles.drawQuickSelector()
+    ui.Separator()
+    ui.Spacing()
 
-        ui.Separator()
-        ui.Spacing()
-
-        if type(renderQuickSetup) == "function" then
-            renderQuickSetup(quickSetupContext)
-        end
-
-        for _, entry in ipairs(quickList or {}) do
-            if staging.modules[entry.id] then
-                local host = snapshots.getHost(entry, snapshot)
-                if not host then
-                    goto continue
-                end
-
-                ui.Separator()
-                ui.Spacing()
-                lib.imguiHelpers.textColored(ui, colors.info, entry.name or entry.id)
-                ui.Spacing()
-                host.drawQuickContent(ui)
-                runtime.commitEntrySession(entry, snapshot)
-            end
-            ::continue::
-        end
+    if type(renderQuickSetup) == "function" then
+        renderQuickSetup(quickSetupContext)
     end
 
-    return QuickSetup
+    for _, entry in ipairs(quickList or {}) do
+        if staging.modules[entry.id] then
+            local host = snapshotAccess.getHost(entry, snapshot)
+            if not host then
+                goto continue
+            end
+
+            ui.Separator()
+            ui.Spacing()
+            lib.imguiHelpers.textColored(ui, colors.info, entry.name or entry.id)
+            ui.Spacing()
+            host.drawQuickContent(ui)
+            runtime.commitEntrySession(entry, snapshot)
+        end
+        ::continue::
+    end
 end
+
+return draw

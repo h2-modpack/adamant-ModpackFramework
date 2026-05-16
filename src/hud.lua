@@ -1,20 +1,20 @@
 --- Create the HUD subsystem for one coordinator pack.
 --- @param packId string Pack identifier used for component naming.
 --- @param packIndex number Stable vertical stacking index for this pack.
---- @param hash table Hash subsystem returned by `Framework.createHash(...)`.
---- @param theme table Theme object returned by `Framework.createTheme(...)`.
+--- @param configHash table Config-hash subsystem returned by `createConfigHash(...)`.
+--- @param theme table Theme object returned by `ui/theme.lua`.
 --- @param config table Coordinator config table containing `ModEnabled`.
 --- @param hideHashMarker boolean|nil Optional pack-level flag to suppress the HUD fingerprint marker.
 --- @return table hud HUD object exposing marker/hash update helpers.
-function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMarker)
+local function createHud(packId, packIndex, configHash, theme, config, hideHashMarker)
     assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
-        "Framework.createHud: game HUD globals are not ready; call Framework.init after game load")
+        "Framework.init: game HUD globals are not ready; call Framework.init after game load")
     assert(lib and lib.overlays and type(lib.overlays.defineOwned) == "function",
-        "Framework.createHud: adamant-ModpackLib overlays are not available")
+        "Framework.init: adamant-ModpackLib overlays are not available")
 
     local componentName = "ModpackMark_" .. packId
 
-    local _, initFingerprint = hash.GetConfigHash()
+    local _, initFingerprint = configHash.GetConfigHash()
     local currentHash = config.ModEnabled and initFingerprint or ""
     local hashDirty = false
     local markerHidden = hideHashMarker == true
@@ -50,7 +50,7 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
     end
 
     local function updateHash()
-        local _, fingerprint = hash.GetConfigHash()
+        local _, fingerprint = configHash.GetConfigHash()
         currentHash = fingerprint
         hashDirty = false
         UpdateModMark()
@@ -68,7 +68,7 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
 
     local function setModMarker(enabled)
         if enabled then
-            local _, fingerprint = hash.GetConfigHash()
+            local _, fingerprint = configHash.GetConfigHash()
             currentHash = fingerprint
             hashDirty = false
         else
@@ -83,7 +83,9 @@ function Framework.createHud(packId, packIndex, hash, theme, config, hideHashMar
         markHashDirty   = markHashDirty,
         flushPendingHash = flushPendingHash,
         updateHash      = updateHash,
-        getConfigHash   = hash.GetConfigHash,
-        applyConfigHash = hash.ApplyConfigHash,
+        getConfigHash   = configHash.GetConfigHash,
+        applyConfigHash = configHash.ApplyConfigHash,
     }
 end
+
+return createHud
