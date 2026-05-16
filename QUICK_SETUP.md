@@ -58,7 +58,6 @@ internal.DrawQuickContent = function(imgui, session, host)
 end
 
 local host = lib.tryCreateModule({
-    owner = internal,
     pluginGuid = PLUGIN_GUID,
     config = config,
     definition = {

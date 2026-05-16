@@ -21,7 +21,6 @@ Modules participate by exposing a Lib module host:
 
 ```lua
 local host = lib.tryCreateModule({
-    owner = internal,
     pluginGuid = PLUGIN_GUID,
     config = config,
     definition = {
