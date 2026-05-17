@@ -196,9 +196,9 @@ Module authors own compatibility plans for:
 ## Shipped-Module Invariants
 
 Once a module is publicly shipped, the following are part of its ABI and should be treated as stable:
-- `definition.id` — identifies the module in hashes and profiles
-- persisted storage root `alias` names — identify values within a module's namespace
-- storage defaults — consumed when a persisted value is absent
-- `definition.hashGroupPlan` layout — determines grouped hash encoding
+- `definition.id` - identifies the module in hashes and profiles
+- persisted storage root `alias` names - identify values within a module's namespace
+- storage defaults - consumed when a persisted value is absent
+- `definition.hashGroupPlan` layout - determines grouped hash encoding
 
 Changing any of these is a compatibility event and requires an explicit compatibility plan.

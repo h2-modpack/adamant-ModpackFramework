@@ -20,6 +20,10 @@ It provides:
 Modules participate by exposing a Lib module host:
 
 ```lua
+local data = import("mods/data.lua")
+local logic = import("mods/logic.lua").bind(data)
+local ui = import("mods/ui.lua").bind(data)
+
 local host = lib.tryCreateModule({
     pluginGuid = PLUGIN_GUID,
     config = config,
@@ -27,11 +31,11 @@ local host = lib.tryCreateModule({
         modpack = PACK_ID,
         id = MODULE_ID,
         name = "Example Module",
-        storage = internal.BuildStorage(),
+        storage = data.buildStorage(),
     },
-    registerHooks = internal.RegisterHooks,
-    drawTab = internal.DrawTab,
-    drawQuickContent = internal.DrawQuickContent,
+    registerHooks = logic.registerHooks,
+    drawTab = ui.drawTab,
+    drawQuickContent = ui.drawQuickContent,
 })
 if not host then
     return

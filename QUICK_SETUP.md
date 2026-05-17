@@ -53,9 +53,9 @@ profiles from the main Quick Setup tab without opening the Profiles tab.
 Modules participate in Quick Setup through:
 
 ```lua
-internal.DrawQuickContent = function(imgui, session, host)
-    ...
-end
+local data = import("mods/data.lua")
+local logic = import("mods/logic.lua").bind(data)
+local ui = import("mods/ui.lua").bind(data)
 
 local host = lib.tryCreateModule({
     pluginGuid = PLUGIN_GUID,
@@ -64,11 +64,11 @@ local host = lib.tryCreateModule({
         modpack = PACK_ID,
         id = MODULE_ID,
         name = "Example Module",
-        storage = internal.BuildStorage(),
+        storage = data.buildStorage(),
     },
-    registerHooks = internal.RegisterHooks,
-    drawTab = internal.DrawTab,
-    drawQuickContent = internal.DrawQuickContent,
+    registerHooks = logic.registerHooks,
+    drawTab = ui.drawTab,
+    drawQuickContent = ui.drawQuickContent,
 })
 if not host then
     return

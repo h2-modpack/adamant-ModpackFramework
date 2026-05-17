@@ -9,7 +9,7 @@
 local function createHud(packId, packIndex, configHash, theme, config, hideHashMarker)
     assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
         "Framework.init: game HUD globals are not ready; call Framework.init after game load")
-    assert(lib and lib.overlays and type(lib.overlays.defineOwned) == "function",
+    assert(lib and lib.overlays and type(lib.overlays.defineSystem) == "function",
         "Framework.init: adamant-ModpackLib overlays are not available")
 
     local componentName = "ModpackMark_" .. packId
@@ -21,7 +21,7 @@ local function createHud(packId, packIndex, configHash, theme, config, hideHashM
     local markerContext = nil
 
     if not markerHidden then
-        lib.overlays.defineOwned("adamant-framework." .. packId .. ".hud", function(overlays)
+        lib.overlays.defineSystem("adamant-framework." .. packId .. ".hud", function(overlays)
             overlays.createLine("hash", {
                 componentName = componentName,
                 region = "middleRightStack",

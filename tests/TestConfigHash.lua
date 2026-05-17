@@ -176,7 +176,7 @@ function TestConfigHashStorage:testApplyConfigHashRollsBackWhenEnableFails()
 end
 
 function TestConfigHashStorage:testApplyConfigHashRollsBackWhenFlushFails()
-    local failApply = true
+    local failApply = false
     local moduleRegistry = MockModuleRegistry.create({
         {
             id = "BiomeControl",
@@ -207,6 +207,7 @@ function TestConfigHashStorage:testApplyConfigHashRollsBackWhenFlushFails()
     local configHash = makeConfigHash(moduleRegistry)
     local biomeHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.BiomeControl)
     local godHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
+    failApply = true
 
     local ok = configHash.ApplyConfigHash("_v=1|BiomeControl.Mode=Chaos|GodPool=1|GodPool.EnabledFlag=1")
 

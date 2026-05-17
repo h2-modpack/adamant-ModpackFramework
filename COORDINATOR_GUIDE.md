@@ -94,9 +94,13 @@ Optional `opts` fields:
 Framework discovers modules through Lib's live-host registry:
 
 ```lua
-local host = lib.getLiveModuleHost(modName)
+-- Conceptual filter over Lib-published live hosts.
 host.getIdentity().modpack == PACK_ID
 ```
+
+Direct live-host lookup is keyed by `pluginGuid`. Framework discovery filters
+the registry by prepared host identity instead of looking modules up by module
+id.
 
 Each discovered coordinated module must expose:
 - `host.getIdentity().id`
@@ -111,8 +115,8 @@ Lib receive the author surfaces as `drawTab(imgui, session, host)` and
 `drawQuickContent(imgui, session, host)`.
 
 Lib owns module definition preparation and lifecycle validation before the host is published.
-Framework trusts Lib-created hosts and calls the host lifecycle surface:
-- `host.applyOnLoad()`
+Framework trusts Lib-created hosts. Activation-time mutation sync is owned by
+Lib; Framework only calls runtime transition/session methods:
 - `host.applyMutation()`
 - `host.revertMutation()`
 - `host.commitIfDirty()`

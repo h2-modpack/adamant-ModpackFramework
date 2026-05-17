@@ -29,7 +29,7 @@ end
 
 function TestMain:testCreateHudRegistersFrameworkHashOverlay()
     local previousScreenData = ScreenData
-    local previousDefineOwned = lib.overlays.defineOwned
+    local previousDefineSystem = lib.overlays.defineSystem
     local previousDispatchCommit = AdamantModpackLib_Internal.overlays.dispatchCommit
     local registeredOwner = nil
     local registeredLine = nil
@@ -43,7 +43,7 @@ function TestMain:testCreateHudRegistersFrameworkHashOverlay()
         },
     }
 
-    lib.overlays.defineOwned = function(owner, register)
+    lib.overlays.defineSystem = function(owner, register)
         registeredOwner = owner
         local registrar = {
             createLine = function(name, spec)
@@ -91,7 +91,7 @@ function TestMain:testCreateHudRegistersFrameworkHashOverlay()
     hud.setModMarker(false)
 
     ScreenData = previousScreenData
-    lib.overlays.defineOwned = previousDefineOwned
+    lib.overlays.defineSystem = previousDefineSystem
     AdamantModpackLib_Internal.overlays.dispatchCommit = previousDispatchCommit
 
     lu.assertEquals(registeredOwner, "adamant-framework.test-pack.hud")
@@ -174,7 +174,7 @@ function TestMain:testRenderWindowCleansUpImguiStacksBeforeRethrow()
     lu.assertEquals(popStyleCalls, 1)
 end
 
-function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
+function TestMain:testInitLeavesStartupMutationSyncToHostActivation()
     local previousSetupRunData = rom.game.SetupRunData
     local setupRunDataCalls = 0
 
@@ -190,11 +190,7 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
             affectsRunData = true,
         },
     }
-    local host = {
-        applyOnLoad = function()
-            return true
-        end,
-    }
+    local host = {}
 
     rom.game.SetupRunData = function()
         setupRunDataCalls = setupRunDataCalls + 1
@@ -255,10 +251,10 @@ function TestMain:testInitBatchesRunDataSetupAfterCoordinatedStartupSync()
     lib.coordinator.register("startup-pack", nil)
     rom.game.SetupRunData = previousSetupRunData
 
-    lu.assertEquals(setupRunDataCalls, 1)
+    lu.assertEquals(setupRunDataCalls, 0)
 end
 
-function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
+function TestMain:testModuleActivationOwnsStartupSyncBeforeFrameworkInit()
     local packId = "load-order-pack"
     lib.coordinator.register(packId, nil)
 
@@ -294,7 +290,9 @@ function TestMain:testModuleLoadedBeforeCoordinatorIsAppliedByFrameworkInit()
     })
     authorHost.tryActivate()
 
-    lu.assertEquals(buildCalls, 0)
+    lu.assertEquals(buildCalls, 1)
+    lu.assertEquals(target.Value, "patched")
+    lu.assertEquals(setupRunDataCalls, 1)
     lib.coordinator.register(packId, {
         ModEnabled = true,
     })
@@ -678,88 +676,10 @@ function TestMain:testTryInitReturnsErrorAndDoesNotRegisterPack()
     lu.assertStrContains(warnings[1], "try init boom")
 end
 
-function TestMain:testInitStartupLifecycleWarningUsesPackPrefix()
-    CaptureWarnings()
-
-    local entry = {
-        id = "Alpha",
-        name = "Alpha",
-        pluginGuid = "Alpha",
-        storage = {},
-        definition = {
-            id = "Alpha",
-            name = "Alpha",
-        },
-    }
-    local host = {
-        applyOnLoad = function()
-            return false, "startup boom"
-        end,
-    }
-    lib.coordinator.register("startup-pack", { ModEnabled = true })
-
-    FrameworkTestApi.withBootConstructors({
-        createModuleRegistry = function()
-            return {
-                modules = { entry },
-                refresh = function() end,
-                live = {
-                    captureSnapshot = function()
-                        return { hosts = { [entry] = host } }
-                    end,
-                },
-                snapshot = {
-                    getHost = function(_, snapshot)
-                        return snapshot.hosts[entry]
-                    end,
-                },
-            }
-        end,
-        createConfigHash = function()
-            return {}
-        end,
-        createTheme = function()
-            return { colors = {} }
-        end,
-        createHud = function()
-            return {
-                setModMarker = function() end,
-                setMarkerVisible = function() end,
-            }
-        end,
-        createUI = function()
-            return {
-                renderWindow = function() end,
-                addMenuBar = function() end,
-            }
-        end,
-    }, function()
-        FrameworkTestApi.init(
-            "startup-pack",
-            "Startup Pack",
-            {
-                ModEnabled = true,
-                DebugMode = false,
-                Profiles = {
-                    { Name = "", Hash = "", Tooltip = "" },
-                },
-            },
-            1,
-            {}
-        )
-    end)
-
-    local warnings = Warnings
-    lib.coordinator.register("startup-pack", nil)
-    RestoreWarnings()
-
-    lu.assertEquals(#warnings, 1)
-    lu.assertEquals(warnings[1], "[startup-pack] Alpha startup lifecycle failed: startup boom")
-end
-
 function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
     CaptureWarnings()
 
+    lib.coordinator.register("test-pack", { ModEnabled = false })
     local previousSetupRunData = SetupRunData
     local setupRunDataCalls = 0
     SetupRunData = function()
@@ -900,6 +820,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
 
     rom.ImGui = previousImGui
     SetupRunData = previousSetupRunData
+    lib.coordinator.register("test-pack", nil)
     RestoreWarnings()
 
     lu.assertTrue(okFirst, tostring(errFirst))
@@ -1452,6 +1373,7 @@ function TestMain:testDisablingRunDataModuleFlushesSetupRunDataWhenMenuCloses()
             DrawTab = function() end,
         },
     })
+    setupRunDataCalls = 0
 
     local hud = {
         setModMarker = noop,

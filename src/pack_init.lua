@@ -65,7 +65,7 @@ local function ValidateRuntimePrerequisites()
         "Framework.init: rom.game.SetupRunData is not ready; call Framework.init after game load")
     assert(ScreenData and ScreenData.HUD and ScreenData.HUD.ComponentData,
         "Framework.init: game HUD globals are not ready; call Framework.init after game load")
-    assert(lib and lib.overlays and type(lib.overlays.defineOwned) == "function",
+    assert(lib and lib.overlays and type(lib.overlays.defineSystem) == "function",
         "Framework.init: adamant-ModpackLib overlays are not available")
 end
 
@@ -90,27 +90,6 @@ local function init(packId, windowTitle, config, numProfiles, defaultProfiles, o
         opts.hideHashMarker == true)
     local ui = bootConstructors.createUI(moduleRegistry, hud, theme, config, packId, windowTitle,
         numProfiles, defaultProfiles, opts.renderQuickSetup, profileTools.auditSavedProfiles)
-
-    local startupSnapshot = moduleRegistry.live.captureSnapshot()
-    local needsRunDataSetup = false
-    for _, entry in ipairs(moduleRegistry.modules) do
-        local host = moduleRegistry.snapshot.getHost(entry, startupSnapshot)
-        if host then
-            local ok, err = host.applyOnLoad()
-            if not ok then
-                logging.warn(packId,
-                    "%s startup lifecycle failed: %s",
-                    tostring(entry.name or entry.id or "module"),
-                    tostring(err))
-            elseif entry.affectsRunData then
-                needsRunDataSetup = true
-            end
-        end
-    end
-
-    if needsRunDataSetup then
-        rom.game.SetupRunData()
-    end
 
     profileTools.auditSavedProfiles(packId, config.Profiles, moduleRegistry)
 
