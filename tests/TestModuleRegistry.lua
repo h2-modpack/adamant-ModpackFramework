@@ -37,7 +37,7 @@ local function attachModule(pluginGuid, definition, persisted, exports)
     if patchPlan ~= nil then
         authorHost.mutation.patch(patchPlan)
     end
-    authorHost.tryActivate()
+    authorHost.activate()
     exports.host = host
     rom.mods[pluginGuid] = exports
     return exports

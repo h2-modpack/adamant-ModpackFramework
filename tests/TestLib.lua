@@ -22,7 +22,7 @@ function TestLibHost:testCommitSessionFlushesManagedAliasState()
 
     session.write("Flag", true)
 
-    authorHost.tryActivate()
+    authorHost.activate()
     local ok, err = host.flush()
 
     lu.assertTrue(ok, tostring(err))

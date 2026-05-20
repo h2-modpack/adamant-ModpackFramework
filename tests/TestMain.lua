@@ -279,7 +279,7 @@ function TestMain:testModuleActivationOwnsStartupSyncBeforeFrameworkInit()
         buildCalls = buildCalls + 1
         plan:set(target, "Value", "patched")
     end)
-    authorHost.tryActivate()
+    authorHost.activate()
 
     lu.assertEquals(buildCalls, 1)
     lu.assertEquals(target.Value, "patched")
@@ -1328,7 +1328,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
             secondQuickRenders = secondQuickRenders + 1
         end,
     })
-    replacementAuthorHost.tryActivate()
+    replacementAuthorHost.activate()
     rom.mods[entry.pluginGuid].host = replacementHost
 
     local okSecond, errSecond = pcall(builtUi.renderWindow)

@@ -457,7 +457,7 @@ function MockModuleRegistry.create(moduleDefs)
         if def.patchPlan ~= nil then
             authorHost.mutation.patch(def.patchPlan)
         end
-        authorHost.tryActivate()
+        authorHost.activate()
         local module = {
             pluginGuid = pluginGuid,
             mod = {
