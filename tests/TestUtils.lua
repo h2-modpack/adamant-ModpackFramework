@@ -404,9 +404,6 @@ local function makePersistedConfig(storage, overrides)
         else
             persisted[root.alias] = overrides and overrides[root.alias] or root.default
         end
-        if root.stage == false then
-            transientAliases[root.alias] = true
-        end
     end
     if overrides then
         for key, value in pairs(overrides) do
