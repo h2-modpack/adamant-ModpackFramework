@@ -516,6 +516,31 @@ function MockModuleRegistry.create(moduleDefs)
         return host.setEnabled(enabled)
     end
 
+    function moduleRegistry.snapshot.suspendForPackDisable(entry, snapshot)
+        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
+        return host.suspendForPackDisable()
+    end
+
+    function moduleRegistry.snapshot.ensureSuspendedForPackDisable(entry, snapshot)
+        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
+        return host.ensureSuspendedForPackDisable()
+    end
+
+    function moduleRegistry.snapshot.restoreForPackEnable(entry, snapshot)
+        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
+        return host.restoreForPackEnable()
+    end
+
+    function moduleRegistry.snapshot.rollbackPackTransition(entry, receipt, snapshot)
+        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
+        return host.rollbackPackTransition(receipt)
+    end
+
+    function moduleRegistry.snapshot.restorePackTransitionState(entry, receipt, snapshot)
+        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
+        return host.restorePackTransitionState(receipt)
+    end
+
     function moduleRegistry.snapshot.getStorageValue(module, alias, snapshot)
         local host = moduleRegistry.snapshot.getHost(module, snapshot)
         return host.read(alias)

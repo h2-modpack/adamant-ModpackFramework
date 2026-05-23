@@ -61,6 +61,20 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
         return ok, err
     end
 
+    local function RunPackLifecycle(entry, snapshot, actionName, invoke)
+        local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
+        if not host then
+            return false, "module host is unavailable"
+        end
+
+        local ok, err, nextReceipt = invoke(host)
+        if not ok then
+            logging.warn(packId,
+                "%s %s failed: %s", entry.pluginGuid, actionName, err)
+        end
+        return ok, err, nextReceipt
+    end
+
     local function BuildEntry(found)
         local meta = found.meta
         local moduleId = found.moduleId
@@ -243,6 +257,36 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
 
     function ModuleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
         return SetEntryEnabled(entry, enabled, snapshot)
+    end
+
+    function ModuleRegistry.snapshot.suspendForPackDisable(entry, snapshot)
+        return RunPackLifecycle(entry, snapshot, "pack suspend", function(host)
+            return host.suspendForPackDisable()
+        end)
+    end
+
+    function ModuleRegistry.snapshot.ensureSuspendedForPackDisable(entry, snapshot)
+        return RunPackLifecycle(entry, snapshot, "pack suspend", function(host)
+            return host.ensureSuspendedForPackDisable()
+        end)
+    end
+
+    function ModuleRegistry.snapshot.restoreForPackEnable(entry, snapshot)
+        return RunPackLifecycle(entry, snapshot, "pack restore", function(host)
+            return host.restoreForPackEnable()
+        end)
+    end
+
+    function ModuleRegistry.snapshot.rollbackPackTransition(entry, receipt, snapshot)
+        return RunPackLifecycle(entry, snapshot, "pack rollback", function(host)
+            return host.rollbackPackTransition(receipt)
+        end)
+    end
+
+    function ModuleRegistry.snapshot.restorePackTransitionState(entry, receipt, snapshot)
+        return RunPackLifecycle(entry, snapshot, "pack state restore", function(host)
+            return host.restorePackTransitionState(receipt)
+        end)
     end
 
     function ModuleRegistry.snapshot.getStorageValue(module, alias, snapshot)

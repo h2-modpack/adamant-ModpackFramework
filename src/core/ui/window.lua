@@ -119,6 +119,7 @@ local function createUI(moduleRegistry, hud, theme, config, packId, windowTitle,
         frameworkRuntime = frameworkRuntime,
     })
 
+    runtime.reconcilePackDisabledState()
     snapshotToStaging()
 
     local moduleByTabLabel = {}

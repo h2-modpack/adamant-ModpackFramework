@@ -244,6 +244,33 @@ function TestModuleRegistry:testModuleWithOnlyBuiltInStorageIsRegistered()
     lu.assertEquals(#Warnings, 0)
 end
 
+function TestModuleRegistry:testPackDisableSuspendsThroughHostLifecycle()
+    local exports = attachModule("test-PackRestore", {
+        modpack = "test-pack",
+        id = "PackRestore",
+        name = "Pack Restore",
+        storage = {},
+    }, { Enabled = true, DebugMode = false }, {
+        DrawTab = function() end,
+    })
+
+    local moduleRegistry = FrameworkTestApi.createModuleRegistry("test-pack", { DebugMode = false })
+    moduleRegistry.refresh()
+    local entry = moduleRegistry.modules[1]
+    local snapshot = moduleRegistry.live.captureSnapshot()
+
+    local ok, err, receipt = moduleRegistry.snapshot.suspendForPackDisable(entry, snapshot)
+    lu.assertTrue(ok, tostring(err))
+
+    lu.assertFalse(moduleRegistry.snapshot.isEntryEnabled(entry, snapshot))
+    lu.assertEquals(exports.host.read("AdamantFramework_PackRestoreSnapshot"), 2)
+
+    ok, err = moduleRegistry.snapshot.rollbackPackTransition(entry, receipt, snapshot)
+    lu.assertTrue(ok, tostring(err))
+    lu.assertTrue(moduleRegistry.snapshot.isEntryEnabled(entry, snapshot))
+    lu.assertEquals(exports.host.read("AdamantFramework_PackRestoreSnapshot"), 0)
+end
+
 function TestModuleRegistry:testMissingDrawTabIsRejectedByLibHostCreation()
     local ok, err = pcall(function()
         attachModule("test-NoDrawTab", {

@@ -20,7 +20,10 @@ local function draw(entry, snapshot)
     local enabled = staging.modules[entry.id] or false
     local val, chg = ui.Checkbox(entry._enableLabel, enabled)
     if chg then
-        runtime.toggleEntry(entry, val, snapshot)
+        local ok = runtime.toggleEntry(entry, val, snapshot)
+        if ok then
+            enabled = val == true
+        end
     end
     if ui.IsItemHovered() and entry.tooltip then
         ui.SetTooltip(entry.tooltip)

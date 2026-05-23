@@ -112,12 +112,18 @@ Lib receive the author surfaces as `drawTab(draw, state, actions, services)` and
 `widgets`, and `nav`; the other arguments provide staged data, staged actions,
 and draw-safe services.
 
-Lib owns module definition preparation and lifecycle validation before the host is published.
-Framework trusts Lib-created hosts. Activation-time mutation sync is owned by
-Lib; Framework only calls runtime transition/state methods:
-- `host.applyMutation()`
-- `host.revertMutation()`
+Lib owns module definition preparation and lifecycle validation before the host
+is published. Framework trusts Lib-created hosts. Runtime state transitions are
+routed through the same host lifecycle methods authors use:
+- `host.setEnabled(enabled)`
 - `host.commitIfDirty()`
+
+Pack disable snapshots each discovered module's current `Enabled` value, then
+disables modules through Lib's host pack-suspension lifecycle. Pack enable
+restores that snapshot through the matching host lifecycle path and clears it
+after a successful restore. The snapshot is persisted in Lib-managed internal
+storage, so a disabled pack can survive a full game restart and still restore
+the prior module mix when re-enabled.
 
 Framework skips modules that are missing:
 - live host registry entry

@@ -19,6 +19,10 @@ local function replaceTableContents(target, source)
     end
 end
 
+local function readPackRestoreMarker(moduleRegistry, entry, snapshot)
+    return moduleRegistry.snapshot.getHost(entry, snapshot).read("AdamantFramework_PackRestoreSnapshot")
+end
+
 function TestMain:setUp()
     local overlays = LibOverlays
     self.previousUiSuppressors = overlays.uiSuppressors
@@ -836,7 +840,14 @@ end
 function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
     CaptureWarnings()
 
-    public.registerCoordinator("test-pack", { ModEnabled = false })
+    local config = {
+        ModEnabled = false,
+        DebugMode = false,
+        Profiles = {
+            { Name = "", Hash = "", Tooltip = "" },
+        },
+    }
+    public.registerCoordinator("test-pack", config)
     local previousSetupRunData = rom.game.SetupRunData
     local setupRunDataCalls = 0
     rom.game.SetupRunData = function()
@@ -914,7 +925,10 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
             pluginGuid = "Alpha",
             id = "Alpha",
             name = "Alpha",
-            enabled = true,
+            enabled = false,
+            values = {
+                AdamantFramework_PackRestoreSnapshot = 2,
+            },
             storage = {},
             patchPlan = function(plan)
                 firstState.built = firstState.built + 1
@@ -925,7 +939,10 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
             pluginGuid = "Bravo",
             id = "Bravo",
             name = "Bravo",
-            enabled = true,
+            enabled = false,
+            values = {
+                AdamantFramework_PackRestoreSnapshot = 2,
+            },
             storage = {},
             patchPlan = function()
                 secondState.built = secondState.built + 1
@@ -958,14 +975,6 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
             { Name = "", Hash = "", Tooltip = "" },
         },
     }
-    local config = {
-        ModEnabled = false,
-        DebugMode = false,
-        Profiles = {
-            { Name = "", Hash = "", Tooltip = "" },
-        },
-    }
-
     local builtUi = FrameworkTestApi.createUI(moduleRegistry, hud, theme, config, "test-pack", "Test Window",
         setup.NUM_PROFILES, setup.defaultProfiles, setup.drawPackQuickContent)
     builtUi.addMenuBar()
@@ -989,9 +998,9 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
     lu.assertEquals(firstState.target.Value, "base")
     lu.assertEquals(secondState.built, 1)
     lu.assertEquals(secondState.target.Value, "base")
-    lu.assertEquals(#warnings, 2)
-    lu.assertStrContains(warnings[1], "[test-pack] Bravo apply failed: ")
-    lu.assertStrContains(warnings[2], "[test-pack] Enable Mod toggle failed; restoring previous runtime state")
+    lu.assertEquals(#warnings, 1)
+    lu.assertStrContains(warnings[1], "[test-pack] Enable Mod toggle failed; restoring previous runtime state: ")
+    lu.assertStrContains(warnings[1], "apply boom")
 end
 
 function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
@@ -1098,6 +1107,215 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
     lu.assertEquals(setupRunDataCalls, 0)
     lu.assertEquals(#warnings, 1)
     lu.assertStrContains(warnings[1], "[test-pack] Module batch toggle failed; restoring previous module states: ")
+end
+
+function TestMain:testPackDisableSnapshotsModuleEnabledState()
+    local config = {
+        ModEnabled = true,
+        DebugMode = false,
+    }
+    public.registerCoordinator("test-pack", config)
+
+    local moduleRegistry = MockModuleRegistry.create({
+        {
+            pluginGuid = "Alpha",
+            id = "Alpha",
+            name = "Alpha",
+            enabled = true,
+            storage = {},
+        },
+        {
+            pluginGuid = "Bravo",
+            id = "Bravo",
+            name = "Bravo",
+            enabled = false,
+            storage = {},
+        },
+    })
+    local staging = {
+        ModEnabled = true,
+        modules = {
+            Alpha = true,
+            Bravo = false,
+        },
+        debug = {},
+    }
+    local hudMarkers = {}
+    local runtime = FrameworkTestApi.createUIRuntime({
+        moduleRegistry = moduleRegistry,
+        hud = {
+            markHashDirty = function() end,
+            setModMarker = function(value)
+                hudMarkers[#hudMarkers + 1] = value
+            end,
+        },
+        config = config,
+        packId = "test-pack",
+        colors = {},
+        staging = staging,
+        snapshotAccess = {
+            get = function() return nil end,
+            capture = function() return moduleRegistry.live.captureSnapshot() end,
+            getHost = function(entry, snapshot)
+                return moduleRegistry.snapshot.getHost(entry, snapshot)
+            end,
+        },
+        snapshotToStaging = function() end,
+        logging = FrameworkTestApi.logging,
+    })
+    local snapshot = moduleRegistry.live.captureSnapshot()
+
+    local ok, err = runtime.setPackRuntimeState(false, snapshot)
+
+    public.registerCoordinator("test-pack", nil)
+
+    lu.assertTrue(ok, tostring(err))
+    lu.assertFalse(config.ModEnabled)
+    lu.assertFalse(staging.ModEnabled)
+    lu.assertFalse(moduleRegistry.snapshot.isEntryEnabled(moduleRegistry.modulesById.Alpha, snapshot))
+    lu.assertFalse(moduleRegistry.snapshot.isEntryEnabled(moduleRegistry.modulesById.Bravo, snapshot))
+    lu.assertEquals(
+        readPackRestoreMarker(moduleRegistry, moduleRegistry.modulesById.Alpha, snapshot),
+        2)
+    lu.assertEquals(
+        readPackRestoreMarker(moduleRegistry, moduleRegistry.modulesById.Bravo, snapshot),
+        1)
+    lu.assertEquals(hudMarkers, { false })
+end
+
+function TestMain:testPackEnableRestoresPersistedPackRestoreMarkers()
+    local config = {
+        ModEnabled = false,
+        DebugMode = false,
+    }
+    public.registerCoordinator("test-pack", config)
+
+    local moduleRegistry = MockModuleRegistry.create({
+        {
+            pluginGuid = "Alpha",
+            id = "Alpha",
+            name = "Alpha",
+            enabled = false,
+            values = {
+                AdamantFramework_PackRestoreSnapshot = 2,
+            },
+            storage = {},
+        },
+        {
+            pluginGuid = "Bravo",
+            id = "Bravo",
+            name = "Bravo",
+            enabled = false,
+            values = {
+                AdamantFramework_PackRestoreSnapshot = 1,
+            },
+            storage = {},
+        },
+    })
+    local staging = {
+        ModEnabled = false,
+        modules = {
+            Alpha = false,
+            Bravo = false,
+        },
+        debug = {},
+    }
+    local hudMarkers = {}
+    local runtime = FrameworkTestApi.createUIRuntime({
+        moduleRegistry = moduleRegistry,
+        hud = {
+            markHashDirty = function() end,
+            setModMarker = function(value)
+                hudMarkers[#hudMarkers + 1] = value
+            end,
+        },
+        config = config,
+        packId = "test-pack",
+        colors = {},
+        staging = staging,
+        snapshotAccess = {
+            get = function() return nil end,
+            capture = function() return moduleRegistry.live.captureSnapshot() end,
+            getHost = function(entry, snapshot)
+                return moduleRegistry.snapshot.getHost(entry, snapshot)
+            end,
+        },
+        snapshotToStaging = function() end,
+        logging = FrameworkTestApi.logging,
+    })
+    local snapshot = moduleRegistry.live.captureSnapshot()
+
+    local ok, err = runtime.setPackRuntimeState(true, snapshot)
+
+    public.registerCoordinator("test-pack", nil)
+
+    lu.assertTrue(ok, tostring(err))
+    lu.assertTrue(config.ModEnabled)
+    lu.assertTrue(staging.ModEnabled)
+    lu.assertTrue(moduleRegistry.snapshot.isEntryEnabled(moduleRegistry.modulesById.Alpha, snapshot))
+    lu.assertFalse(moduleRegistry.snapshot.isEntryEnabled(moduleRegistry.modulesById.Bravo, snapshot))
+    lu.assertEquals(
+        readPackRestoreMarker(moduleRegistry, moduleRegistry.modulesById.Alpha, snapshot),
+        0)
+    lu.assertEquals(
+        readPackRestoreMarker(moduleRegistry, moduleRegistry.modulesById.Bravo, snapshot),
+        0)
+    lu.assertEquals(hudMarkers, { true })
+end
+
+function TestMain:testDisabledPackCreationSuspendsEnabledModules()
+    local config = {
+        ModEnabled = false,
+        DebugMode = false,
+        Profiles = {
+            { Name = "", Hash = "", Tooltip = "" },
+        },
+    }
+    public.registerCoordinator("test-pack", config)
+
+    local target = { Value = "base" }
+    local buildCalls = 0
+    local moduleRegistry = MockModuleRegistry.create({
+        {
+            pluginGuid = "Alpha",
+            id = "Alpha",
+            name = "Alpha",
+            enabled = true,
+            storage = {},
+            patchPlan = function(plan)
+                buildCalls = buildCalls + 1
+                plan:set(target, "Value", "patched")
+            end,
+        },
+    })
+    lu.assertEquals(target.Value, "patched")
+
+    local function noop() end
+    local hud = {
+        setModMarker = noop,
+        markHashDirty = noop,
+        flushPendingHash = noop,
+        setMarkerVisible = noop,
+        updateHash = noop,
+        getConfigHash = function()
+            return "hash", "fingerprint"
+        end,
+        applyConfigHash = function()
+            return true
+        end,
+    }
+    local theme = FrameworkTestApi.createTheme()
+
+    FrameworkTestApi.createUI(moduleRegistry, hud, theme, config, "test-pack", "Test Window",
+        1, config.Profiles)
+    local snapshot = moduleRegistry.live.captureSnapshot()
+
+    public.registerCoordinator("test-pack", nil)
+
+    lu.assertEquals(buildCalls, 1)
+    lu.assertEquals(target.Value, "base")
+    lu.assertFalse(moduleRegistry.snapshot.isEntryEnabled(moduleRegistry.modulesById.Alpha, snapshot))
+    lu.assertEquals(readPackRestoreMarker(moduleRegistry, moduleRegistry.modulesById.Alpha, snapshot), 2)
 end
 
 function TestMain:testQuickSetupRendersModuleQuickContent()

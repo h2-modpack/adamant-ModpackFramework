@@ -52,12 +52,13 @@ local function createUIRuntime()
     end
 
     function Runtime.toggleEntry(entry, enabled, snapshot)
-        local ok = moduleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
+        local ok, err = moduleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
         if not ok then
-            return
+            return false, err
         end
         staging.modules[entry.id] = enabled
         Runtime.finishUiChange(entry)
+        return true, nil
     end
 
     function Runtime.getModulesStatus(moduleIds)
@@ -152,42 +153,131 @@ local function createUIRuntime()
         return true, nil
     end
 
-    function Runtime.setEntryRuntimeState(entry, state, snapshot)
-        local host = snapshotAccess.getHost(entry, snapshot)
-        if not host then
-            return false, "module host is unavailable"
-        end
-
-        local ok, err
-        if state then
-            ok, err = host.applyMutation()
-        else
-            ok, err = host.revertMutation()
-        end
-        if not ok then
-            logging.warn(packId,
-                "%s %s failed: %s", entry.pluginGuid or "unknown", state and "apply" or "revert", err)
+    local function setEntryEnabledWithStaging(entry, enabled, snapshot)
+        local ok, err = moduleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
+        if ok then
+            staging.modules[entry.id] = enabled == true
         end
         return ok, err
     end
 
-    local function rollBackTouchedEntries(touched, previousState, snapshot)
+    local function syncEntryEnabledStaging(entry, snapshot)
+        staging.modules[entry.id] = moduleRegistry.snapshot.isEntryEnabled(entry, snapshot) == true
+    end
+
+    local function rollBackTouchedEntries(touched, snapshot)
         local rollbackErrors = {}
         for i = #touched, 1, -1 do
-            local rollbackEntry = touched[i]
-            local rollbackOk, rollbackErr = Runtime.setEntryRuntimeState(rollbackEntry, previousState, snapshot)
+            local touchedEntry = touched[i]
+            local rollbackOk, rollbackErr = moduleRegistry.snapshot.rollbackPackTransition(
+                touchedEntry.entry,
+                touchedEntry.receipt,
+                snapshot)
             if not rollbackOk then
                 table.insert(rollbackErrors,
                     string.format("%s: %s",
-                        tostring(rollbackEntry.pluginGuid or rollbackEntry.id or "unknown"),
+                        tostring(touchedEntry.entry.pluginGuid or touchedEntry.entry.id or "unknown"),
                         tostring(rollbackErr)))
+            else
+                syncEntryEnabledStaging(touchedEntry.entry, snapshot)
             end
         end
         if #rollbackErrors > 0 then
-                logging.warn(packId,
+            logging.warn(packId,
                 "Enable Mod rollback incomplete: %s",
                 table.concat(rollbackErrors, "; "))
         end
+    end
+
+    local function rollBackRestoredEntries(touched, snapshot, previousPackState)
+        local rollbackErrors = {}
+        for i = #touched, 1, -1 do
+            local touchedEntry = touched[i]
+            local rollbackOk, rollbackErr = setEntryEnabledWithStaging(touchedEntry.entry, false, snapshot)
+            if not rollbackOk then
+                rollbackErrors[#rollbackErrors + 1] = string.format(
+                    "%s: %s",
+                    tostring(touchedEntry.entry.pluginGuid or touchedEntry.entry.id or "unknown"),
+                    tostring(rollbackErr))
+            end
+        end
+
+        config.ModEnabled = previousPackState
+        staging.ModEnabled = previousPackState
+
+        for i = #touched, 1, -1 do
+            local touchedEntry = touched[i]
+            local rollbackOk, rollbackErr = moduleRegistry.snapshot.restorePackTransitionState(
+                touchedEntry.entry,
+                touchedEntry.receipt,
+                snapshot)
+            if not rollbackOk then
+                rollbackErrors[#rollbackErrors + 1] = string.format(
+                    "%s: %s",
+                    tostring(touchedEntry.entry.pluginGuid or touchedEntry.entry.id or "unknown"),
+                    tostring(rollbackErr))
+            else
+                syncEntryEnabledStaging(touchedEntry.entry, snapshot)
+            end
+        end
+
+        if #rollbackErrors > 0 then
+            logging.warn(packId,
+                "Enable Mod rollback incomplete: %s",
+                table.concat(rollbackErrors, "; "))
+        end
+    end
+
+    local function suspendEntry(entry, snapshot)
+        local ok, err, receipt = moduleRegistry.snapshot.suspendForPackDisable(entry, snapshot)
+        if not ok then
+            return false, err
+        end
+        syncEntryEnabledStaging(entry, snapshot)
+        return true, nil, {
+            entry = entry,
+            receipt = receipt,
+        }
+    end
+
+    local function restoreEntry(entry, snapshot)
+        local ok, err, receipt = moduleRegistry.snapshot.restoreForPackEnable(entry, snapshot)
+        if not ok then
+            return false, err
+        end
+        syncEntryEnabledStaging(entry, snapshot)
+        return true, nil, {
+            entry = entry,
+            receipt = receipt,
+        }
+    end
+
+    function Runtime.reconcilePackDisabledState(snapshot)
+        if config.ModEnabled == true then
+            return true, nil
+        end
+
+        local errors = {}
+        snapshot = snapshot or snapshotAccess.get() or snapshotAccess.capture()
+        for _, entry in ipairs(moduleRegistry.modules) do
+            local ok, err = moduleRegistry.snapshot.ensureSuspendedForPackDisable(entry, snapshot)
+            if ok then
+                syncEntryEnabledStaging(entry, snapshot)
+            else
+                errors[#errors + 1] = string.format("%s: %s",
+                    tostring(entry.pluginGuid or entry.id or "unknown"),
+                    tostring(err))
+            end
+        end
+
+        if #errors > 0 then
+            local err = table.concat(errors, "; ")
+            logging.warn(packId,
+                "Pack disabled startup sync incomplete: %s",
+                err)
+            return false, err
+        end
+        return true, nil
     end
 
     function Runtime.setPackRuntimeState(state, snapshot)
@@ -195,21 +285,41 @@ local function createUIRuntime()
         local touched = {}
         snapshot = snapshot or snapshotAccess.get() or snapshotAccess.capture()
 
+        if previousState == (state == true) then
+            return true, nil
+        end
+
+        if state == true then
+            config.ModEnabled = true
+        end
+
         for _, entry in ipairs(moduleRegistry.modules) do
-            if staging.modules[entry.id] then
-                local ok, err = Runtime.setEntryRuntimeState(entry, state, snapshot)
-                if not ok then
-                    logging.warn(packId,
-                        "Enable Mod toggle failed; restoring previous runtime state")
-                    rollBackTouchedEntries(touched, previousState, snapshot)
-                    return false, err
+            local ok, err, receipt
+            if state then
+                ok, err, receipt = restoreEntry(entry, snapshot)
+            else
+                ok, err, receipt = suspendEntry(entry, snapshot)
+            end
+            if not ok then
+                logging.warn(packId,
+                    "Enable Mod toggle failed; restoring previous runtime state: %s",
+                    tostring(err))
+                if state then
+                    rollBackRestoredEntries(touched, snapshot, previousState)
+                else
+                    config.ModEnabled = previousState
+                    staging.ModEnabled = previousState
+                    rollBackTouchedEntries(touched, snapshot)
                 end
-                table.insert(touched, entry)
+                return false, err
+            end
+            if receipt then
+                touched[#touched + 1] = receipt
             end
         end
 
-        staging.ModEnabled = state
-        config.ModEnabled = state
+        staging.ModEnabled = state == true
+        config.ModEnabled = state == true
         Runtime.markRunDataDirty()
         hud.setModMarker(state)
         return true, nil
