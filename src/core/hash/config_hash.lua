@@ -211,12 +211,11 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
 
     local function EncodeValue(root, value, entryLabel)
         local encoded = hashing.toHash(root, value)
-        if encoded == nil then
-            logging.warn(packId,
-                "GetConfigHash: skipping %s '%s' with unknown storage type '%s'",
-                entryLabel, tostring(root.alias), tostring(root.type))
-            return nil
-        end
+        assert(encoded ~= nil, string.format(
+            "GetConfigHash: expected hashable prepared %s '%s'",
+            entryLabel,
+            tostring(root.alias)
+        ))
         return encoded
     end
 
@@ -231,12 +230,11 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         end
 
         local decoded = hashing.fromHash(root, str)
-        if decoded == nil then
-            logging.warn(packId,
-                "ApplyConfigHash: defaulting %s '%s' with unknown storage type '%s'",
-                entryLabel, tostring(root.alias), tostring(root.type))
-            return root.default, nil
-        end
+        assert(decoded ~= nil, string.format(
+            "ApplyConfigHash: expected hashable prepared %s '%s'",
+            entryLabel,
+            tostring(root.alias)
+        ))
         return decoded, nil
     end
 

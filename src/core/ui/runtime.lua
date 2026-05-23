@@ -43,8 +43,9 @@ local function createUIRuntime()
         return cachedHash, cachedFingerprint
     end
 
-    function Runtime.finishUiChange(entry)
-        if entry and entry.affectsRunData then
+    function Runtime.finishUiChange(entry, snapshot)
+        snapshot = snapshot or snapshotAccess.get() or snapshotAccess.capture()
+        if entry and moduleRegistry.snapshot.affectsRunData(entry, snapshot) then
             Runtime.markRunDataDirty()
         end
         Runtime.invalidateHash()
@@ -57,7 +58,7 @@ local function createUIRuntime()
             return false, err
         end
         staging.modules[entry.id] = enabled
-        Runtime.finishUiChange(entry)
+        Runtime.finishUiChange(entry, snapshot)
         return true, nil
     end
 
@@ -105,7 +106,7 @@ local function createUIRuntime()
                     })
                     staging.modules[moduleId] = enabled
                     changed = true
-                    if entry.affectsRunData then
+                    if moduleRegistry.snapshot.affectsRunData(entry, snapshot) then
                         needsRunData = true
                     end
                 else
@@ -347,7 +348,7 @@ local function createUIRuntime()
 
         local ok, err, committed = host.commitIfDirty()
         if ok and committed then
-            Runtime.finishUiChange(entry)
+            Runtime.finishUiChange(entry, snapshot)
         elseif ok == false then
             logging.warn(packId,
                 "%s state commit failed; restored previous config where possible: %s",

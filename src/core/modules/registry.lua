@@ -27,10 +27,6 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
         return host.getHashHints()
     end
 
-    local function ReadAffectsRunData(host)
-        return host.affectsRunData() == true
-    end
-
     local function ReadPersisted(entry, alias, snapshot)
         local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
         if not host then
@@ -87,7 +83,6 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
             name = meta.name or moduleId,
             shortName = meta.shortName,
             tooltip = meta.tooltip or "",
-            affectsRunData = found.affectsRunData,
             hashHints = found.hashHints,
             storage = found.storage,
             _enableLabel = "Enable " .. tostring(meta.name or moduleId or found.pluginGuid),
@@ -124,7 +119,6 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
                         packId = hostPackId,
                         meta = ReadMeta(host),
                         hashHints = ReadHashHints(host),
-                        affectsRunData = ReadAffectsRunData(host),
                     })
                 end
             end
@@ -163,23 +157,16 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
         end
 
         for _, foundModule in ipairs(found) do
-            local pluginGuid = foundModule.pluginGuid
             local host = foundModule.host
             local id = foundModule.moduleId
-            local name = foundModule.meta.name
             local hasQuickContent = host and type(host.drawQuickContent) == "function"
 
             if not duplicateNamespaces[id] then
-                if not id or not name then
-                    logging.warn(packId,
-                        "Skipping %s: missing id/name", pluginGuid)
-                else
-                    local discovered = BuildEntry(foundModule)
-                    table.insert(ModuleRegistry.modules, discovered)
-                    ModuleRegistry.modulesById[discovered.id] = discovered
-                    if hasQuickContent then
-                        table.insert(ModuleRegistry.modulesWithQuickContent, discovered)
-                    end
+                local discovered = BuildEntry(foundModule)
+                table.insert(ModuleRegistry.modules, discovered)
+                ModuleRegistry.modulesById[discovered.id] = discovered
+                if hasQuickContent then
+                    table.insert(ModuleRegistry.modulesWithQuickContent, discovered)
                 end
             end
         end
@@ -253,6 +240,11 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
 
     function ModuleRegistry.snapshot.isEntryEnabled(entry, snapshot)
         return ReadPersisted(entry, "Enabled", snapshot) == true
+    end
+
+    function ModuleRegistry.snapshot.affectsRunData(entry, snapshot)
+        local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
+        return host ~= nil and host.affectsRunData() == true
     end
 
     function ModuleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)

@@ -114,7 +114,7 @@ function TestModuleRegistry:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissin
             }
         end,
         affectsRunData = function()
-            return entry.affectsRunData == true
+            return true
         end,
         read = function(key)
             if key == "Enabled" then
@@ -134,6 +134,7 @@ function TestModuleRegistry:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissin
     local liveSnapshot = moduleRegistry.live.captureSnapshot()
     lu.assertEquals(moduleRegistry.snapshot.getHost(entry, liveSnapshot), replacement)
     lu.assertTrue(moduleRegistry.snapshot.isEntryEnabled(entry, liveSnapshot))
+    lu.assertTrue(moduleRegistry.snapshot.affectsRunData(entry, liveSnapshot))
 
     exports.host = nil
     SetRuntimeLiveHost("test-GodPool", nil)
@@ -184,7 +185,7 @@ function TestModuleRegistry:testCapturedSnapshotIsStableAcrossHostReplacement()
             }
         end,
         affectsRunData = function()
-            return entry.affectsRunData == true
+            return true
         end,
         read = function() return "replacement" end,
         writeAndFlush = function() return true end,
@@ -200,6 +201,8 @@ function TestModuleRegistry:testCapturedSnapshotIsStableAcrossHostReplacement()
 
     local freshSnapshot = moduleRegistry.live.captureSnapshot()
     lu.assertEquals(moduleRegistry.snapshot.getHost(entry, freshSnapshot), replacement)
+    lu.assertTrue(moduleRegistry.snapshot.affectsRunData(entry, freshSnapshot))
+    lu.assertFalse(moduleRegistry.snapshot.affectsRunData(entry, capturedSnapshot))
     lu.assertEquals(moduleRegistry.snapshot.getHost(entry, capturedSnapshot), originalHost)
 end
 

@@ -462,7 +462,6 @@ function MockModuleRegistry.create(moduleDefs)
             shortName = definition.shortName,
             tooltip = definition.tooltip,
             modpack = definition.modpack,
-            affectsRunData = host.affectsRunData(),
             hashHints = definition.hashGroupPlan,
             storage = definition.storage,
         }
@@ -509,6 +508,11 @@ function MockModuleRegistry.create(moduleDefs)
     function moduleRegistry.snapshot.isEntryEnabled(entry, snapshot)
         local host = moduleRegistry.snapshot.getHost(entry, snapshot)
         return host.read("Enabled") == true
+    end
+
+    function moduleRegistry.snapshot.affectsRunData(entry, snapshot)
+        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
+        return host ~= nil and host.affectsRunData() == true
     end
 
     function moduleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
