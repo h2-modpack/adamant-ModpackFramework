@@ -11,7 +11,7 @@
 - `Framework.createPack(...)` is now the only public pack construction entrypoint; the prior split strict/safe construction surfaces were retired.
 - GUI registration now uses stable callbacks from `Framework.createGuiCallbacks(packId)` so coordinator code owns the ROM GUI callsite.
 - Framework implementation files now live under `src/core/...`; root `src/main.lua` only assembles the public surface.
-- Pack enable/disable now drives coordinated modules through Lib host lifecycle methods. Disabling a pack snapshots each module's prior enabled state and enabling the pack restores that snapshot, so mutations and integration provider notifications use the same path as module-level toggles.
+- Pack enable/disable now drives coordinated modules through Lib host lifecycle methods. Disabling a pack snapshots each module's prior enabled state and enabling the pack restores that snapshot, so mutations and shared publications use the same path as module-level toggles.
 - Framework now reconciles discovered modules when a pack starts disabled, preserving the pack-restore snapshot while ensuring module runtime effects stay suspended.
 
 ## [1.1.0] - 2026-05-05

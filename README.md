@@ -52,7 +52,7 @@ through that registry rather than reading module globals directly.
 ## Docs
 
 - [COORDINATOR_GUIDE.md](COORDINATOR_GUIDE.md)
-  Bootstrap, discovery, and coordinator/module integration.
+  Bootstrap, discovery, and coordinator/module wiring.
 - [QUICK_SETUP.md](QUICK_SETUP.md)
   How pack-level Quick Setup content is assembled.
 - [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md)
@@ -77,8 +77,8 @@ Discovered modules render through:
 - optional `host.drawQuickContent()`
 
 The module-authored callbacks registered with Lib receive
-`drawTab(draw, state, actions, services)` and
-`drawQuickContent(draw, state, actions, services)`. Framework calls the live
+`drawTab(draw, state, actions)` and
+`drawQuickContent(draw, state, actions)`. Framework calls the live
 `ModuleHost` methods; Lib supplies the draw object with `imgui`, `widgets`, and
 `nav`, plus the staged state, action, and draw-safe service surfaces.
 
