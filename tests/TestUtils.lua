@@ -140,17 +140,17 @@ lib = public
 rom.mods['adamant-ModpackLib'] = lib
 local defaultFrameworkRuntime = lib.createFrameworkRuntime("adamant-ModpackFramework")
 
-function GetRuntimeLiveHosts()
+function GetRuntimeLiveModules()
     local runtimeRoot = assert(AdamantModpackLib_Runtime, "Lib runtime missing")
     local registry = assert(runtimeRoot.registry, "Lib registry missing")
-    local hosts = assert(registry.hosts, "host registry missing")
-    return assert(hosts.live, "runtime live hosts missing")
+    local modules = assert(registry.modules, "module registry missing")
+    return assert(modules.live, "runtime live modules missing")
 end
 
 function SetRuntimeLiveHost(pluginGuid, host)
-    local liveHosts = GetRuntimeLiveHosts()
-    local previousHost = liveHosts[pluginGuid]
-    liveHosts[pluginGuid] = host
+    local liveModules = GetRuntimeLiveModules()
+    local previousHost = liveModules[pluginGuid]
+    liveModules[pluginGuid] = host
     return previousHost
 end
 
@@ -172,10 +172,10 @@ LibModuleState = setmetatable({}, {
 })
 LibModuleHost = setmetatable({}, {
     __index = function(_, key)
-        return assert(LibTestImports["core/module_bootstrap/host.lua"], "LibModuleHost test service missing")[key]
+        return assert(LibTestImports["core/module_bootstrap/managed_module.lua"], "LibModuleHost test service missing")[key]
     end,
     __newindex = function(_, key, value)
-        assert(LibTestImports["core/module_bootstrap/host.lua"], "LibModuleHost test service missing")[key] = value
+        assert(LibTestImports["core/module_bootstrap/managed_module.lua"], "LibModuleHost test service missing")[key] = value
     end,
 })
 local function GetLibOverlayService()
@@ -438,18 +438,39 @@ function MockModuleRegistry.create(moduleDefs)
         })
         local persistentState, stagedState = CreateModuleState(persisted, definition)
         local pluginGuid = def.pluginGuid or ("adamant-" .. def.id)
-        local host, authorHost = LibModuleHost.create({
+        local function adaptDraw(callback)
+            if type(callback) ~= "function" then
+                return callback
+            end
+            return function(callbackHost, ui)
+                return callback(ui.draw, ui.data, ui.actions, ui, callbackHost)
+            end
+        end
+        local function adaptPatch(callback)
+            if type(callback) ~= "function" then
+                return callback
+            end
+            return function(callbackHost, runtime, plan)
+                return callback(plan, callbackHost, runtime and runtime.data or nil, runtime)
+            end
+        end
+        local mutationBundle = {
+            patchMutation = nil,
+        }
+        if def.patchPlan ~= nil then
+            local mutations = assert(LibTestImports["core/mutations/00_init.lua"], "Lib mutation bundle missing")
+            mutations.lifecycle.declarePatch(mutationBundle, adaptPatch(def.patchPlan))
+        end
+        local host = LibModuleHost.create({
             pluginGuid = pluginGuid,
             definition = definition,
             persistentState = persistentState,
             stagedState = stagedState,
-            drawTab = def.DrawTab or function() end,
-            drawQuickContent = def.DrawQuickContent,
+            mutationBundle = mutationBundle,
+            drawTab = adaptDraw(def.DrawTab or function() end),
+            drawQuickContent = adaptDraw(def.DrawQuickContent),
         })
-        if def.patchPlan ~= nil then
-            authorHost.mutation.patch(def.patchPlan)
-        end
-        authorHost.activate()
+        host.activate()
         local module = {
             pluginGuid = pluginGuid,
             mod = {

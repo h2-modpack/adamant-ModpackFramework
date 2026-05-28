@@ -28,7 +28,7 @@
 
 - `Framework.createPack(...)` now uses positional required arguments plus an optional `opts` table instead of nested `params.def`.
 - Framework pack state now persists on `FrameworkPackRegistry`, so repeated coordinator/framework reloads replace pack state without duplicating pack slots.
-- Framework discovery now resolves modules through Lib's live-host registry instead of reading module public globals directly.
+- Framework discovery now resolves modules through Lib's live-module registry instead of reading module public globals directly.
 - UI and hash operations now snapshot current module hosts at operation start, so ordinary module behavior reloads can update through Lib-published hosts without rediscovery.
 - Coordinated packs can rebuild when a coordinated module republishes a structurally changed host and Lib requests a coordinator rebuild.
 - The main UI was split into focused runtime, profile, Quick Setup, module-tab, dev, and theme files.

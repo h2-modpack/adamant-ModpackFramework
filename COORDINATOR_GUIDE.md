@@ -87,10 +87,10 @@ Optional `opts` fields:
 
 ## Discovery Contract
 
-Framework discovers modules through Lib's live-host registry:
+Framework discovers modules through Lib's live-module registry:
 
 ```lua
--- Conceptual filter over Lib-published live hosts.
+-- Conceptual filter over Lib-published live modules.
 host.getPackId() == PACK_ID
 ```
 
@@ -126,7 +126,7 @@ storage, so a disabled pack can survive a full game restart and still restore
 the prior module mix when re-enabled.
 
 Framework skips modules that are missing:
-- live host registry entry
+- live module registry entry
 - host identity `id` or meta `name`
 - host storage contract
 

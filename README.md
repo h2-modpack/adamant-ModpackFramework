@@ -46,7 +46,7 @@ end
 ```
 
 If a module does not register runtime hooks, skip the hook declaration call.
-Host activation publishes the created host into Lib's live-host registry. Framework discovers modules
+Host activation publishes the created host into Lib's live-module registry. Framework discovers modules
 through that registry rather than reading module globals directly.
 
 ## Docs

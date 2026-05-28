@@ -335,18 +335,22 @@ function TestMain:testModuleActivationOwnsStartupSyncBeforeFrameworkInit()
         Enabled = true,
         DebugMode = false,
     }, definition)
-    local host, authorHost = LibModuleHost.create({
+    local mutationBundle = {
+        patchMutation = nil,
+    }
+    LibTestImports["core/mutations/00_init.lua"].lifecycle.declarePatch(mutationBundle, function(_, _, plan)
+        buildCalls = buildCalls + 1
+        plan:set(target, "Value", "patched")
+    end)
+    local host = LibModuleHost.create({
         pluginGuid = "test-pack.Alpha",
         definition = definition,
         persistentState = persistentState,
         stagedState = stagedState,
+        mutationBundle = mutationBundle,
         drawTab = function() end,
     })
-    authorHost.mutation.patch(function(plan)
-        buildCalls = buildCalls + 1
-        plan:set(target, "Value", "patched")
-    end)
-    authorHost.activate()
+    host.activate()
 
     lu.assertEquals(buildCalls, 1)
     lu.assertEquals(target.Value, "patched")
@@ -1607,7 +1611,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
         DebugMode = false,
         FlagA = false,
     }, replacementDefinition)
-    local replacementHost, replacementAuthorHost = LibModuleHost.create({
+    local replacementHost = LibModuleHost.create({
         pluginGuid = entry.pluginGuid,
         definition = replacementDefinition,
         persistentState = persistentState,
@@ -1617,7 +1621,7 @@ function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
             secondQuickRenders = secondQuickRenders + 1
         end,
     })
-    replacementAuthorHost.activate()
+    replacementHost.activate()
     rom.mods[entry.pluginGuid].host = replacementHost
 
     local okSecond, errSecond = pcall(builtUi.renderWindow)

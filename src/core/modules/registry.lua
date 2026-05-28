@@ -1,4 +1,4 @@
--- Indexes coordinated modules through the Lib live-host registry and snapshots live host pointers
+-- Indexes coordinated modules through the Lib live-module registry and snapshots live host pointers
 -- so UI/runtime work can tolerate hot-replaced hosts safely.
 
 local deps = ...

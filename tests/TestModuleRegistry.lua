@@ -26,18 +26,39 @@ local function attachModule(pluginGuid, definition, persisted, exports)
         hashGroupPlan = definition.hashGroupPlan,
     })
     local persistentState, stagedState = CreateModuleState(persisted or {}, definition)
-    local host, authorHost = LibModuleHost.create({
+    local function adaptDraw(callback)
+        if type(callback) ~= "function" then
+            return callback
+        end
+        return function(callbackHost, ui)
+            return callback(ui.draw, ui.data, ui.actions, ui, callbackHost)
+        end
+    end
+    local function adaptPatch(callback)
+        if type(callback) ~= "function" then
+            return callback
+        end
+        return function(callbackHost, runtime, plan)
+            return callback(plan, callbackHost, runtime and runtime.data or nil, runtime)
+        end
+    end
+    local mutationBundle = {
+        patchMutation = nil,
+    }
+    if patchPlan ~= nil then
+        local mutations = assert(LibTestImports["core/mutations/00_init.lua"], "Lib mutation bundle missing")
+        mutations.lifecycle.declarePatch(mutationBundle, adaptPatch(patchPlan))
+    end
+    local host = LibModuleHost.create({
         pluginGuid = pluginGuid,
         definition = definition,
         persistentState = persistentState,
         stagedState = stagedState,
-        drawTab = exports.DrawTab,
-        drawQuickContent = exports.DrawQuickContent,
+        mutationBundle = mutationBundle,
+        drawTab = adaptDraw(exports.DrawTab),
+        drawQuickContent = adaptDraw(exports.DrawQuickContent),
     })
-    if patchPlan ~= nil then
-        authorHost.mutation.patch(patchPlan)
-    end
-    authorHost.activate()
+    host.activate()
     exports.host = host
     rom.mods[pluginGuid] = exports
     return exports

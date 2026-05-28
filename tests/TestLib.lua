@@ -12,7 +12,7 @@ function TestLibHost:testCommitStagedStateFlushesManagedAliasState()
         },
     })
     local persistentState, stagedState = CreateModuleState(config, definition)
-    local host, authorHost = LibModuleHost.create({
+    local host = LibModuleHost.create({
         pluginGuid = "test-managed-state",
         definition = definition,
         persistentState = persistentState,
@@ -22,7 +22,7 @@ function TestLibHost:testCommitStagedStateFlushesManagedAliasState()
 
     stagedState.write("Flag", true)
 
-    authorHost.activate()
+    host.activate()
     local ok, err = host.flush()
 
     lu.assertTrue(ok, tostring(err))
