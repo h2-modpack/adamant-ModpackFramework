@@ -23,10 +23,6 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
         return host.getMeta()
     end
 
-    local function ReadHashHints(host)
-        return host.getHashHints()
-    end
-
     local function ReadPersisted(entry, alias, snapshot)
         local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
         if not host then
@@ -83,7 +79,6 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
             name = meta.name or moduleId,
             shortName = meta.shortName,
             tooltip = meta.tooltip or "",
-            hashHints = found.hashHints,
             storage = found.storage,
             _enableLabel = "Enable " .. tostring(meta.name or moduleId or found.pluginGuid),
             _debugLabel = tostring(meta.name or moduleId or found.pluginGuid)
@@ -118,7 +113,6 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
                         moduleId = host.getModuleId(),
                         packId = hostPackId,
                         meta = ReadMeta(host),
-                        hashHints = ReadHashHints(host),
                     })
                 end
             end

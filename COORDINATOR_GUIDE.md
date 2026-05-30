@@ -177,7 +177,6 @@ If no callback is registered or the request is rejected, the module warns that a
 Hash/profile behavior is built on:
 - module enable state
 - validated persisted storage roots
-- optional `definition.hashGroupPlan`
 
 Profile load:
 - stages decoded persisted values through each module host/state plumbing

@@ -13,6 +13,8 @@
 - Framework implementation files now live under `src/core/...`; root `src/main.lua` only assembles the public surface.
 - Pack enable/disable now drives coordinated modules through Lib host lifecycle methods. Disabling a pack snapshots each module's prior enabled state and enabling the pack restores that snapshot, so mutations and shared publications use the same path as module-level toggles.
 - Framework now reconciles discovered modules when a pack starts disabled, preserving the pack-restore snapshot while ensuring module runtime effects stay suspended.
+- Removed `definition.hashGroupPlan` and grouped hash/profile encoding. Hashes now use semantic module/storage keys only, with future shortening expected to happen through whole-string compression.
+- Bumped the config hash ABI to version 2 and reject older versions instead of attempting partial migration from grouped hashes.
 
 ## [1.1.0] - 2026-05-05
 

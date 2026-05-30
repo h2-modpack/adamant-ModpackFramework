@@ -11,16 +11,13 @@ local createModuleRegistry = import("core/modules/registry.lua", nil, {
     rom = rom,
     logging = logging,
 })
-local createHashGroupBuilder = import("core/hash/group_builder.lua")
 local profileTools = import("core/profiles/audit.lua", nil, {
     hashCodec = hashCodec,
-    createHashGroupBuilder = createHashGroupBuilder,
     logging = logging,
 })
 local createConfigHash = import("core/hash/config_hash.lua", nil, {
     rom = rom,
     hashCodec = hashCodec,
-    createHashGroupBuilder = createHashGroupBuilder,
     logging = logging,
 })
 local createHud = import("core/hud/runtime.lua")

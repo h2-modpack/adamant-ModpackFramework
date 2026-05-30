@@ -56,7 +56,7 @@ through that registry rather than reading module globals directly.
 - [QUICK_SETUP.md](QUICK_SETUP.md)
   How pack-level Quick Setup content is assembled.
 - [HASH_PROFILE_ABI.md](HASH_PROFILE_ABI.md)
-  Compatibility rules for module ids, storage aliases/defaults, and hash groups.
+  Compatibility rules for module ids, storage aliases/defaults, and value codecs.
 - [CONTRIBUTING.md](CONTRIBUTING.md)
   Contributor expectations for framework behavior and compatibility-sensitive changes.
 

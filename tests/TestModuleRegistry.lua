@@ -23,7 +23,6 @@ local function attachModule(pluginGuid, definition, persisted, exports)
         shortName = definition.shortName,
         tooltip = definition.tooltip,
         storage = definition.storage,
-        hashGroupPlan = definition.hashGroupPlan,
     })
     local persistentState, stagedState = CreateModuleState(persisted or {}, definition)
     local function adaptDraw(callback)

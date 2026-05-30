@@ -287,7 +287,6 @@ function CreateFrameworkHarness(opts)
     }
 end
 local logging = import("core/logging.lua")
-local createHashGroupBuilder = import("core/hash/group_builder.lua")
 local createModuleRegistry = import("core/modules/registry.lua", nil, {
     rom = rom,
     logging = logging,
@@ -299,7 +298,6 @@ local hashCodec = import("core/hash/codec.lua")
 local createConfigHash = import("core/hash/config_hash.lua", nil, {
     rom = rom,
     hashCodec = hashCodec,
-    createHashGroupBuilder = createHashGroupBuilder,
     logging = logging,
 })
 local createHud = import("core/hud/runtime.lua")
@@ -347,9 +345,6 @@ local function createTestHud(packId, packIndex, configHash, theme, config, hideH
         frameworkRuntime or createDefaultFrameworkRuntime())
 end
 
-rawset(FrameworkTestApi, "createHashGroupBuilder", function(hashing)
-    return createHashGroupBuilder(hashing or defaultFrameworkRuntime.hashing)
-end)
 rawset(FrameworkTestApi, "createModuleRegistry", function(packId, testConfig, frameworkRuntime)
     return createModuleRegistry(packId, testConfig, frameworkRuntime or createDefaultFrameworkRuntime())
 end)
@@ -371,7 +366,6 @@ rawset(FrameworkTestApi, "createUIRuntime", function(ctx)
 end)
 local profileTools = import("core/profiles/audit.lua", nil, {
     hashCodec = hashCodec,
-    createHashGroupBuilder = createHashGroupBuilder,
     logging = logging,
 })
 rawset(FrameworkTestApi, "normalizeProfiles", profileTools.normalizeProfiles)
@@ -432,7 +426,6 @@ function MockModuleRegistry.create(moduleDefs)
             name = def.name or def.id,
             modpack = def.modpack or "test-pack",
             storage = def.storage or {},
-            hashGroupPlan = def.hashGroupPlan,
             shortName = def.shortName,
             tooltip = def.tooltip,
         })
@@ -483,7 +476,6 @@ function MockModuleRegistry.create(moduleDefs)
             shortName = definition.shortName,
             tooltip = definition.tooltip,
             modpack = definition.modpack,
-            hashHints = definition.hashGroupPlan,
             storage = definition.storage,
         }
 

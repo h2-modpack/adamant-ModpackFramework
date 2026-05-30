@@ -24,7 +24,7 @@ For UI and host behavior, use [README.md](README.md) and [COORDINATOR_GUIDE.md](
 Framework encodes config state into a canonical key-value string:
 
 ```text
-_v=1|ModuleId=1|ModuleId.alias=value
+_v=2|ModuleId=1|ModuleId.alias=value
 ```
 
 Properties:
@@ -78,7 +78,6 @@ Treat the following as frozen after release unless you are doing deliberate comp
 - storage `default`
 - storage type `toHash(...)`
 - storage type `fromHash(...)`
-- `definition.hashGroupPlan` key prefixes, item boundaries, and alias order
 
 These are the wire format.
 
@@ -150,43 +149,14 @@ Framework token escaping is also part of the wire envelope. Storage type codecs
 should return their logical token value; Framework owns escaping delimiters in the
 outer key/value format.
 
-### `definition.hashGroupPlan`
-
-When a module declares hash groups, the group surface becomes part of the wire format.
-
-Compatibility-sensitive parts are:
-- group key
-- which root aliases belong to the group
-- member order inside the group
-
-## Hash Groups
-
-`definition.hashGroupPlan` provides optional grouping hints that let Framework compress multiple small persisted root values into one base62 token.
-
-Supported members:
-- root `bool`
-- root `int`
-- root `packedInt` with derivable pack width
-
-Not supported:
-- packed child aliases
-- `Enabled`
-- roots declared with `hash = false`
-
-Reason:
-- packed child aliases already belong to a packed root
-- `Enabled` is encoded as module enable state
-- non-hash state is intentionally not part of portable/shared config state
-
 ## Decode Behavior
 
 Framework provides these decode guarantees:
-- hash format version check on decode
+- exact hash format version check on decode
 - unknown keys are ignored
 - missing keys fall back to defaults
 - invalid module enable tokens fail the import and roll back
 - malformed scalar/table storage tokens fail the import and roll back
-- malformed or empty packed hash-group tokens fail the import and roll back
 - saved coordinator profiles are audited at `Framework.createPack(...)` and warn on unknown field keys inside known module namespaces
 
 Module authors own compatibility plans for:
@@ -194,7 +164,6 @@ Module authors own compatibility plans for:
 - renamed aliases
 - changed defaults
 - changed encoding semantics
-- changed hash group layout
 
 ## Shipped-Module Invariants
 
@@ -202,6 +171,5 @@ Once a module is publicly shipped, the following are part of its ABI and should 
 - `definition.id` - identifies the module in hashes and profiles
 - persisted storage root `alias` names - identify values within a module's namespace
 - storage defaults - consumed when a persisted value is absent
-- `definition.hashGroupPlan` layout - determines grouped hash encoding
 
 Changing any of these is a compatibility event and requires an explicit compatibility plan.

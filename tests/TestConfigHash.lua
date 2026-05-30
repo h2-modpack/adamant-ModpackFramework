@@ -13,14 +13,6 @@ local function assertWarningContains(fragment)
     lu.fail("expected warning containing '" .. fragment .. "'")
 end
 
-TestConfigHashBase62 = {}
-
-function TestConfigHashBase62:testRoundTrip()
-    local configHash = makeConfigHash(MockModuleRegistry.create())
-    local encoded = configHash.EncodeBase62(3844)
-    lu.assertEquals(configHash.DecodeBase62(encoded), 3844)
-end
-
 TestConfigHashStorage = {}
 
 function TestConfigHashStorage:testAllDefaultsProduceVersionOnlyCanonical()
@@ -41,7 +33,7 @@ function TestConfigHashStorage:testAllDefaultsProduceVersionOnlyCanonical()
 
     local canonical = makeConfigHash(moduleRegistry).GetConfigHash()
 
-    lu.assertEquals(canonical, "_v=1")
+    lu.assertEquals(canonical, "_v=2")
 end
 
 function TestConfigHashStorage:testRegularAndSpecialStorageRoundTrip()
@@ -167,7 +159,7 @@ function TestConfigHashStorage:testApplyConfigHashRollsBackWhenEnableFails()
     local module = moduleRegistry.modulesById.GodPool
     local moduleHost = moduleRegistry.live.getHost(module)
 
-    local ok = configHash.ApplyConfigHash("_v=1|GodPool=1|GodPool.EnabledFlag=1")
+    local ok = configHash.ApplyConfigHash("_v=2|GodPool=1|GodPool.EnabledFlag=1")
 
     lu.assertFalse(ok)
     lu.assertFalse(moduleHost.read("Enabled"))
@@ -209,7 +201,7 @@ function TestConfigHashStorage:testApplyConfigHashRollsBackWhenFlushFails()
     local godHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
     failApply = true
 
-    local ok = configHash.ApplyConfigHash("_v=1|BiomeControl.Mode=Chaos|GodPool=1|GodPool.EnabledFlag=1")
+    local ok = configHash.ApplyConfigHash("_v=2|BiomeControl.Mode=Chaos|GodPool=1|GodPool.EnabledFlag=1")
 
     lu.assertFalse(ok)
     lu.assertEquals(biomeHost.read("Mode"), "Vanilla")
@@ -217,7 +209,7 @@ function TestConfigHashStorage:testApplyConfigHashRollsBackWhenFlushFails()
     lu.assertTrue(godHost.read("Enabled"))
 end
 
-function TestConfigHashStorage:testApplyConfigHashRejectsNewerVersion()
+function TestConfigHashStorage:testApplyConfigHashRejectsUnsupportedVersion()
     CaptureWarnings()
     local moduleRegistry = MockModuleRegistry.create({
         {
@@ -237,7 +229,7 @@ function TestConfigHashStorage:testApplyConfigHashRejectsNewerVersion()
     lu.assertFalse(ok)
     lu.assertFalse(moduleHost.read("Enabled"))
     lu.assertFalse(moduleHost.read("EnabledFlag"))
-    assertWarningContains("newer than supported")
+    assertWarningContains("is not supported")
     RestoreWarnings()
 end
 
@@ -256,7 +248,7 @@ function TestConfigHashStorage:testApplyConfigHashRejectsInvalidModuleEnableToke
     local configHash = makeConfigHash(moduleRegistry)
     local moduleHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
 
-    local ok = configHash.ApplyConfigHash("_v=1|GodPool=enabled|GodPool.EnabledFlag=1")
+    local ok = configHash.ApplyConfigHash("_v=2|GodPool=enabled|GodPool.EnabledFlag=1")
 
     lu.assertFalse(ok)
     lu.assertFalse(moduleHost.read("Enabled"))
@@ -280,73 +272,11 @@ function TestConfigHashStorage:testApplyConfigHashRejectsInvalidScalarStorageTok
     local configHash = makeConfigHash(moduleRegistry)
     local moduleHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
 
-    local ok = configHash.ApplyConfigHash("_v=1|GodPool.Count=not-a-number")
+    local ok = configHash.ApplyConfigHash("_v=2|GodPool.Count=not-a-number")
 
     lu.assertFalse(ok)
     lu.assertEquals(moduleHost.read("Count"), 3)
     assertWarningContains("invalid storage root 'Count' hash value")
-    RestoreWarnings()
-end
-
-function TestConfigHashStorage:testApplyConfigHashRejectsInvalidPackedGroupToken()
-    CaptureWarnings()
-    local moduleRegistry = MockModuleRegistry.create({
-        {
-            id = "GodPool",
-            enabled = false,
-            hashGroupPlan = {
-                {
-                    keyPrefix = "Group",
-                    items = {
-                        { "Count" },
-                    },
-                },
-            },
-            storage = {
-                { type = "int", alias = "Count", default = 3, min = 1, max = 9 },
-            },
-            values = { Count = 3 },
-        },
-    })
-    local configHash = makeConfigHash(moduleRegistry)
-    local moduleHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
-
-    local ok = configHash.ApplyConfigHash("_v=1|GodPool.Group_1=bad!")
-
-    lu.assertFalse(ok)
-    lu.assertEquals(moduleHost.read("Count"), 3)
-    assertWarningContains("invalid packed hash value")
-    RestoreWarnings()
-end
-
-function TestConfigHashStorage:testApplyConfigHashRejectsEmptyPackedGroupToken()
-    CaptureWarnings()
-    local moduleRegistry = MockModuleRegistry.create({
-        {
-            id = "GodPool",
-            enabled = false,
-            hashGroupPlan = {
-                {
-                    keyPrefix = "Group",
-                    items = {
-                        { "Count" },
-                    },
-                },
-            },
-            storage = {
-                { type = "int", alias = "Count", default = 3, min = 1, max = 9 },
-            },
-            values = { Count = 3 },
-        },
-    })
-    local configHash = makeConfigHash(moduleRegistry)
-    local moduleHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
-
-    local ok = configHash.ApplyConfigHash("_v=1|GodPool.Group_1=")
-
-    lu.assertFalse(ok)
-    lu.assertEquals(moduleHost.read("Count"), 3)
-    assertWarningContains("invalid packed hash value")
     RestoreWarnings()
 end
 
@@ -374,45 +304,12 @@ function TestConfigHashStorage:testApplyConfigHashRejectsInvalidTableStorageToke
     local configHash = makeConfigHash(moduleRegistry)
     local moduleHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
 
-    local ok = configHash.ApplyConfigHash("_v=1|GodPool.Rows=not-a-table")
+    local ok = configHash.ApplyConfigHash("_v=2|GodPool.Rows=not-a-table")
 
     lu.assertFalse(ok)
     lu.assertEquals(moduleHost.read("Rows"), {})
     assertWarningContains("invalid storage root 'Rows' hash value")
     RestoreWarnings()
-end
-
-function TestConfigHashStorage:testHashGroupsAllowPackedRootAliases()
-    local moduleRegistry = MockModuleRegistry.create({
-        {
-            id = "GodPool",
-            enabled = false,
-            hashGroupPlan = {
-                {
-                    keyPrefix = "PackedRoots",
-                    items = {
-                        { "PackedA", "PackedB" },
-                    },
-                },
-            },
-            storage = {
-                { type = "packedInt", alias = "PackedA", width = 12, bits = {
-                    { alias = "AFlag", offset = 0, width = 1, type = "bool", default = false },
-                }},
-                { type = "packedInt", alias = "PackedB", width = 12, bits = {
-                    { alias = "BFlag", offset = 0, width = 1, type = "bool", default = false },
-                }},
-            },
-            values = {
-                PackedA = 3,
-                PackedB = 5,
-            },
-        },
-    })
-
-    local canonical = makeConfigHash(moduleRegistry).GetConfigHash()
-
-    lu.assertStrContains(canonical, "GodPool.PackedRoots_1=")
 end
 
 function TestConfigHashStorage:testTransientRootsAreExcludedFromHash()

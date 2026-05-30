@@ -1,13 +1,11 @@
 local deps = ...
 local rom = deps.rom
 local hashCodec = deps.hashCodec
-local createHashGroupBuilder = deps.createHashGroupBuilder
 local logging = deps.logging
 
 local function createConfigHash(moduleRegistry, config, packId, hashing)
-    local HASH_VERSION = 1
+    local HASH_VERSION = 2
     local ConfigHash = {}
-    local hashGroupBuilder = createHashGroupBuilder(hashing)
 
     local function ReadPersisted(entry, key, snapshot)
         return moduleRegistry.snapshot.getStorageValue(entry, key, snapshot)
@@ -57,24 +55,6 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
                 host.reloadFromConfig()
             end
         end
-    end
-
-    local function GetEntryHashMeta(entry)
-        return hashGroupBuilder.build(entry.storage, entry.hashHints)
-    end
-
-    local moduleHashMeta = {}
-
-    local function EnsureEntryHashMeta(cache, entry)
-        local meta = cache[entry]
-        if meta then
-            return meta
-        end
-
-        local groups, groupedAliases = GetEntryHashMeta(entry)
-        meta = { groups = groups, groupedAliases = groupedAliases }
-        cache[entry] = meta
-        return meta
     end
 
     local function ClonePersistedValue(value)
@@ -164,7 +144,7 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
 
     local BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
-    function ConfigHash.EncodeBase62(n)
+    local function EncodeBase62(n)
         if n == 0 then return "0" end
         local result = ""
         while n > 0 do
@@ -173,20 +153,6 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
             n = math.floor(n / 62)
         end
         return result
-    end
-
-    function ConfigHash.DecodeBase62(str)
-        if type(str) ~= "string" or str == "" then
-            return nil
-        end
-        local n = 0
-        for i = 1, #str do
-            local c = string.sub(str, i, i)
-            local idx = string.find(BASE62, c, 1, true)
-            if not idx then return nil end
-            n = n * 62 + (idx - 1)
-        end
-        return n
     end
 
     local function HashChunk(str, seed, multiplier)
@@ -198,7 +164,7 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
     end
 
     local function EncodeBase62Fixed(n, width)
-        local s = ConfigHash.EncodeBase62(n)
+        local s = EncodeBase62(n)
         while #s < width do s = "0" .. s end
         return s
     end
@@ -262,31 +228,12 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
                 kv[entry.id] = "1"
             end
 
-            local meta = EnsureEntryHashMeta(moduleHashMeta, entry)
-            for _, group in ipairs(meta.groups) do
-                local packedValue = 0
-                local isDefault = true
-                for _, member in ipairs(group.members) do
-                    local value = ReadPersisted(entry, member.alias, snapshot)
-                    local encoded = hashGroupBuilder.encodeValue(member.node, value)
-                    if encoded ~= hashGroupBuilder.encodeValue(member.node, member.node.default) then
-                        isDefault = false
-                    end
-                    packedValue = hashing.writePackedBits(packedValue, member.offset, member.width, encoded)
-                end
-                if not isDefault then
-                    kv[entry.id .. "." .. group.key] = ConfigHash.EncodeBase62(packedValue)
-                end
-            end
-
             for _, root in ipairs(GetRootStorage(entry)) do
-                if not meta.groupedAliases[root.alias] then
-                    local current = ReadPersisted(entry, root.alias, snapshot)
-                    if not hashing.valuesEqual(root, current, root.default) then
-                        local encoded = EncodeValue(root, current, "storage root")
-                        if encoded ~= nil then
-                            kv[entry.id .. "." .. root.alias] = encoded
-                        end
+                local current = ReadPersisted(entry, root.alias, snapshot)
+                if not hashing.valuesEqual(root, current, root.default) then
+                    local encoded = EncodeValue(root, current, "storage root")
+                    if encoded ~= nil then
+                        kv[entry.id .. "." .. root.alias] = encoded
                     end
                 end
             end
@@ -311,9 +258,9 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         end
 
         local version = tonumber(kv["_v"]) or 1
-        if version > HASH_VERSION then
+        if version ~= HASH_VERSION then
             logging.warn(packId,
-                "ApplyConfigHash: hash version %d is newer than supported (%d)",
+                "ApplyConfigHash: hash version %d is not supported (%d required)",
                 version, HASH_VERSION)
             return false
         end
@@ -332,54 +279,22 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
 
         local okWrite, writeSucceeded, writeErr = xpcall(function()
             for _, entry in ipairs(moduleRegistry.modules) do
-                local meta = EnsureEntryHashMeta(moduleHashMeta, entry)
-                for _, group in ipairs(meta.groups) do
-                    local stored = kv[entry.id .. "." .. group.key]
+                for _, root in ipairs(GetRootStorage(entry)) do
+                    local stored = kv[entry.id .. "." .. root.alias]
                     if stored ~= nil then
-                        local packedValue = ConfigHash.DecodeBase62(stored)
-                        if packedValue == nil then
-                            return false, FormatEntryError(
-                                entry,
-                                "decode " .. tostring(group.key),
-                                "invalid packed hash value '" .. tostring(stored) .. "'"
-                            )
+                        local decoded, decodeErr = DecodeValue(root, stored, "storage root")
+                        if decodeErr ~= nil then
+                            return false, FormatEntryError(entry, "decode " .. tostring(root.alias), decodeErr)
                         end
-                        for _, member in ipairs(group.members) do
-                            local encoded = hashing.readPackedBits(packedValue, member.offset, member.width)
-                            local ok, err = StagePersistedChecked(entry, member.alias,
-                                hashGroupBuilder.decodeValue(member.node, encoded), snapshot)
-                            if ok == false then
-                                return false, err
-                            end
+                        local ok, err = StagePersistedChecked(entry, root.alias,
+                            decoded, snapshot)
+                        if ok == false then
+                            return false, err
                         end
                     else
-                        for _, member in ipairs(group.members) do
-                            local ok, err = StagePersistedChecked(entry, member.alias, member.node.default, snapshot)
-                            if ok == false then
-                                return false, err
-                            end
-                        end
-                    end
-                end
-
-                for _, root in ipairs(GetRootStorage(entry)) do
-                    if not meta.groupedAliases[root.alias] then
-                        local stored = kv[entry.id .. "." .. root.alias]
-                        if stored ~= nil then
-                            local decoded, decodeErr = DecodeValue(root, stored, "storage root")
-                            if decodeErr ~= nil then
-                                return false, FormatEntryError(entry, "decode " .. tostring(root.alias), decodeErr)
-                            end
-                            local ok, err = StagePersistedChecked(entry, root.alias,
-                                decoded, snapshot)
-                            if ok == false then
-                                return false, err
-                            end
-                        else
-                            local ok, err = StagePersistedChecked(entry, root.alias, root.default, snapshot)
-                            if ok == false then
-                                return false, err
-                            end
+                        local ok, err = StagePersistedChecked(entry, root.alias, root.default, snapshot)
+                        if ok == false then
+                            return false, err
                         end
                     end
                 end

@@ -1,6 +1,5 @@
 local deps = ...
 local hashCodec = deps.hashCodec
-local createHashGroupBuilder = deps.createHashGroupBuilder
 local logging = deps.logging
 local profiles = {}
 
@@ -26,17 +25,12 @@ end
 function profiles.auditSavedProfiles(packId, profileSlots, moduleRegistry, hashing)
     local knownModules = {}
     local issueCount = 0
-    local hashGroupBuilder = createHashGroupBuilder(hashing)
 
     for _, entry in ipairs(moduleRegistry.modules) do
         local fields = {}
         if entry.storage then
-            local groups, groupedAliases = hashGroupBuilder.build(entry.storage, entry.hashHints)
-            for _, group in ipairs(groups or {}) do
-                fields[tostring(group.key)] = true
-            end
             for _, root in ipairs(hashing.getRoots(entry.storage)) do
-                if root.alias ~= "Enabled" and not groupedAliases[root.alias] then
+                if root.alias ~= "Enabled" then
                     fields[tostring(root.alias)] = true
                 end
             end
