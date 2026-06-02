@@ -97,7 +97,7 @@ function TestModuleRegistry:testModulesRegisterDrawTabAndQuickContent()
     lu.assertEquals(moduleRegistry.tabOrder[1]._tabLabel, "Pool")
 end
 
-function TestModuleRegistry:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissing()
+function TestModuleRegistry:testSnapshotUsesLiveModuleAndWarnsWhenLiveModuleIsMissing()
     local exports = attachModule("test-GodPool", {
         modpack = "test-pack",
         id = "GodPool",
@@ -149,7 +149,7 @@ function TestModuleRegistry:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissin
     }
 
     exports.host = replacement
-    SetRuntimeLiveHost("test-GodPool", replacement)
+    SetRuntimeLiveModule("test-GodPool", replacement)
 
     local liveSnapshot = moduleRegistry.live.captureSnapshot()
     lu.assertEquals(moduleRegistry.snapshot.getHost(entry, liveSnapshot), replacement)
@@ -157,12 +157,12 @@ function TestModuleRegistry:testHostSnapshotUsesLiveHostAndWarnsWhenHostIsMissin
     lu.assertTrue(moduleRegistry.snapshot.affectsRunData(entry, liveSnapshot))
 
     exports.host = nil
-    SetRuntimeLiveHost("test-GodPool", nil)
+    SetRuntimeLiveModule("test-GodPool", nil)
 
     local missingSnapshot = moduleRegistry.live.captureSnapshot()
     lu.assertNil(moduleRegistry.snapshot.getHost(entry, missingSnapshot))
     lu.assertEquals(#Warnings, 1)
-    lu.assertStrContains(Warnings[1], "module host is unavailable")
+    lu.assertStrContains(Warnings[1], "live module is unavailable")
 end
 
 function TestModuleRegistry:testCapturedSnapshotIsStableAcrossHostReplacement()
@@ -214,7 +214,7 @@ function TestModuleRegistry:testCapturedSnapshotIsStableAcrossHostReplacement()
         drawTab = function() end,
     }
     exports.host = replacement
-    SetRuntimeLiveHost("test-GodPool", replacement)
+    SetRuntimeLiveModule("test-GodPool", replacement)
 
     lu.assertEquals(moduleRegistry.snapshot.getHost(entry, capturedSnapshot), originalHost)
     lu.assertEquals(moduleRegistry.live.getHost(entry), replacement)
@@ -241,13 +241,13 @@ function TestModuleRegistry:testHostSnapshotWarnsOnceWhenHostStaysMissing()
     local moduleRegistry = FrameworkTestApi.createModuleRegistry("test-pack", { DebugMode = false })
     moduleRegistry.refresh()
     exports.host = nil
-    SetRuntimeLiveHost("test-GodPool", nil)
+    SetRuntimeLiveModule("test-GodPool", nil)
 
     moduleRegistry.live.captureSnapshot()
     moduleRegistry.live.captureSnapshot()
 
     lu.assertEquals(#Warnings, 1)
-    lu.assertStrContains(Warnings[1], "module host is unavailable")
+    lu.assertStrContains(Warnings[1], "live module is unavailable")
 end
 
 function TestModuleRegistry:testModuleWithOnlyBuiltInStorageIsRegistered()

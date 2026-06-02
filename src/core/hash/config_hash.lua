@@ -14,7 +14,7 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
     local function StagePersisted(entry, key, value, snapshot)
         local host = moduleRegistry.snapshot.getHost(entry, snapshot)
         if not host then
-            return false, "module host is unavailable"
+            return false, "live module is unavailable"
         end
         return host.stage(key, value)
     end

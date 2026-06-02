@@ -1,5 +1,5 @@
--- Indexes coordinated modules through the Lib live-module registry and snapshots live host pointers
--- so UI/runtime work can tolerate hot-replaced hosts safely.
+-- Indexes coordinated modules through the Lib live-module registry and snapshots live module pointers
+-- so UI/runtime work can tolerate hot-replaced modules safely.
 
 local deps = ...
 local rom = deps.rom
@@ -12,7 +12,7 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
         "core/modules/registry: framework runtime modules are required")
 
     local function GetHost(pluginGuid)
-        return modules.getLiveHost(pluginGuid)
+        return modules.getLiveModule(pluginGuid)
     end
 
     local function ReadStorage(host)
@@ -34,7 +34,7 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
     local function WriteStagedAndFlush(entry, alias, value, snapshot)
         local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
         if not host then
-            return false, "module host is unavailable"
+            return false, "live module is unavailable"
         end
         return host.writeAndFlush(alias, value)
     end
@@ -42,7 +42,7 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
     local function SetEntryEnabled(entry, enabled, snapshot)
         local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
         if not host then
-            return false, "module host is unavailable"
+            return false, "live module is unavailable"
         end
 
         local ok, err = host.setEnabled(enabled)
@@ -56,7 +56,7 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
     local function RunPackLifecycle(entry, snapshot, actionName, invoke)
         local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
         if not host then
-            return false, "module host is unavailable"
+            return false, "live module is unavailable"
         end
 
         local ok, err, nextReceipt = invoke(host)
@@ -216,7 +216,7 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
             snapshot.hosts[entry] = host or false
             if not host and not warnedMissingHosts[entry.pluginGuid] then
                 warnedMissingHosts[entry.pluginGuid] = true
-                logging.warn(packId, "%s: module host is unavailable", entry.pluginGuid)
+                logging.warn(packId, "%s: live module is unavailable", entry.pluginGuid)
             end
         end
 
@@ -290,7 +290,7 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
     function ModuleRegistry.snapshot.setDebugEnabled(entry, value, snapshot)
         local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
         if not host then
-            return false, "module host is unavailable"
+            return false, "live module is unavailable"
         end
         host.setDebugMode(value)
         return true

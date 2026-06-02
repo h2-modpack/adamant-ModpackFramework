@@ -1493,7 +1493,7 @@ function TestMain:testQuickSetupRendersModuleQuickContent()
     lu.assertStrContains(joined, "Quick B")
 end
 
-function TestMain:testQuickSetupUsesLatestLiveHostForQuickContent()
+function TestMain:testQuickSetupUsesLatestLiveModuleForQuickContent()
     local previousImGui = rom.ImGui
     local firstQuickRenders = 0
     local secondQuickRenders = 0

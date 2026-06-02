@@ -147,7 +147,7 @@ function GetRuntimeLiveModules()
     return assert(modules.live, "runtime live modules missing")
 end
 
-function SetRuntimeLiveHost(pluginGuid, host)
+function SetRuntimeLiveModule(pluginGuid, host)
     local liveModules = GetRuntimeLiveModules()
     local previousHost = liveModules[pluginGuid]
     liveModules[pluginGuid] = host
@@ -502,15 +502,15 @@ function MockModuleRegistry.create(moduleDefs)
         }
 
         for _, module in ipairs(moduleRegistry.modules) do
-            local liveHost = defaultFrameworkRuntime.modules.getLiveHost(module.pluginGuid)
-            snapshot.hosts[module] = liveHost or false
+            local liveModule = defaultFrameworkRuntime.modules.getLiveModule(module.pluginGuid)
+            snapshot.hosts[module] = liveModule or false
         end
 
         return snapshot
     end
 
     function moduleRegistry.live.getHost(entry)
-        return defaultFrameworkRuntime.modules.getLiveHost(entry.pluginGuid)
+        return defaultFrameworkRuntime.modules.getLiveModule(entry.pluginGuid)
     end
 
     function moduleRegistry.snapshot.getHost(entry, snapshot)

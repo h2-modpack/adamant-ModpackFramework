@@ -17,7 +17,7 @@ It provides:
 - HUD fingerprint display for the active settings
 - pack-level enable/disable behavior with rollback on failure
 
-Modules participate by exposing a Lib module host:
+Modules participate by exposing a Lib managed module:
 
 ```lua
 local data = import("mods/data.lua")
@@ -65,7 +65,7 @@ through that registry rather than reading module globals directly.
 
 The framework discovers modules that expose:
 
-- a Lib-published live host
+- a Lib-published live module
 - `host.getPackId() == PACK_ID`
 - `host.getModuleId()`
 - `host.getMeta().name`
