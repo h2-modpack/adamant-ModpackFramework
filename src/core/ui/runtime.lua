@@ -340,6 +340,49 @@ local function createUIRuntime()
         return false
     end
 
+    function Runtime.resetAllModules()
+        local snapshot = snapshotAccess.get() or snapshotAccess.capture()
+        local changed = false
+        local resetCount = 0
+        local errors = {}
+
+        for _, entry in ipairs(moduleRegistry.modules) do
+            local host = snapshotAccess.getHost(entry, snapshot)
+            if host then
+                local resetOk, moduleChanged, moduleCount = pcall(host.resetAll)
+                if not resetOk then
+                    errors[#errors + 1] = string.format("%s: %s",
+                        tostring(entry.name or entry.id or entry.pluginGuid or "module"),
+                        tostring(moduleChanged))
+                elseif moduleChanged then
+                    changed = true
+                    resetCount = resetCount + (moduleCount or 0)
+                    local ok, err = host.commitIfDirty()
+                    if ok == false then
+                        errors[#errors + 1] = string.format("%s: %s",
+                            tostring(entry.name or entry.id or entry.pluginGuid or "module"),
+                            tostring(err))
+                    elseif moduleRegistry.snapshot.affectsRunData(entry, snapshot) then
+                        Runtime.markRunDataDirty()
+                    end
+                end
+            end
+        end
+
+        if #errors > 0 then
+            local err = table.concat(errors, "; ")
+            logging.warn(packId, "Reset all modules failed: %s", err)
+            return false, err, resetCount
+        end
+        if changed then
+            snapshotToStaging()
+            Runtime.invalidateHash()
+            hud.markHashDirty()
+            hud.updateHash()
+        end
+        return true, nil, resetCount
+    end
+
     function Runtime.commitEntryState(entry, snapshot)
         local host = snapshotAccess.getHost(entry, snapshot)
         if not host then

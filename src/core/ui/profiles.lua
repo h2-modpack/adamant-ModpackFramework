@@ -30,6 +30,7 @@ local function createUIProfiles()
     local importFeedback = nil
     local importFeedbackColor = nil
     local importFeedbackTime = nil
+    local pendingConfirmKey = nil
 
     local Profiles = {}
 
@@ -45,6 +46,25 @@ local function createUIProfiles()
             importFeedbackColor = nil
             importFeedbackTime = nil
         end
+    end
+
+    local function confirmButton(key, label)
+        if pendingConfirmKey == key then
+            if ui.Button("Confirm##" .. key) then
+                pendingConfirmKey = nil
+                return true
+            end
+            ui.SameLine()
+            if ui.Button("Cancel##" .. key) then
+                pendingConfirmKey = nil
+            end
+            return false
+        end
+
+        if ui.Button(label) then
+            pendingConfirmKey = key
+        end
+        return false
     end
 
     local function rebuildSlotLabels()
@@ -227,7 +247,7 @@ local function createUIProfiles()
                 setImportFeedback("Copied to clipboard!", colors.success)
             end
             ui.SameLine()
-            if ui.Button("Clear") then
+            if confirmButton("ClearProfileSlot", "Clear") then
                 ps.Name = ""
                 ps.Hash = ""
                 ps.Tooltip = ""
@@ -244,7 +264,7 @@ local function createUIProfiles()
         ui.Separator()
         ui.Spacing()
 
-        if ui.Button("Restore Default Profiles") then
+        if confirmButton("RestoreDefaultProfiles", "Restore Default Profiles") then
             for i = 1, NUM_PROFILES do
                 local d = defaultProfiles[i]
                 local cp = config.Profiles[i]
@@ -263,6 +283,27 @@ local function createUIProfiles()
         end
         if ui.IsItemHovered() then
             ui.SetTooltip("Overwrites ALL profile slots with the shipped defaults. Custom profiles will be lost.")
+        end
+
+        ui.SameLine()
+        if confirmButton("ResetModpack", "Reset All Modules") then
+            local ok, _, resetCount = runtime.resetAllModules()
+            if ok then
+                if resetCount and resetCount > 0 then
+                    setImportFeedback(
+                        string.format("Reset %d module setting%s.",
+                            resetCount,
+                            resetCount == 1 and "" or "s"),
+                        colors.success)
+                else
+                    setImportFeedback("Modpack already at defaults.", colors.textDisabled)
+                end
+            else
+                setImportFeedback("Reset failed. Check warnings/log.", colors.error)
+            end
+        end
+        if ui.IsItemHovered() then
+            ui.SetTooltip("Resets all module settings in this modpack to their defaults.")
         end
 
         ui.SameLine()

@@ -1323,6 +1323,97 @@ function TestMain:testPackEnableRestoresPersistedPackRestoreMarkers()
     lu.assertEquals(hudMarkers, { true })
 end
 
+function TestMain:testRuntimeResetAllModulesCommitsModuleDefaults()
+    local previousSetupRunData = rom.game.SetupRunData
+    local setupRunDataCalls = 0
+    rom.game.SetupRunData = function()
+        setupRunDataCalls = setupRunDataCalls + 1
+    end
+
+    local moduleRegistry = MockModuleRegistry.create({
+        {
+            pluginGuid = "Alpha",
+            id = "Alpha",
+            name = "Alpha",
+            enabled = true,
+            values = {
+                Flag = true,
+            },
+            storage = {
+                { type = "bool", alias = "Flag", default = false },
+            },
+            patchPlan = function(plan)
+                plan:set({}, "unused", true)
+            end,
+        },
+        {
+            pluginGuid = "Bravo",
+            id = "Bravo",
+            name = "Bravo",
+            enabled = false,
+            values = {
+                Count = 4,
+            },
+            storage = {
+                { type = "int", alias = "Count", default = 1, min = 0, max = 9 },
+            },
+        },
+    })
+    local snapshotToStagingCalls = 0
+    local markHashDirtyCalls = 0
+    local updateHashCalls = 0
+    local runtime = FrameworkTestApi.createUIRuntime({
+        moduleRegistry = moduleRegistry,
+        hud = {
+            markHashDirty = function()
+                markHashDirtyCalls = markHashDirtyCalls + 1
+            end,
+            updateHash = function()
+                updateHashCalls = updateHashCalls + 1
+            end,
+        },
+        config = {
+            ModEnabled = true,
+            DebugMode = false,
+        },
+        packId = "test-pack",
+        colors = {},
+        staging = {
+            ModEnabled = true,
+            modules = {},
+            debug = {},
+        },
+        snapshotAccess = {
+            get = function() return nil end,
+            capture = function() return moduleRegistry.live.captureSnapshot() end,
+            getHost = function(entry, snapshot)
+                return moduleRegistry.snapshot.getHost(entry, snapshot)
+            end,
+        },
+        snapshotToStaging = function()
+            snapshotToStagingCalls = snapshotToStagingCalls + 1
+        end,
+        logging = FrameworkTestApi.logging,
+    })
+    local snapshot = moduleRegistry.live.captureSnapshot()
+    local alpha = moduleRegistry.modulesById.Alpha
+    local bravo = moduleRegistry.modulesById.Bravo
+
+    local ok, err, resetCount = runtime.resetAllModules()
+    runtime.flushPendingRunData()
+    rom.game.SetupRunData = previousSetupRunData
+
+    lu.assertTrue(ok, tostring(err))
+    lu.assertEquals(resetCount, 3)
+    lu.assertFalse(moduleRegistry.snapshot.isEntryEnabled(alpha, snapshot))
+    lu.assertFalse(moduleRegistry.snapshot.getStorageValue(alpha, "Flag", snapshot))
+    lu.assertEquals(moduleRegistry.snapshot.getStorageValue(bravo, "Count", snapshot), 1)
+    lu.assertEquals(snapshotToStagingCalls, 1)
+    lu.assertEquals(markHashDirtyCalls, 1)
+    lu.assertEquals(updateHashCalls, 1)
+    lu.assertEquals(setupRunDataCalls, 2)
+end
+
 function TestMain:testDisabledPackCreationSuspendsEnabledModules()
     local config = {
         ModEnabled = false,
