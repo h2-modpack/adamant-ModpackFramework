@@ -146,7 +146,7 @@ local function createUI(moduleRegistry, hud, theme, config, packId, windowTitle,
             table.insert(cachedTabList, entry._tabLabel)
         end
 
-        for _, entry in ipairs(moduleRegistry.modulesWithQuickContent) do
+        for _, entry in ipairs(moduleRegistry.tabOrder) do
             table.insert(cachedQuickList, entry)
         end
 

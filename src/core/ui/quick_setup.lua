@@ -24,6 +24,31 @@ local packQuickContentContext = {
     end,
 }
 
+local function drawEntryHeader(entry, snapshot)
+    local enabled = staging.modules[entry.id] or false
+    local label = entry.name or entry.id
+    local startX = ui.GetCursorPosX()
+    local toggleWidth = 110
+    local toggleX = math.max(startX + 220, startX + ui.GetContentRegionAvail() - toggleWidth)
+
+    TextColored(ui, colors.info, label)
+    ui.SameLine()
+    ui.SetCursorPosX(toggleX)
+
+    local value, changed = ui.Checkbox("Enabled##quick_" .. tostring(entry.id), enabled)
+    if changed then
+        local ok = runtime.toggleEntry(entry, value, snapshot)
+        if ok then
+            enabled = value == true
+        end
+    end
+    if ui.IsItemHovered() and entry.tooltip then
+        ui.SetTooltip(entry.tooltip)
+    end
+
+    return enabled
+end
+
 local function draw(quickList, snapshot)
     profiles.drawQuickSelector()
 
@@ -35,20 +60,18 @@ local function draw(quickList, snapshot)
     end
 
     for _, entry in ipairs(quickList or {}) do
-        if staging.modules[entry.id] then
-            local host = snapshotAccess.getHost(entry, snapshot)
-            if not host then
-                goto continue
-            end
+        ui.Separator()
+        ui.Spacing()
 
-            ui.Separator()
-            ui.Spacing()
-            TextColored(ui, colors.info, entry.name or entry.id)
+        local enabled = drawEntryHeader(entry, snapshot)
+        local host = snapshotAccess.getHost(entry, snapshot)
+
+        if enabled and host and type(host.drawQuickContent) == "function" then
             ui.Spacing()
             host.drawQuickContent()
-            runtime.commitEntryState(entry, snapshot)
         end
-        ::continue::
+
+        runtime.commitEntryState(entry, snapshot)
     end
 end
 
