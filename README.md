@@ -50,6 +50,28 @@ If a module does not register runtime hooks, skip the hook declaration call.
 Host activation publishes the created host into Lib's live-module registry. Framework discovers modules
 through that registry rather than reading module globals directly.
 
+## Getting Started
+
+For the full new-pack walkthrough, start with the
+[`ModpackBootstrap` Getting Started guide](https://github.com/h2-modpack/ModpackBootstrap/blob/main/docs/GETTING_STARTED.md).
+This repo documents the Framework coordinator contract once a pack workspace
+exists.
+
+Use Framework through the generated pack workflow:
+
+- Create a new pack with
+  [`ModpackBootstrap`](https://github.com/h2-modpack/ModpackBootstrap). It
+  generates the shell repo, coordinator package, shared Lib/Framework
+  submodules, and `ModpackTools/`.
+- Add modules to an existing pack with
+  `python ModpackTools/new_module/create.py --package-id My_Module --title "My Module"`.
+- Use [`ModpackModuleTemplate`](https://github.com/h2-modpack/ModpackModuleTemplate)
+  as the standalone module repo shape.
+- Validate a shell workspace with `python ModpackTools/test_all.py`.
+
+Framework itself owns runtime coordinator orchestration. It is not the pack
+bootstrapper or the module template source.
+
 ## Docs
 
 - [COORDINATOR_GUIDE.md](COORDINATOR_GUIDE.md)
