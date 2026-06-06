@@ -43,7 +43,7 @@ Framework.createPack(PACK_ID, "My Modpack", config, #config.Profiles, defaultPro
 - `getModulesStatus(moduleIds)`
 - `setModulesEnabled(moduleIds, enabled)`
 
-Keep coordinator quick content coordinator-scoped. Module controls belong in that module's draw/host surface.
+Keep coordinator quick content coordinator-scoped. Module controls belong in that module's draw surface.
 
 The built-in profile selector always renders before coordinator content. It lets users load saved
 profiles from the main Quick Setup tab without opening the Profiles tab.
@@ -81,8 +81,8 @@ end
 
 Framework behavior:
 - only enabled modules render their quick content
-- Framework snapshots live module hosts at the start of the UI operation
-- module quick content is called through that snapshot host's `drawQuickContent()`
+- Framework snapshots live modules at the start of the UI operation
+- module quick content is called through that snapshot live module's `drawQuickContent()`
 - the module-authored quick callback receives `(host, ui)`
 - `ui.draw` contains `imgui`, `widgets`, `nav`, and `control`; `ui.data` owns
   staged UI state; `ui.actions` owns post-draw intent

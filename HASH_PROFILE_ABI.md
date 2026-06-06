@@ -17,7 +17,7 @@ Covered data:
 - coordinator profile slots stored in Chalk config
 - discovered coordinated modules
 
-For UI and host behavior, use [README.md](README.md) and [COORDINATOR_GUIDE.md](COORDINATOR_GUIDE.md).
+For UI and live-module behavior, use [README.md](README.md) and [COORDINATOR_GUIDE.md](COORDINATOR_GUIDE.md).
 
 ## Canonical Format
 

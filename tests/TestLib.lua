@@ -1,10 +1,10 @@
 local lu = require('luaunit')
 
-TestLibHost = {}
+TestLibManagedModule = {}
 
-function TestLibHost:testCommitStagedStateFlushesManagedAliasState()
+function TestLibManagedModule:testCommitStagedStateFlushesManagedAliasState()
     local config = { Flag = false, Enabled = false, DebugMode = false }
-    local definition = LibModuleHost.prepareDefinition({}, {
+    local definition = LibManagedModule.prepareDefinition({}, {
         id = "ManagedState",
         name = "Managed State",
         storage = {
@@ -12,7 +12,7 @@ function TestLibHost:testCommitStagedStateFlushesManagedAliasState()
         },
     })
     local persistentState, stagedState = CreateModuleState(config, definition)
-    local host = LibModuleHost.create({
+    local liveModule = LibManagedModule.create({
         pluginGuid = "test-managed-state",
         definition = definition,
         persistentState = persistentState,
@@ -22,8 +22,8 @@ function TestLibHost:testCommitStagedStateFlushesManagedAliasState()
 
     stagedState.write("Flag", true)
 
-    host.activate()
-    local ok, err = host.flush()
+    liveModule.activate()
+    local ok, err = liveModule.flush()
 
     lu.assertTrue(ok, tostring(err))
     lu.assertTrue(config.Flag)

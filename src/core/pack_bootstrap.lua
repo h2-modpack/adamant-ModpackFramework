@@ -13,8 +13,8 @@ local function disposePack(pack)
 
     if packUi.dispose ~= nil then
         packUi.dispose()
-    elseif packUi.handleHostGuiClosed ~= nil then
-        packUi.handleHostGuiClosed()
+    elseif packUi.handleGuiClosed ~= nil then
+        packUi.handleGuiClosed()
     end
 end
 
@@ -162,7 +162,7 @@ local function createGuiCallbacks(packId)
         if wasGuiOpen and not isGuiOpen then
             local pack = FrameworkPackRegistry.packs[packId]
             if pack and pack.ui then
-                pack.ui.handleHostGuiClosed()
+                pack.ui.handleGuiClosed()
             end
         end
 

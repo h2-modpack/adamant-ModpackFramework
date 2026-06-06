@@ -147,11 +147,11 @@ function GetRuntimeLiveModules()
     return assert(modules.live, "runtime live modules missing")
 end
 
-function SetRuntimeLiveModule(pluginGuid, host)
+function SetRuntimeLiveModule(pluginGuid, liveModule)
     local liveModules = GetRuntimeLiveModules()
-    local previousHost = liveModules[pluginGuid]
-    liveModules[pluginGuid] = host
-    return previousHost
+    local previousLiveModule = liveModules[pluginGuid]
+    liveModules[pluginGuid] = liveModule
+    return previousLiveModule
 end
 
 LibStorage = setmetatable({}, {
@@ -170,12 +170,12 @@ LibModuleState = setmetatable({}, {
         assert(LibTestImports["core/module_state/00_init.lua"], "LibModuleState test service missing")[key] = value
     end,
 })
-LibModuleHost = setmetatable({}, {
+LibManagedModule = setmetatable({}, {
     __index = function(_, key)
-        return assert(LibTestImports["core/module_bootstrap/managed_module.lua"], "LibModuleHost test service missing")[key]
+        return assert(LibTestImports["core/module_bootstrap/managed_module.lua"], "LibManagedModule test service missing")[key]
     end,
     __newindex = function(_, key, value)
-        assert(LibTestImports["core/module_bootstrap/managed_module.lua"], "LibModuleHost test service missing")[key] = value
+        assert(LibTestImports["core/module_bootstrap/managed_module.lua"], "LibManagedModule test service missing")[key] = value
     end,
 })
 local function GetLibOverlayService()
@@ -378,7 +378,7 @@ config = { ModEnabled = true, DebugMode = false }
 MockModuleRegistry = {}
 
 local function prepareDefinition(definition)
-    return LibModuleHost.prepareDefinition({}, definition)
+    return LibManagedModule.prepareDefinition({}, definition)
 end
 
 local function makePersistedConfig(storage, overrides)
@@ -454,7 +454,7 @@ function MockModuleRegistry.create(moduleDefs)
             local mutations = assert(LibTestImports["core/mutations/00_init.lua"], "Lib mutation bundle missing")
             mutations.lifecycle.declarePatch(mutationBundle, adaptPatch(def.patchPlan))
         end
-        local host = LibModuleHost.create({
+        local liveModule = LibManagedModule.create({
             pluginGuid = pluginGuid,
             definition = definition,
             persistentState = persistentState,
@@ -463,12 +463,12 @@ function MockModuleRegistry.create(moduleDefs)
             drawTab = adaptDraw(def.DrawTab or function() end),
             drawQuickContent = adaptDraw(def.DrawQuickContent),
         })
-        host.activate()
+        liveModule.activate()
         local module = {
             pluginGuid = pluginGuid,
             mod = {
                 definition = definition,
-                host = host,
+                liveModule = liveModule,
             },
             definition = definition,
             id = definition.id,
@@ -484,7 +484,7 @@ function MockModuleRegistry.create(moduleDefs)
         table.insert(moduleRegistry.modules, module)
         moduleRegistry.modulesById[module.id] = module
 
-        if type(host.drawQuickContent) == "function" then
+        if type(liveModule.drawQuickContent) == "function" then
             table.insert(moduleRegistry.modulesWithQuickContent, module)
         end
 
@@ -498,84 +498,84 @@ function MockModuleRegistry.create(moduleDefs)
 
     function moduleRegistry.live.captureSnapshot()
         local snapshot = {
-            hosts = {},
+            liveModules = {},
         }
 
         for _, module in ipairs(moduleRegistry.modules) do
             local liveModule = defaultFrameworkRuntime.modules.getLiveModule(module.pluginGuid)
-            snapshot.hosts[module] = liveModule or false
+            snapshot.liveModules[module] = liveModule or false
         end
 
         return snapshot
     end
 
-    function moduleRegistry.live.getHost(entry)
+    function moduleRegistry.live.getLiveModule(entry)
         return defaultFrameworkRuntime.modules.getLiveModule(entry.pluginGuid)
     end
 
-    function moduleRegistry.snapshot.getHost(entry, snapshot)
-        local host = snapshot.hosts[entry]
-        return host or nil
+    function moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+        local liveModule = snapshot.liveModules[entry]
+        return liveModule or nil
     end
 
     function moduleRegistry.snapshot.isEntryEnabled(entry, snapshot)
-        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
-        return host.read("Enabled") == true
+        local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+        return liveModule.read("Enabled") == true
     end
 
     function moduleRegistry.snapshot.affectsRunData(entry, snapshot)
-        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
-        return host ~= nil and host.affectsRunData() == true
+        local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+        return liveModule ~= nil and liveModule.affectsRunData() == true
     end
 
     function moduleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
-        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
-        return host.setEnabled(enabled)
+        local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+        return liveModule.setEnabled(enabled)
     end
 
     function moduleRegistry.snapshot.suspendForPackDisable(entry, snapshot)
-        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
-        return host.suspendForPackDisable()
+        local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+        return liveModule.suspendForPackDisable()
     end
 
     function moduleRegistry.snapshot.ensureSuspendedForPackDisable(entry, snapshot)
-        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
-        return host.ensureSuspendedForPackDisable()
+        local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+        return liveModule.ensureSuspendedForPackDisable()
     end
 
     function moduleRegistry.snapshot.restoreForPackEnable(entry, snapshot)
-        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
-        return host.restoreForPackEnable()
+        local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+        return liveModule.restoreForPackEnable()
     end
 
     function moduleRegistry.snapshot.rollbackPackTransition(entry, receipt, snapshot)
-        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
-        return host.rollbackPackTransition(receipt)
+        local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+        return liveModule.rollbackPackTransition(receipt)
     end
 
     function moduleRegistry.snapshot.restorePackTransitionState(entry, receipt, snapshot)
-        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
-        return host.restorePackTransitionState(receipt)
+        local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+        return liveModule.restorePackTransitionState(receipt)
     end
 
     function moduleRegistry.snapshot.getStorageValue(module, alias, snapshot)
-        local host = moduleRegistry.snapshot.getHost(module, snapshot)
-        return host.read(alias)
+        local liveModule = moduleRegistry.snapshot.getLiveModule(module, snapshot)
+        return liveModule.read(alias)
     end
 
     function moduleRegistry.snapshot.setStorageValue(module, alias, value, snapshot)
-        local host = moduleRegistry.snapshot.getHost(module, snapshot)
-        return host.writeAndFlush(alias, value)
+        local liveModule = moduleRegistry.snapshot.getLiveModule(module, snapshot)
+        return liveModule.writeAndFlush(alias, value)
     end
 
     function moduleRegistry.snapshot.isDebugEnabled(entry, snapshot)
-        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
-        return host.read("DebugMode") == true
+        local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+        return liveModule.read("DebugMode") == true
     end
 
     function moduleRegistry.snapshot.setDebugEnabled(entry, value, snapshot)
-        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
-        host.setDebugMode(value)
+        local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+        liveModule.setDebugMode(value)
     end
 
     return moduleRegistry

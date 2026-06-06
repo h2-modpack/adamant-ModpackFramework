@@ -11,7 +11,7 @@
 - `Framework.createPack(...)` is now the only public pack construction entrypoint; the prior split strict/safe construction surfaces were retired.
 - GUI registration now uses stable callbacks from `Framework.createGuiCallbacks(packId)` so coordinator code owns the ROM GUI callsite.
 - Framework implementation files now live under `src/core/...`; root `src/main.lua` only assembles the public surface.
-- Pack enable/disable now drives coordinated modules through Lib host lifecycle methods. Disabling a pack snapshots each module's prior enabled state and enabling the pack restores that snapshot, so mutations and shared publications use the same path as module-level toggles.
+- Pack enable/disable now drives coordinated modules through Lib live-module lifecycle methods. Disabling a pack snapshots each module's prior enabled state and enabling the pack restores that snapshot, so mutations and shared publications use the same path as module-level toggles.
 - Framework now reconciles discovered modules when a pack starts disabled, preserving the pack-restore snapshot while ensuring module runtime effects stay suspended.
 - Removed `definition.hashGroupPlan` and grouped hash/profile encoding. Hashes now use semantic module/storage keys only, with future shortening expected to happen through whole-string compression.
 - Bumped the config hash ABI to version 2 and reject older versions instead of attempting partial migration from grouped hashes.
@@ -31,8 +31,8 @@
 - `Framework.createPack(...)` now uses positional required arguments plus an optional `opts` table instead of nested `params.def`.
 - Framework pack state now persists on `FrameworkPackRegistry`, so repeated coordinator/framework reloads replace pack state without duplicating pack slots.
 - Framework discovery now resolves modules through Lib's live-module registry instead of reading module public globals directly.
-- UI and hash operations now snapshot current module hosts at operation start, so ordinary module behavior reloads can update through Lib-published hosts without rediscovery.
-- Coordinated packs can rebuild when a coordinated module republishes a structurally changed host and Lib requests a coordinator rebuild.
+- UI and hash operations now snapshot current live modules at operation start, so ordinary module behavior reloads can update through Lib-published live modules without rediscovery.
+- Coordinated packs can rebuild when a coordinated module republishes a structurally changed live module and Lib requests a coordinator rebuild.
 - The main UI was split into focused runtime, profile, Quick Setup, module-tab, dev, and theme files.
 - Profile/hash updates now flush on menu close instead of periodic HUD refreshes while the main UI is open.
 - HUD fingerprint wrapping now uses Lib's reload-stable hook registration instead of raw ModUtil wrapping.
@@ -59,15 +59,15 @@
   - coordinator registration before `Framework.createPack(...)`
   - `Framework.createGuiCallbacks(PACK_ID)` for GUI callback registration
   - positional `Framework.createPack(...)` arguments plus optional `opts`
-  - Lib-host discovery and snapshot-host runtime behavior
+  - Lib live-module discovery and snapshot runtime behavior
 - Expanded `HASH_PROFILE_ABI.md` with hash/profile invariants, token escaping, decode behavior, and shipped-module compatibility rules.
-- Updated Quick Setup docs for coordinator-owned `opts.drawPackQuickContent(ctx)` and module-host quick content.
-- Updated README and contributor docs to focus on the host-first coordinator/module contract.
+- Updated Quick Setup docs for coordinator-owned `opts.drawPackQuickContent(ctx)` and module quick content.
+- Updated README and contributor docs to focus on the live-module coordinator/module contract.
 
 ### Tests
 
-- Expanded Framework test coverage for discovery, hashing/profile rollback, startup lifecycle sync, repeated init, GUI registration, Quick Setup live-host behavior, and UI stack cleanup.
-- Updated the test harness to isolate Framework factories and exercise Lib-host discovery paths.
+- Expanded Framework test coverage for discovery, hashing/profile rollback, startup lifecycle sync, repeated init, GUI registration, Quick Setup live-module behavior, and UI stack cleanup.
+- Updated the test harness to isolate Framework factories and exercise Lib live-module discovery paths.
 
 ## [1.0.0] - 2026-04-20
 
@@ -79,7 +79,7 @@ Initial public release of the adamant Modpack Framework surface.
 - shared main-window UI for coordinated modpacks
 - Quick Setup, Profiles, and Dev coordinator tabs
 - hash/profile export and import flow through the HUD layer
-- coordinated module hosting through Lib module hosts
+- coordinated module discovery through Lib live modules
 - master pack toggle handling with transactional runtime rollback
 - shared theme, HUD, discovery, and UI factory surfaces
 

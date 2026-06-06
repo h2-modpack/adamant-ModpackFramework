@@ -74,21 +74,21 @@ function TestConfigHashStorage:testRegularAndSpecialStorageRoundTrip()
 
     local module = moduleRegistry.modulesById.GodPool
     local biome = moduleRegistry.modulesById.BiomeControl
-    local moduleHost = moduleRegistry.live.getHost(module)
-    local biomeHost = moduleRegistry.live.getHost(biome)
+    local liveModule = moduleRegistry.live.getLiveModule(module)
+    local biomeLiveModule = moduleRegistry.live.getLiveModule(biome)
     local editSnapshot = moduleRegistry.live.captureSnapshot()
     moduleRegistry.snapshot.setEntryEnabled(module, false, editSnapshot)
-    moduleHost.writeAndFlush("EnabledFlag", false)
-    moduleHost.writeAndFlush("Count", 3)
+    liveModule.writeAndFlush("EnabledFlag", false)
+    liveModule.writeAndFlush("Count", 3)
     moduleRegistry.snapshot.setEntryEnabled(biome, false, editSnapshot)
-    biomeHost.writeAndFlush("Mode", "Vanilla")
+    biomeLiveModule.writeAndFlush("Mode", "Vanilla")
 
     lu.assertTrue(configHash.ApplyConfigHash(canonical))
-    lu.assertTrue(moduleHost.read("Enabled"))
-    lu.assertTrue(moduleHost.read("EnabledFlag"))
-    lu.assertEquals(moduleHost.read("Count"), 7)
-    lu.assertTrue(biomeHost.read("Enabled"))
-    lu.assertEquals(biomeHost.read("Mode"), "Chaos")
+    lu.assertTrue(liveModule.read("Enabled"))
+    lu.assertTrue(liveModule.read("EnabledFlag"))
+    lu.assertEquals(liveModule.read("Count"), 7)
+    lu.assertTrue(biomeLiveModule.read("Enabled"))
+    lu.assertEquals(biomeLiveModule.read("Mode"), "Chaos")
 end
 
 function TestConfigHashStorage:testStringStorageEscapesHashDelimiters()
@@ -108,14 +108,14 @@ function TestConfigHashStorage:testStringStorageEscapesHashDelimiters()
     local configHash = makeConfigHash(moduleRegistry)
     local canonical = configHash.GetConfigHash()
     local module = moduleRegistry.modulesById.BiomeControl
-    local host = moduleRegistry.live.getHost(module)
+    local liveModule = moduleRegistry.live.getLiveModule(module)
 
     lu.assertStrContains(canonical, "BiomeControl.Filter=Apollo%7CZeus%3DPoseidon%25Chaos")
     lu.assertNotStrContains(canonical, "Apollo|Zeus")
 
-    host.writeAndFlush("Filter", "")
+    liveModule.writeAndFlush("Filter", "")
     lu.assertTrue(configHash.ApplyConfigHash(canonical))
-    lu.assertEquals(host.read("Filter"), "Apollo|Zeus=Poseidon%Chaos")
+    lu.assertEquals(liveModule.read("Filter"), "Apollo|Zeus=Poseidon%Chaos")
 end
 
 function TestConfigHashStorage:testFingerprintChangesWithConfig()
@@ -132,7 +132,7 @@ function TestConfigHashStorage:testFingerprintChangesWithConfig()
     local configHash = makeConfigHash(moduleRegistry)
     local canonicalA, fingerprintA = configHash.GetConfigHash()
 
-    moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool).writeAndFlush("EnabledFlag", true)
+    moduleRegistry.live.getLiveModule(moduleRegistry.modulesById.GodPool).writeAndFlush("EnabledFlag", true)
     local canonicalB, fingerprintB = configHash.GetConfigHash()
 
     lu.assertNotEquals(canonicalA, canonicalB)
@@ -157,13 +157,13 @@ function TestConfigHashStorage:testApplyConfigHashRollsBackWhenEnableFails()
     })
     local configHash = makeConfigHash(moduleRegistry)
     local module = moduleRegistry.modulesById.GodPool
-    local moduleHost = moduleRegistry.live.getHost(module)
+    local liveModule = moduleRegistry.live.getLiveModule(module)
 
     local ok = configHash.ApplyConfigHash("_v=2|GodPool=1|GodPool.EnabledFlag=1")
 
     lu.assertFalse(ok)
-    lu.assertFalse(moduleHost.read("Enabled"))
-    lu.assertFalse(moduleHost.read("EnabledFlag"))
+    lu.assertFalse(liveModule.read("Enabled"))
+    lu.assertFalse(liveModule.read("EnabledFlag"))
     lu.assertEquals(buildCalls, 1)
 end
 
@@ -197,16 +197,16 @@ function TestConfigHashStorage:testApplyConfigHashRollsBackWhenFlushFails()
         },
     })
     local configHash = makeConfigHash(moduleRegistry)
-    local biomeHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.BiomeControl)
-    local godHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
+    local biomeLiveModule = moduleRegistry.live.getLiveModule(moduleRegistry.modulesById.BiomeControl)
+    local godPoolLiveModule = moduleRegistry.live.getLiveModule(moduleRegistry.modulesById.GodPool)
     failApply = true
 
     local ok = configHash.ApplyConfigHash("_v=2|BiomeControl.Mode=Chaos|GodPool=1|GodPool.EnabledFlag=1")
 
     lu.assertFalse(ok)
-    lu.assertEquals(biomeHost.read("Mode"), "Vanilla")
-    lu.assertFalse(godHost.read("EnabledFlag"))
-    lu.assertTrue(godHost.read("Enabled"))
+    lu.assertEquals(biomeLiveModule.read("Mode"), "Vanilla")
+    lu.assertFalse(godPoolLiveModule.read("EnabledFlag"))
+    lu.assertTrue(godPoolLiveModule.read("Enabled"))
 end
 
 function TestConfigHashStorage:testApplyConfigHashRejectsUnsupportedVersion()
@@ -222,13 +222,13 @@ function TestConfigHashStorage:testApplyConfigHashRejectsUnsupportedVersion()
         },
     })
     local configHash = makeConfigHash(moduleRegistry)
-    local moduleHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
+    local liveModule = moduleRegistry.live.getLiveModule(moduleRegistry.modulesById.GodPool)
 
     local ok = configHash.ApplyConfigHash("_v=999|GodPool=1|GodPool.EnabledFlag=1")
 
     lu.assertFalse(ok)
-    lu.assertFalse(moduleHost.read("Enabled"))
-    lu.assertFalse(moduleHost.read("EnabledFlag"))
+    lu.assertFalse(liveModule.read("Enabled"))
+    lu.assertFalse(liveModule.read("EnabledFlag"))
     assertWarningContains("is not supported")
     RestoreWarnings()
 end
@@ -246,13 +246,13 @@ function TestConfigHashStorage:testApplyConfigHashRejectsInvalidModuleEnableToke
         },
     })
     local configHash = makeConfigHash(moduleRegistry)
-    local moduleHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
+    local liveModule = moduleRegistry.live.getLiveModule(moduleRegistry.modulesById.GodPool)
 
     local ok = configHash.ApplyConfigHash("_v=2|GodPool=enabled|GodPool.EnabledFlag=1")
 
     lu.assertFalse(ok)
-    lu.assertFalse(moduleHost.read("Enabled"))
-    lu.assertFalse(moduleHost.read("EnabledFlag"))
+    lu.assertFalse(liveModule.read("Enabled"))
+    lu.assertFalse(liveModule.read("EnabledFlag"))
     assertWarningContains("invalid module enable value")
     RestoreWarnings()
 end
@@ -270,12 +270,12 @@ function TestConfigHashStorage:testApplyConfigHashRejectsInvalidScalarStorageTok
         },
     })
     local configHash = makeConfigHash(moduleRegistry)
-    local moduleHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
+    local liveModule = moduleRegistry.live.getLiveModule(moduleRegistry.modulesById.GodPool)
 
     local ok = configHash.ApplyConfigHash("_v=2|GodPool.Count=not-a-number")
 
     lu.assertFalse(ok)
-    lu.assertEquals(moduleHost.read("Count"), 3)
+    lu.assertEquals(liveModule.read("Count"), 3)
     assertWarningContains("invalid storage root 'Count' hash value")
     RestoreWarnings()
 end
@@ -302,12 +302,12 @@ function TestConfigHashStorage:testApplyConfigHashRejectsInvalidTableStorageToke
         },
     })
     local configHash = makeConfigHash(moduleRegistry)
-    local moduleHost = moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool)
+    local liveModule = moduleRegistry.live.getLiveModule(moduleRegistry.modulesById.GodPool)
 
     local ok = configHash.ApplyConfigHash("_v=2|GodPool.Rows=not-a-table")
 
     lu.assertFalse(ok)
-    lu.assertEquals(moduleHost.read("Rows"), {})
+    lu.assertEquals(liveModule.read("Rows"), {})
     assertWarningContains("invalid storage root 'Rows' hash value")
     RestoreWarnings()
 end
@@ -328,7 +328,7 @@ function TestConfigHashStorage:testTransientRootsAreExcludedFromHash()
         },
     })
 
-    moduleRegistry.live.getHost(moduleRegistry.modulesById.GodPool).stage("FilterText", "Apollo")
+    moduleRegistry.live.getLiveModule(moduleRegistry.modulesById.GodPool).stage("FilterText", "Apollo")
     local canonical = makeConfigHash(moduleRegistry).GetConfigHash()
 
     lu.assertStrContains(canonical, "GodPool.EnabledFlag=1")

@@ -47,8 +47,9 @@ end
 ```
 
 If a module does not register runtime hooks, skip the hook declaration call.
-Host activation publishes the created host into Lib's live-module registry. Framework discovers modules
-through that registry rather than reading module globals directly.
+Module activation publishes the created live module into Lib's live-module
+registry. Framework discovers modules through that registry rather than reading
+module globals directly.
 
 ## Getting Started
 
@@ -88,20 +89,20 @@ bootstrapper or the module template source.
 The framework discovers modules that expose:
 
 - a Lib-published live module
-- `host.getPackId() == PACK_ID`
-- `host.getModuleId()`
-- `host.getMeta().name`
-- `host.getStorage()`
-- `host.drawTab()`
+- `liveModule.getPackId() == PACK_ID`
+- `liveModule.getModuleId()`
+- `liveModule.getMeta().name`
+- `liveModule.getStorage()`
+- `liveModule.drawTab()`
 
 Discovered modules render through:
 
-- `host.drawTab()`
-- optional `host.drawQuickContent()`
+- `liveModule.drawTab()`
+- optional `liveModule.drawQuickContent()`
 
 The module-authored callbacks registered with Lib receive
 `drawTab(host, ui)` and `drawQuickContent(host, ui)`. Framework calls the live
-`ModuleHost` wrapper methods; Lib supplies the callback host plus `ui.draw`,
+module wrapper methods; Lib supplies the callback host plus `ui.draw`,
 `ui.data`, `ui.actions`, `ui.controls`, and `ui.shared`.
 
 Sidebar behavior:

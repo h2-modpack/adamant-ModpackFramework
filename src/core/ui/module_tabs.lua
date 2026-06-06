@@ -6,12 +6,12 @@ local runtime = ctx.runtime
 local snapshotAccess = ctx.snapshotAccess
 
 local function drawEntryBody(entry, snapshot)
-    local host = snapshotAccess.getHost(entry, snapshot)
-    if not host then
+    local liveModule = snapshotAccess.getLiveModule(entry, snapshot)
+    if not liveModule then
         return
     end
 
-    host.drawTab()
+    liveModule.drawTab()
 
     runtime.commitEntryState(entry, snapshot)
 end

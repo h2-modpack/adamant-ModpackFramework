@@ -20,7 +20,7 @@ local function replaceTableContents(target, source)
 end
 
 local function readPackRestoreMarker(moduleRegistry, entry, snapshot)
-    return moduleRegistry.snapshot.getHost(entry, snapshot).read("AdamantFramework_PackRestoreSnapshot")
+    return moduleRegistry.snapshot.getLiveModule(entry, snapshot).read("AdamantFramework_PackRestoreSnapshot")
 end
 
 function TestMain:setUp()
@@ -57,11 +57,11 @@ function TestMain:testCreateUIReloadsModulesBeforeCapturingStartupStaging()
         pluginGuid = "Alpha",
         _tabLabel = "Alpha",
     }
-    local host
-    host = {
+    local liveModule
+    liveModule = {
         reloaded = false,
         reloadFromConfig = function()
-            host.reloaded = true
+            liveModule.reloaded = true
         end,
     }
     local sawReloadBeforeEnabledRead = false
@@ -76,22 +76,22 @@ function TestMain:testCreateUIReloadsModulesBeforeCapturingStartupStaging()
         live = {
             captureSnapshot = function()
                 return {
-                    hosts = {
-                        [entry] = host,
+                    liveModules = {
+                        [entry] = liveModule,
                     },
                 }
             end,
         },
         snapshot = {
-            getHost = function(_, snapshot)
-                return snapshot.hosts[entry]
+            getLiveModule = function(_, snapshot)
+                return snapshot.liveModules[entry]
             end,
             isEntryEnabled = function(_, snapshot)
-                sawReloadBeforeEnabledRead = snapshot.hosts[entry].reloaded == true
+                sawReloadBeforeEnabledRead = snapshot.liveModules[entry].reloaded == true
                 return true
             end,
             isDebugEnabled = function(_, snapshot)
-                sawReloadBeforeDebugRead = snapshot.hosts[entry].reloaded == true
+                sawReloadBeforeDebugRead = snapshot.liveModules[entry].reloaded == true
                 return false
             end,
         },
@@ -263,11 +263,11 @@ function TestMain:testRenderWindowCleansUpImguiStacksBeforeRethrow()
         tabOrder = {},
         live = {
             captureSnapshot = function()
-                return { hosts = {} }
+                return { liveModules = {} }
             end,
         },
         snapshot = {
-            getHost = function()
+            getLiveModule = function()
                 return nil
             end,
         },
@@ -305,7 +305,7 @@ function TestMain:testRenderWindowCleansUpImguiStacksBeforeRethrow()
     lu.assertEquals(popStyleCalls, 1)
 end
 
-function TestMain:testInitLeavesStartupMutationSyncToHostActivation()
+function TestMain:testInitLeavesStartupMutationSyncToLiveModuleActivation()
     local previousSetupRunData = rom.game.SetupRunData
     local setupRunDataCalls = 0
 
@@ -321,7 +321,7 @@ function TestMain:testInitLeavesStartupMutationSyncToHostActivation()
             affectsRunData = true,
         },
     }
-    local host = {}
+    local liveModule = {}
 
     rom.game.SetupRunData = function()
         setupRunDataCalls = setupRunDataCalls + 1
@@ -336,12 +336,12 @@ function TestMain:testInitLeavesStartupMutationSyncToHostActivation()
                 refresh = function() end,
                 live = {
                     captureSnapshot = function()
-                        return { hosts = { [entry] = host } }
+                        return { liveModules = { [entry] = liveModule } }
                     end,
                 },
                 snapshot = {
-                    getHost = function(_, snapshot)
-                        return snapshot.hosts[entry]
+                    getLiveModule = function(_, snapshot)
+                        return snapshot.liveModules[entry]
                     end,
                 },
             }
@@ -400,7 +400,7 @@ function TestMain:testModuleActivationOwnsStartupSyncBeforeFrameworkInit()
         setupRunDataCalls = setupRunDataCalls + 1
     end
 
-    local definition = LibModuleHost.prepareDefinition({}, {
+    local definition = LibManagedModule.prepareDefinition({}, {
         modpack = packId,
         id = "Alpha",
         name = "Alpha",
@@ -417,7 +417,7 @@ function TestMain:testModuleActivationOwnsStartupSyncBeforeFrameworkInit()
         buildCalls = buildCalls + 1
         plan:set(target, "Value", "patched")
     end)
-    local host = LibModuleHost.create({
+    local liveModule = LibManagedModule.create({
         pluginGuid = "test-pack.Alpha",
         definition = definition,
         persistentState = persistentState,
@@ -425,7 +425,7 @@ function TestMain:testModuleActivationOwnsStartupSyncBeforeFrameworkInit()
         mutationBundle = mutationBundle,
         drawTab = function() end,
     })
-    host.activate()
+    liveModule.activate()
 
     lu.assertEquals(buildCalls, 1)
     lu.assertEquals(target.Value, "patched")
@@ -451,12 +451,12 @@ function TestMain:testModuleActivationOwnsStartupSyncBeforeFrameworkInit()
                 refresh = function() end,
                 live = {
                     captureSnapshot = function()
-                        return { hosts = { [entry] = host } }
+                        return { liveModules = { [entry] = liveModule } }
                     end,
                 },
                 snapshot = {
-                    getHost = function(_, snapshot)
-                        return snapshot.hosts[entry]
+                    getLiveModule = function(_, snapshot)
+                        return snapshot.liveModules[entry]
                     end,
                 },
             }
@@ -496,7 +496,7 @@ function TestMain:testModuleActivationOwnsStartupSyncBeforeFrameworkInit()
         {}
     )
 
-    local ok, err = host.revertMutation()
+    local ok, err = liveModule.revertMutation()
     public.registerCoordinator(packId, nil)
     rom.game.SetupRunData = previousSetupRunData
 
@@ -531,11 +531,11 @@ function TestMain:testRepeatedInitReplacesPackStateAndKeepsStablePackIndex()
                 refresh = function() end,
                 live = {
                     captureSnapshot = function()
-                        return { hosts = {} }
+                        return { liveModules = {} }
                     end,
                 },
                 snapshot = {
-                    getHost = function()
+                    getLiveModule = function()
                         return nil
                     end,
                 },
@@ -656,11 +656,11 @@ function TestMain:testRepeatedInitDisposesPreviousOpenUiSuppression()
                     refresh = function() end,
                     live = {
                         captureSnapshot = function()
-                            return { hosts = {} }
+                            return { liveModules = {} }
                         end,
                     },
                     snapshot = {
-                        getHost = function()
+                        getLiveModule = function()
                             return nil
                         end,
                         isEntryEnabled = function()
@@ -761,11 +761,11 @@ function TestMain:testFailedInitDoesNotRegisterPack()
                 refresh = function() end,
                 live = {
                     captureSnapshot = function()
-                        return { hosts = {} }
+                        return { liveModules = {} }
                     end,
                 },
                 snapshot = {
-                    getHost = function()
+                    getLiveModule = function()
                         return nil
                     end,
                 },
@@ -840,11 +840,11 @@ function TestMain:testTryInitReturnsPackOnSuccess()
                 refresh = function() end,
                 live = {
                     captureSnapshot = function()
-                        return { hosts = {} }
+                        return { liveModules = {} }
                     end,
                 },
                 snapshot = {
-                    getHost = function()
+                    getLiveModule = function()
                         return nil
                     end,
                 },
@@ -912,11 +912,11 @@ function TestMain:testTryInitReturnsErrorAndDoesNotRegisterPack()
                 refresh = function() end,
                 live = {
                     captureSnapshot = function()
-                        return { hosts = {} }
+                        return { liveModules = {} }
                     end,
                 },
                 snapshot = {
-                    getHost = function()
+                    getLiveModule = function()
                         return nil
                     end,
                 },
@@ -1202,8 +1202,8 @@ function TestMain:testModuleBatchToggleRollsBackTouchedModulesOnFailure()
         capture = function()
             return moduleRegistry.live.captureSnapshot()
         end,
-        getHost = function(entry, snapshot)
-            return moduleRegistry.snapshot.getHost(entry, snapshot)
+        getLiveModule = function(entry, snapshot)
+            return moduleRegistry.snapshot.getLiveModule(entry, snapshot)
         end,
     }
     local runtime = FrameworkTestApi.createUIRuntime({
@@ -1292,8 +1292,8 @@ function TestMain:testPackDisableSnapshotsModuleEnabledState()
         snapshotAccess = {
             get = function() return nil end,
             capture = function() return moduleRegistry.live.captureSnapshot() end,
-            getHost = function(entry, snapshot)
-                return moduleRegistry.snapshot.getHost(entry, snapshot)
+            getLiveModule = function(entry, snapshot)
+                return moduleRegistry.snapshot.getLiveModule(entry, snapshot)
             end,
         },
         snapshotToStaging = function() end,
@@ -1372,8 +1372,8 @@ function TestMain:testPackEnableRestoresPersistedPackRestoreMarkers()
         snapshotAccess = {
             get = function() return nil end,
             capture = function() return moduleRegistry.live.captureSnapshot() end,
-            getHost = function(entry, snapshot)
-                return moduleRegistry.snapshot.getHost(entry, snapshot)
+            getLiveModule = function(entry, snapshot)
+                return moduleRegistry.snapshot.getLiveModule(entry, snapshot)
             end,
         },
         snapshotToStaging = function() end,
@@ -1462,8 +1462,8 @@ function TestMain:testRuntimeResetAllModulesCommitsModuleDefaults()
         snapshotAccess = {
             get = function() return nil end,
             capture = function() return moduleRegistry.live.captureSnapshot() end,
-            getHost = function(entry, snapshot)
-                return moduleRegistry.snapshot.getHost(entry, snapshot)
+            getLiveModule = function(entry, snapshot)
+                return moduleRegistry.snapshot.getLiveModule(entry, snapshot)
             end,
         },
         snapshotToStaging = function()
@@ -1767,7 +1767,7 @@ function TestMain:testQuickSetupUsesLatestLiveModuleForQuickContent()
     local okFirst, errFirst = pcall(builtUi.renderWindow)
 
     local entry = moduleRegistry.modules[1]
-    local replacementDefinition = LibModuleHost.prepareDefinition({}, {
+    local replacementDefinition = LibManagedModule.prepareDefinition({}, {
         id = entry.id,
         name = entry.name,
         modpack = entry.modpack,
@@ -1780,7 +1780,7 @@ function TestMain:testQuickSetupUsesLatestLiveModuleForQuickContent()
         DebugMode = false,
         FlagA = false,
     }, replacementDefinition)
-    local replacementHost = LibModuleHost.create({
+    local replacementLiveModule = LibManagedModule.create({
         pluginGuid = entry.pluginGuid,
         definition = replacementDefinition,
         persistentState = persistentState,
@@ -1790,8 +1790,7 @@ function TestMain:testQuickSetupUsesLatestLiveModuleForQuickContent()
             secondQuickRenders = secondQuickRenders + 1
         end,
     })
-    replacementHost.activate()
-    rom.mods[entry.pluginGuid].host = replacementHost
+    replacementLiveModule.activate()
 
     local okSecond, errSecond = pcall(builtUi.renderWindow)
 
@@ -1803,7 +1802,7 @@ function TestMain:testQuickSetupUsesLatestLiveModuleForQuickContent()
     lu.assertEquals(secondQuickRenders, 1)
 end
 
-function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears()
+function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenGuiDisappears()
     local previousGui = rom.gui
     local guiOpen = true
     local flushCalls = 0
@@ -1826,7 +1825,7 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
             flushPending = function()
                 flushCalls = flushCalls + 1
             end,
-            handleHostGuiClosed = function()
+            handleGuiClosed = function()
                 closeCalls = closeCalls + 1
             end,
         },
@@ -1844,7 +1843,7 @@ function TestMain:testAlwaysDrawRendererFlushesPendingHashWhenHostGuiDisappears(
     lu.assertEquals(closeCalls, 1)
 end
 
-function TestMain:testHostGuiCloseReleasesOverlaySuppression()
+function TestMain:testGuiCloseReleasesOverlaySuppression()
     local flushCalls = 0
     local suppressCalls = 0
     local releaseCalls = 0
@@ -1897,7 +1896,7 @@ function TestMain:testHostGuiCloseReleasesOverlaySuppression()
     })
 
     ui.addMenuBar()
-    ui.handleHostGuiClosed()
+    ui.handleGuiClosed()
 
     rom.ImGui = previousImGui
 

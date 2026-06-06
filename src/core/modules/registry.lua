@@ -7,45 +7,45 @@ local logging = deps.logging
 
 local function createModuleRegistry(packId, config, frameworkRuntime)
     local ModuleRegistry = {}
-    local warnedMissingHosts = {}
+    local warnedMissingModules = {}
     local modules = assert(frameworkRuntime and frameworkRuntime.modules,
         "core/modules/registry: framework runtime modules are required")
 
-    local function GetHost(pluginGuid)
+    local function getLiveModule(pluginGuid)
         return modules.getLiveModule(pluginGuid)
     end
 
-    local function ReadStorage(host)
-        return host.getStorage()
+    local function ReadStorage(liveModule)
+        return liveModule.getStorage()
     end
 
-    local function ReadMeta(host)
-        return host.getMeta()
+    local function ReadMeta(liveModule)
+        return liveModule.getMeta()
     end
 
     local function ReadPersisted(entry, alias, snapshot)
-        local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
-        if not host then
+        local liveModule = ModuleRegistry.snapshot.getLiveModule(entry, snapshot)
+        if not liveModule then
             return nil
         end
-        return host.read(alias)
+        return liveModule.read(alias)
     end
 
     local function WriteStagedAndFlush(entry, alias, value, snapshot)
-        local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
-        if not host then
+        local liveModule = ModuleRegistry.snapshot.getLiveModule(entry, snapshot)
+        if not liveModule then
             return false, "live module is unavailable"
         end
-        return host.writeAndFlush(alias, value)
+        return liveModule.writeAndFlush(alias, value)
     end
 
     local function SetEntryEnabled(entry, enabled, snapshot)
-        local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
-        if not host then
+        local liveModule = ModuleRegistry.snapshot.getLiveModule(entry, snapshot)
+        if not liveModule then
             return false, "live module is unavailable"
         end
 
-        local ok, err = host.setEnabled(enabled)
+        local ok, err = liveModule.setEnabled(enabled)
         if not ok then
             logging.warn(packId,
                 "%s %s failed: %s", entry.pluginGuid, enabled and "enable" or "disable", err)
@@ -54,12 +54,12 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
     end
 
     local function RunPackLifecycle(entry, snapshot, actionName, invoke)
-        local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
-        if not host then
+        local liveModule = ModuleRegistry.snapshot.getLiveModule(entry, snapshot)
+        if not liveModule then
             return false, "live module is unavailable"
         end
 
-        local ok, err, nextReceipt = invoke(host)
+        local ok, err, nextReceipt = invoke(liveModule)
         if not ok then
             logging.warn(packId,
                 "%s %s failed: %s", entry.pluginGuid, actionName, err)
@@ -101,18 +101,18 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
 
         local found = {}
         for pluginGuid, mod in pairs(rom.mods) do
-            local host = GetHost(pluginGuid)
-            if host then
-                local hostPackId = host.getPackId()
-                if hostPackId == packId then
+            local liveModule = getLiveModule(pluginGuid)
+            if liveModule then
+                local liveModulePackId = liveModule.getPackId()
+                if liveModulePackId == packId then
                     table.insert(found, {
                         pluginGuid = pluginGuid,
                         mod = mod,
-                        host = host,
-                        storage = ReadStorage(host),
-                        moduleId = host.getModuleId(),
-                        packId = hostPackId,
-                        meta = ReadMeta(host),
+                        liveModule = liveModule,
+                        storage = ReadStorage(liveModule),
+                        moduleId = liveModule.getModuleId(),
+                        packId = liveModulePackId,
+                        meta = ReadMeta(liveModule),
                     })
                 end
             end
@@ -151,9 +151,9 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
         end
 
         for _, foundModule in ipairs(found) do
-            local host = foundModule.host
+            local liveModule = foundModule.liveModule
             local id = foundModule.moduleId
-            local hasQuickContent = host and type(host.drawQuickContent) == "function"
+            local hasQuickContent = liveModule and type(liveModule.drawQuickContent) == "function"
 
             if not duplicateNamespaces[id] then
                 local discovered = BuildEntry(foundModule)
@@ -209,13 +209,13 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
     end
 
     function ModuleRegistry.live.captureSnapshot()
-        local snapshot = { hosts = {} }
+        local snapshot = { liveModules = {} }
 
         for _, entry in ipairs(ModuleRegistry.modules) do
-            local host = GetHost(entry.pluginGuid)
-            snapshot.hosts[entry] = host or false
-            if not host and not warnedMissingHosts[entry.pluginGuid] then
-                warnedMissingHosts[entry.pluginGuid] = true
+            local liveModule = getLiveModule(entry.pluginGuid)
+            snapshot.liveModules[entry] = liveModule or false
+            if not liveModule and not warnedMissingModules[entry.pluginGuid] then
+                warnedMissingModules[entry.pluginGuid] = true
                 logging.warn(packId, "%s: live module is unavailable", entry.pluginGuid)
             end
         end
@@ -223,13 +223,13 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
         return snapshot
     end
 
-    function ModuleRegistry.live.getHost(entry)
-        return GetHost(entry.pluginGuid)
+    function ModuleRegistry.live.getLiveModule(entry)
+        return getLiveModule(entry.pluginGuid)
     end
 
-    function ModuleRegistry.snapshot.getHost(entry, snapshot)
-        local host = snapshot.hosts[entry]
-        return host or nil
+    function ModuleRegistry.snapshot.getLiveModule(entry, snapshot)
+        local liveModule = snapshot.liveModules[entry]
+        return liveModule or nil
     end
 
     function ModuleRegistry.snapshot.isEntryEnabled(entry, snapshot)
@@ -237,8 +237,8 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
     end
 
     function ModuleRegistry.snapshot.affectsRunData(entry, snapshot)
-        local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
-        return host ~= nil and host.affectsRunData() == true
+        local liveModule = ModuleRegistry.snapshot.getLiveModule(entry, snapshot)
+        return liveModule ~= nil and liveModule.affectsRunData() == true
     end
 
     function ModuleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
@@ -246,32 +246,32 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
     end
 
     function ModuleRegistry.snapshot.suspendForPackDisable(entry, snapshot)
-        return RunPackLifecycle(entry, snapshot, "pack suspend", function(host)
-            return host.suspendForPackDisable()
+        return RunPackLifecycle(entry, snapshot, "pack suspend", function(liveModule)
+            return liveModule.suspendForPackDisable()
         end)
     end
 
     function ModuleRegistry.snapshot.ensureSuspendedForPackDisable(entry, snapshot)
-        return RunPackLifecycle(entry, snapshot, "pack suspend", function(host)
-            return host.ensureSuspendedForPackDisable()
+        return RunPackLifecycle(entry, snapshot, "pack suspend", function(liveModule)
+            return liveModule.ensureSuspendedForPackDisable()
         end)
     end
 
     function ModuleRegistry.snapshot.restoreForPackEnable(entry, snapshot)
-        return RunPackLifecycle(entry, snapshot, "pack restore", function(host)
-            return host.restoreForPackEnable()
+        return RunPackLifecycle(entry, snapshot, "pack restore", function(liveModule)
+            return liveModule.restoreForPackEnable()
         end)
     end
 
     function ModuleRegistry.snapshot.rollbackPackTransition(entry, receipt, snapshot)
-        return RunPackLifecycle(entry, snapshot, "pack rollback", function(host)
-            return host.rollbackPackTransition(receipt)
+        return RunPackLifecycle(entry, snapshot, "pack rollback", function(liveModule)
+            return liveModule.rollbackPackTransition(receipt)
         end)
     end
 
     function ModuleRegistry.snapshot.restorePackTransitionState(entry, receipt, snapshot)
-        return RunPackLifecycle(entry, snapshot, "pack state restore", function(host)
-            return host.restorePackTransitionState(receipt)
+        return RunPackLifecycle(entry, snapshot, "pack state restore", function(liveModule)
+            return liveModule.restorePackTransitionState(receipt)
         end)
     end
 
@@ -288,11 +288,11 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
     end
 
     function ModuleRegistry.snapshot.setDebugEnabled(entry, value, snapshot)
-        local host = ModuleRegistry.snapshot.getHost(entry, snapshot)
-        if not host then
+        local liveModule = ModuleRegistry.snapshot.getLiveModule(entry, snapshot)
+        if not liveModule then
             return false, "live module is unavailable"
         end
-        host.setDebugMode(value)
+        liveModule.setDebugMode(value)
         return true
     end
 

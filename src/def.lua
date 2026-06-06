@@ -53,7 +53,7 @@ local Framework = {}
 ---@field renderWindow fun()
 ---@field addMenuBar fun()
 ---@field flushPending fun()
----@field handleHostGuiClosed fun()
+---@field handleGuiClosed fun()
 ---@field dispose fun()
 
 ---@class AdamantModpackFramework.GuiCallbacks

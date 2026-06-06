@@ -64,11 +64,11 @@ local function draw(quickList, snapshot)
         ui.Spacing()
 
         local enabled = drawEntryHeader(entry, snapshot)
-        local host = snapshotAccess.getHost(entry, snapshot)
+        local liveModule = snapshotAccess.getLiveModule(entry, snapshot)
 
-        if enabled and host and type(host.drawQuickContent) == "function" then
+        if enabled and liveModule and type(liveModule.drawQuickContent) == "function" then
             ui.Spacing()
-            host.drawQuickContent()
+            liveModule.drawQuickContent()
         end
 
         runtime.commitEntryState(entry, snapshot)

@@ -12,11 +12,11 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
     end
 
     local function StagePersisted(entry, key, value, snapshot)
-        local host = moduleRegistry.snapshot.getHost(entry, snapshot)
-        if not host then
+        local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+        if not liveModule then
             return false, "live module is unavailable"
         end
-        return host.stage(key, value)
+        return liveModule.stage(key, value)
     end
 
     local function FormatEntryError(entry, action, err)
@@ -36,9 +36,9 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
 
     local function FlushManagedState(snapshot)
         for _, entry in ipairs(moduleRegistry.modules) do
-            local host = moduleRegistry.snapshot.getHost(entry, snapshot)
-            if host then
-                local ok, err = host.flush()
+            local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+            if liveModule then
+                local ok, err = liveModule.flush()
                 if ok == false then
                     return false, FormatEntryError(entry, "flush", err)
                 end
@@ -50,9 +50,9 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
     local function ReloadManagedState()
         local snapshot = moduleRegistry.live.captureSnapshot()
         for _, entry in ipairs(moduleRegistry.modules) do
-            local host = moduleRegistry.snapshot.getHost(entry, snapshot)
-            if host then
-                host.reloadFromConfig()
+            local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
+            if liveModule then
+                liveModule.reloadFromConfig()
             end
         end
     end

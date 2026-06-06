@@ -16,7 +16,7 @@ end
 local function attachModule(pluginGuid, definition, persisted, exports)
     exports = exports or {}
     local patchPlan = definition.patchPlan
-    definition = LibModuleHost.prepareDefinition({}, {
+    definition = LibManagedModule.prepareDefinition({}, {
         modpack = definition.modpack,
         id = definition.id,
         name = definition.name,
@@ -48,7 +48,7 @@ local function attachModule(pluginGuid, definition, persisted, exports)
         local mutations = assert(LibTestImports["core/mutations/00_init.lua"], "Lib mutation bundle missing")
         mutations.lifecycle.declarePatch(mutationBundle, adaptPatch(patchPlan))
     end
-    local host = LibModuleHost.create({
+    local liveModule = LibManagedModule.create({
         pluginGuid = pluginGuid,
         definition = definition,
         persistentState = persistentState,
@@ -57,8 +57,8 @@ local function attachModule(pluginGuid, definition, persisted, exports)
         drawTab = adaptDraw(exports.DrawTab),
         drawQuickContent = adaptDraw(exports.DrawQuickContent),
     })
-    host.activate()
-    exports.host = host
+    liveModule.activate()
+    exports.liveModule = liveModule
     rom.mods[pluginGuid] = exports
     return exports
 end
@@ -117,7 +117,7 @@ function TestModuleRegistry:testSnapshotUsesLiveModuleAndWarnsWhenLiveModuleIsMi
         getStorage = function()
             return entry.storage
         end,
-        getHostId = function()
+        getOwnerId = function()
             return "test-GodPool"
         end,
         getModuleId = function()
@@ -148,24 +148,24 @@ function TestModuleRegistry:testSnapshotUsesLiveModuleAndWarnsWhenLiveModuleIsMi
         drawTab = function() end,
     }
 
-    exports.host = replacement
+    exports.liveModule = replacement
     SetRuntimeLiveModule("test-GodPool", replacement)
 
     local liveSnapshot = moduleRegistry.live.captureSnapshot()
-    lu.assertEquals(moduleRegistry.snapshot.getHost(entry, liveSnapshot), replacement)
+    lu.assertEquals(moduleRegistry.snapshot.getLiveModule(entry, liveSnapshot), replacement)
     lu.assertTrue(moduleRegistry.snapshot.isEntryEnabled(entry, liveSnapshot))
     lu.assertTrue(moduleRegistry.snapshot.affectsRunData(entry, liveSnapshot))
 
-    exports.host = nil
+    exports.liveModule = nil
     SetRuntimeLiveModule("test-GodPool", nil)
 
     local missingSnapshot = moduleRegistry.live.captureSnapshot()
-    lu.assertNil(moduleRegistry.snapshot.getHost(entry, missingSnapshot))
+    lu.assertNil(moduleRegistry.snapshot.getLiveModule(entry, missingSnapshot))
     lu.assertEquals(#Warnings, 1)
     lu.assertStrContains(Warnings[1], "live module is unavailable")
 end
 
-function TestModuleRegistry:testCapturedSnapshotIsStableAcrossHostReplacement()
+function TestModuleRegistry:testCapturedSnapshotIsStableAcrossLiveModuleReplacement()
     local exports = attachModule("test-GodPool", {
         modpack = "test-pack",
         id = "GodPool",
@@ -181,14 +181,14 @@ function TestModuleRegistry:testCapturedSnapshotIsStableAcrossHostReplacement()
     moduleRegistry.refresh()
 
     local entry = moduleRegistry.modules[1]
-    local originalHost = exports.host
+    local originalLiveModule = exports.liveModule
     local capturedSnapshot = moduleRegistry.live.captureSnapshot()
 
     local replacement = {
         getStorage = function()
             return entry.storage
         end,
-        getHostId = function()
+        getOwnerId = function()
             return "test-GodPool"
         end,
         getModuleId = function()
@@ -213,20 +213,20 @@ function TestModuleRegistry:testCapturedSnapshotIsStableAcrossHostReplacement()
         setDebugMode = function() end,
         drawTab = function() end,
     }
-    exports.host = replacement
+    exports.liveModule = replacement
     SetRuntimeLiveModule("test-GodPool", replacement)
 
-    lu.assertEquals(moduleRegistry.snapshot.getHost(entry, capturedSnapshot), originalHost)
-    lu.assertEquals(moduleRegistry.live.getHost(entry), replacement)
+    lu.assertEquals(moduleRegistry.snapshot.getLiveModule(entry, capturedSnapshot), originalLiveModule)
+    lu.assertEquals(moduleRegistry.live.getLiveModule(entry), replacement)
 
     local freshSnapshot = moduleRegistry.live.captureSnapshot()
-    lu.assertEquals(moduleRegistry.snapshot.getHost(entry, freshSnapshot), replacement)
+    lu.assertEquals(moduleRegistry.snapshot.getLiveModule(entry, freshSnapshot), replacement)
     lu.assertTrue(moduleRegistry.snapshot.affectsRunData(entry, freshSnapshot))
     lu.assertFalse(moduleRegistry.snapshot.affectsRunData(entry, capturedSnapshot))
-    lu.assertEquals(moduleRegistry.snapshot.getHost(entry, capturedSnapshot), originalHost)
+    lu.assertEquals(moduleRegistry.snapshot.getLiveModule(entry, capturedSnapshot), originalLiveModule)
 end
 
-function TestModuleRegistry:testHostSnapshotWarnsOnceWhenHostStaysMissing()
+function TestModuleRegistry:testLiveModuleSnapshotWarnsOnceWhenLiveModuleStaysMissing()
     local exports = attachModule("test-GodPool", {
         modpack = "test-pack",
         id = "GodPool",
@@ -240,7 +240,7 @@ function TestModuleRegistry:testHostSnapshotWarnsOnceWhenHostStaysMissing()
 
     local moduleRegistry = FrameworkTestApi.createModuleRegistry("test-pack", { DebugMode = false })
     moduleRegistry.refresh()
-    exports.host = nil
+    exports.liveModule = nil
     SetRuntimeLiveModule("test-GodPool", nil)
 
     moduleRegistry.live.captureSnapshot()
@@ -267,7 +267,7 @@ function TestModuleRegistry:testModuleWithOnlyBuiltInStorageIsRegistered()
     lu.assertEquals(#Warnings, 0)
 end
 
-function TestModuleRegistry:testPackDisableSuspendsThroughHostLifecycle()
+function TestModuleRegistry:testPackDisableSuspendsThroughModuleLifecycle()
     local exports = attachModule("test-PackRestore", {
         modpack = "test-pack",
         id = "PackRestore",
@@ -286,15 +286,15 @@ function TestModuleRegistry:testPackDisableSuspendsThroughHostLifecycle()
     lu.assertTrue(ok, tostring(err))
 
     lu.assertFalse(moduleRegistry.snapshot.isEntryEnabled(entry, snapshot))
-    lu.assertEquals(exports.host.read("AdamantFramework_PackRestoreSnapshot"), 2)
+    lu.assertEquals(exports.liveModule.read("AdamantFramework_PackRestoreSnapshot"), 2)
 
     ok, err = moduleRegistry.snapshot.rollbackPackTransition(entry, receipt, snapshot)
     lu.assertTrue(ok, tostring(err))
     lu.assertTrue(moduleRegistry.snapshot.isEntryEnabled(entry, snapshot))
-    lu.assertEquals(exports.host.read("AdamantFramework_PackRestoreSnapshot"), 0)
+    lu.assertEquals(exports.liveModule.read("AdamantFramework_PackRestoreSnapshot"), 0)
 end
 
-function TestModuleRegistry:testMissingDrawTabIsRejectedByLibHostCreation()
+function TestModuleRegistry:testMissingDrawTabIsRejectedByLibManagedModuleCreation()
     local ok, err = pcall(function()
         attachModule("test-NoDrawTab", {
         modpack = "test-pack",

@@ -347,9 +347,9 @@ local function createUIRuntime()
         local errors = {}
 
         for _, entry in ipairs(moduleRegistry.modules) do
-            local host = snapshotAccess.getHost(entry, snapshot)
-            if host then
-                local resetOk, moduleChanged, moduleCount = pcall(host.resetAll)
+            local liveModule = snapshotAccess.getLiveModule(entry, snapshot)
+            if liveModule then
+                local resetOk, moduleChanged, moduleCount = pcall(liveModule.resetAll)
                 if not resetOk then
                     errors[#errors + 1] = string.format("%s: %s",
                         tostring(entry.name or entry.id or entry.pluginGuid or "module"),
@@ -357,7 +357,7 @@ local function createUIRuntime()
                 elseif moduleChanged then
                     changed = true
                     resetCount = resetCount + (moduleCount or 0)
-                    local ok, err = host.commitIfDirty()
+                    local ok, err = liveModule.commitIfDirty()
                     if ok == false then
                         errors[#errors + 1] = string.format("%s: %s",
                             tostring(entry.name or entry.id or entry.pluginGuid or "module"),
@@ -384,12 +384,12 @@ local function createUIRuntime()
     end
 
     function Runtime.commitEntryState(entry, snapshot)
-        local host = snapshotAccess.getHost(entry, snapshot)
-        if not host then
+        local liveModule = snapshotAccess.getLiveModule(entry, snapshot)
+        if not liveModule then
             return
         end
 
-        local ok, err, committed = host.commitIfDirty()
+        local ok, err, committed = liveModule.commitIfDirty()
         if ok and committed then
             Runtime.finishUiChange(entry, snapshot)
         elseif ok == false then
@@ -403,9 +403,9 @@ local function createUIRuntime()
     function Runtime.resyncAllState()
         local snapshot = snapshotAccess.capture()
         for _, entry in ipairs(moduleRegistry.modules) do
-            local host = snapshotAccess.getHost(entry, snapshot)
-            if host then
-                host.resync()
+            local liveModule = snapshotAccess.getLiveModule(entry, snapshot)
+            if liveModule then
+                liveModule.resync()
             end
         end
         snapshotToStaging()

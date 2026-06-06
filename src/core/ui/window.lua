@@ -36,8 +36,8 @@ local function createUI(moduleRegistry, hud, theme, config, packId, windowTitle,
         return snapshotAccess.current
     end
 
-    function snapshotAccess.getHost(entry, snapshot)
-        return moduleRegistry.snapshot.getHost(entry, snapshot or snapshotAccess.current)
+    function snapshotAccess.getLiveModule(entry, snapshot)
+        return moduleRegistry.snapshot.getLiveModule(entry, snapshot or snapshotAccess.current)
     end
 
     local profiles
@@ -47,9 +47,9 @@ local function createUI(moduleRegistry, hud, theme, config, packId, windowTitle,
         local snapshot = snapshotAccess.capture()
 
         for _, entry in ipairs(moduleRegistry.modules) do
-            local host = snapshotAccess.getHost(entry, snapshot)
-            if host then
-                host.reloadFromConfig()
+            local liveModule = snapshotAccess.getLiveModule(entry, snapshot)
+            if liveModule then
+                liveModule.reloadFromConfig()
             end
 
             staging.modules[entry.id] = moduleRegistry.snapshot.isEntryEnabled(entry, snapshot)
@@ -230,7 +230,7 @@ local function createUI(moduleRegistry, hud, theme, config, packId, windowTitle,
         end
     end
 
-    local function handleHostGuiClosed()
+    local function handleGuiClosed()
         if disposed then
             return
         end
@@ -313,7 +313,7 @@ local function createUI(moduleRegistry, hud, theme, config, packId, windowTitle,
         renderWindow = renderWindow,
         addMenuBar = addMenuBar,
         flushPending = flushPending,
-        handleHostGuiClosed = handleHostGuiClosed,
+        handleGuiClosed = handleGuiClosed,
         dispose = dispose,
     }
 end

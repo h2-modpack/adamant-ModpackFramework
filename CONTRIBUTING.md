@@ -20,7 +20,7 @@ Treat its runtime behavior and warnings as public coordinator contract.
 - Keep docs aligned with the supported framework contract.
 - Prefer explicit contract warnings over silent skips.
 - Treat hash/profile ABI changes as compatibility work, not refactoring.
-- Keep Framework focused on coordinator orchestration. Module UI belongs to module hosts.
+- Keep Framework focused on coordinator orchestration. Module UI belongs to modules.
 
 ## Validation
 

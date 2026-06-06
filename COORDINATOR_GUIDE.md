@@ -95,45 +95,45 @@ Framework discovers modules through Lib's live-module registry:
 
 ```lua
 -- Conceptual filter over Lib-published live modules.
-host.getPackId() == PACK_ID
+liveModule.getPackId() == PACK_ID
 ```
 
-Direct live-host lookup is keyed by `pluginGuid`. Framework discovery filters
-the registry by prepared host identity instead of looking modules up by module
-id.
+Direct live-module lookup is keyed by `pluginGuid`. Framework discovery filters
+the registry by prepared live-module identity instead of looking modules up by
+module id.
 
 Each discovered coordinated module must expose:
-- `host.getModuleId()`
-- `host.getMeta().name`
-- `host.getStorage()`
-- `host.drawTab()`
+- `liveModule.getModuleId()`
+- `liveModule.getMeta().name`
+- `liveModule.getStorage()`
+- `liveModule.drawTab()`
 
-`host.drawQuickContent()` is optional.
+`liveModule.drawQuickContent()` is optional.
 
-These are full Lib host methods. The module-authored callbacks registered with
-Lib receive the author surfaces as `drawTab(host, ui)` and
+These are full Lib live-module methods. The module-authored callbacks registered
+with Lib receive the author surfaces as `drawTab(host, ui)` and
 `drawQuickContent(host, ui)`. `ui.draw` contains `imgui`, `widgets`, `nav`, and
 `control`; `ui.data` provides staged UI data and read-only runtime-owned data;
 `ui.actions` provides post-draw intent; `ui.controls` and `ui.shared` expose
 control and shared-data surfaces.
 
-Lib owns module definition preparation and lifecycle validation before the host
-is published. Framework trusts Lib-created hosts. Runtime state transitions are
-routed through the same host lifecycle methods authors use:
-- `host.setEnabled(enabled)`
-- `host.commitIfDirty()`
+Lib owns module definition preparation and lifecycle validation before the live
+module is published. Framework trusts Lib-created live modules. Runtime state
+transitions are routed through the same live-module lifecycle methods authors use:
+- `liveModule.setEnabled(enabled)`
+- `liveModule.commitIfDirty()`
 
 Pack disable snapshots each discovered module's current `Enabled` value, then
-disables modules through Lib's host pack-suspension lifecycle. Pack enable
-restores that snapshot through the matching host lifecycle path and clears it
-after a successful restore. The snapshot is persisted in Lib-managed internal
-storage, so a disabled pack can survive a full game restart and still restore
-the prior module mix when re-enabled.
+disables modules through Lib's live-module pack-suspension lifecycle. Pack enable
+restores that snapshot through the matching live-module lifecycle path and clears
+it after a successful restore. The snapshot is persisted in Lib-managed internal
+storage, so a disabled pack can survive a full game restart and still restore the
+prior module mix when re-enabled.
 
 Framework skips modules that are missing:
 - live module registry entry
-- host identity `id` or meta `name`
-- host storage contract
+- live-module identity `id` or meta `name`
+- live-module storage contract
 
 ## Window Model
 
@@ -147,9 +147,9 @@ The sidebar is module-based: one tab per discovered module, in discovery order.
 
 Module tabs are simple:
 - Framework renders the enable checkbox
-- Framework snapshots live module hosts at the start of the UI operation
-- Framework calls the selected module host's `drawTab()` when enabled
-- if staged state is dirty after draw, Framework commits it through that snapshot host's `commitIfDirty()`
+- Framework snapshots live modules at the start of the UI operation
+- Framework calls the selected live module's `drawTab()` when enabled
+- if staged state is dirty after draw, Framework commits it through that snapshot live module's `commitIfDirty()`
 
 ## Quick Setup
 
@@ -158,7 +158,7 @@ Quick Setup renders in this order:
 2. coordinator-owned content from `opts.drawPackQuickContent(ctx)`
 3. each discovered enabled module with quick content support
 
-Quick content is provided by coordinator code or module hosts.
+Quick content is provided by coordinator code or live modules.
 
 See [QUICK_SETUP.md](QUICK_SETUP.md).
 
@@ -171,7 +171,7 @@ Framework replaces pack state for the same `packId` while preserving that pack's
 
 Coordinated module behavior reloads do not rebuild the pack. Instead:
 - discovery metadata remains static for the process
-- UI and hash paths snapshot the module's live host at the start of each operation
+- UI and hash paths snapshot the module's live module at the start of each operation
 
 Coordinated module structural reloads can request a pack rebuild through the
 callback registered with `Framework.registerCoordinator(...)`.
@@ -184,7 +184,7 @@ Hash/profile behavior is built on:
 - validated persisted storage roots
 
 Profile load:
-- stages decoded persisted values through each module host/state plumbing
+- stages decoded persisted values through each live module/state plumbing
 - flushes staged managed values to config
 - reapplies enabled/runtime state
 - rolls the operation back on failure
