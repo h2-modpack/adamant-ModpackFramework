@@ -48,6 +48,80 @@ function TestMain:testCreateGuiCallbacksAreSafeBeforeInit()
     lu.assertTrue(menuBarOk)
 end
 
+function TestMain:testCreateUIReloadsModulesBeforeCapturingStartupStaging()
+    local function noop() end
+
+    local entry = {
+        id = "Alpha",
+        name = "Alpha",
+        pluginGuid = "Alpha",
+        _tabLabel = "Alpha",
+    }
+    local host = {
+        reloaded = false,
+        reloadFromConfig = function(hostSelf)
+            hostSelf.reloaded = true
+        end,
+    }
+    local sawReloadBeforeEnabledRead = false
+    local sawReloadBeforeDebugRead = false
+    local moduleRegistry = {
+        modules = { entry },
+        modulesById = {
+            Alpha = entry,
+        },
+        modulesWithQuickContent = {},
+        tabOrder = { entry },
+        live = {
+            captureSnapshot = function()
+                return {
+                    hosts = {
+                        [entry] = host,
+                    },
+                }
+            end,
+        },
+        snapshot = {
+            getHost = function(_, snapshot)
+                return snapshot.hosts[entry]
+            end,
+            isEntryEnabled = function(_, snapshot)
+                sawReloadBeforeEnabledRead = snapshot.hosts[entry].reloaded == true
+                return true
+            end,
+            isDebugEnabled = function(_, snapshot)
+                sawReloadBeforeDebugRead = snapshot.hosts[entry].reloaded == true
+                return false
+            end,
+        },
+    }
+    local hud = {
+        flushPendingHash = noop,
+        setMarkerVisible = noop,
+        getConfigHash = function()
+            return "hash", "fingerprint"
+        end,
+        applyConfigHash = function()
+            return true
+        end,
+        markHashDirty = noop,
+    }
+    local theme = FrameworkTestApi.createTheme()
+
+    FrameworkTestApi.createUI(moduleRegistry, hud, theme, {
+        ModEnabled = true,
+        DebugMode = false,
+        Profiles = {
+            { Name = "", Hash = "", Tooltip = "" },
+        },
+    }, "test-pack", "Test Window", 1, {
+        { Name = "", Hash = "", Tooltip = "" },
+    })
+
+    lu.assertTrue(sawReloadBeforeEnabledRead)
+    lu.assertTrue(sawReloadBeforeDebugRead)
+end
+
 function TestMain:testCreateHudRegistersFrameworkHashOverlay()
     local overlayOrder = {
         framework = 0,

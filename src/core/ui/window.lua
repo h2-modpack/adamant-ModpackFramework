@@ -47,13 +47,13 @@ local function createUI(moduleRegistry, hud, theme, config, packId, windowTitle,
         local snapshot = snapshotAccess.capture()
 
         for _, entry in ipairs(moduleRegistry.modules) do
-            staging.modules[entry.id] = moduleRegistry.snapshot.isEntryEnabled(entry, snapshot)
-            staging.debug[entry.id] = moduleRegistry.snapshot.isDebugEnabled(entry, snapshot)
-
             local host = snapshotAccess.getHost(entry, snapshot)
             if host then
                 host.reloadFromConfig()
             end
+
+            staging.modules[entry.id] = moduleRegistry.snapshot.isEntryEnabled(entry, snapshot)
+            staging.debug[entry.id] = moduleRegistry.snapshot.isDebugEnabled(entry, snapshot)
         end
 
         if profiles then
