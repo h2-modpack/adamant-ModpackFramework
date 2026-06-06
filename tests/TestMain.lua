@@ -57,10 +57,11 @@ function TestMain:testCreateUIReloadsModulesBeforeCapturingStartupStaging()
         pluginGuid = "Alpha",
         _tabLabel = "Alpha",
     }
-    local host = {
+    local host
+    host = {
         reloaded = false,
-        reloadFromConfig = function(hostSelf)
-            hostSelf.reloaded = true
+        reloadFromConfig = function()
+            host.reloaded = true
         end,
     }
     local sawReloadBeforeEnabledRead = false
