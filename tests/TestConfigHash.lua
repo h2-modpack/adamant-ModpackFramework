@@ -118,6 +118,49 @@ function TestConfigHashStorage:testStringStorageEscapesHashDelimiters()
     lu.assertEquals(liveModule.read("Filter"), "Apollo|Zeus=Poseidon%Chaos")
 end
 
+function TestConfigHashStorage:testTableStorageRoundTripsThroughCanonicalHash()
+    local moduleRegistry = MockModuleRegistry.create({
+        {
+            id = "GodPool",
+            name = "God Pool",
+            enabled = true,
+            storage = {
+                {
+                    type = "table",
+                    alias = "Rows",
+                    minRows = 0,
+                    maxRows = 3,
+                    defaultRows = 0,
+                    row = {
+                        { type = "bool", alias = "Flag", default = false },
+                        { type = "string", alias = "Note", default = "", maxLen = 32 },
+                    },
+                },
+            },
+            values = {
+                Rows = {
+                    { Flag = true, Note = "a|b=%c" },
+                },
+            },
+        },
+    })
+    local configHash = makeConfigHash(moduleRegistry)
+    local canonical = configHash.GetConfigHash()
+    local module = moduleRegistry.modulesById.GodPool
+    local liveModule = moduleRegistry.live.getLiveModule(module)
+
+    lu.assertStrContains(canonical, "GodPool.Rows=")
+    lu.assertNotStrContains(canonical, "a|b")
+
+    liveModule.writeAndFlush("Rows", {})
+    lu.assertEquals(liveModule.read("Rows"), {})
+
+    lu.assertTrue(configHash.ApplyConfigHash(canonical))
+    lu.assertEquals(liveModule.read("Rows"), {
+        { Flag = true, Note = "a|b=%c" },
+    })
+end
+
 function TestConfigHashStorage:testFingerprintChangesWithConfig()
     local moduleRegistry = MockModuleRegistry.create({
         {
@@ -310,6 +353,34 @@ function TestConfigHashStorage:testApplyConfigHashRejectsInvalidTableStorageToke
     lu.assertEquals(liveModule.read("Rows"), {})
     assertWarningContains("invalid storage root 'Rows' hash value")
     RestoreWarnings()
+end
+
+function TestConfigHashStorage:testApplyConfigHashIgnoresMalformedLooseSegmentsAndUnknownKeys()
+    local moduleRegistry = MockModuleRegistry.create({
+        {
+            id = "GodPool",
+            enabled = false,
+            storage = {
+                { type = "bool", alias = "EnabledFlag", default = false },
+                { type = "int", alias = "Count", default = 3, min = 1, max = 9 },
+            },
+            values = {
+                EnabledFlag = false,
+                Count = 3,
+            },
+        },
+    })
+    local configHash = makeConfigHash(moduleRegistry)
+    local liveModule = moduleRegistry.live.getLiveModule(moduleRegistry.modulesById.GodPool)
+
+    local ok = configHash.ApplyConfigHash(
+        "_v=2|LooseSegment|GodPool=1|UnknownModule.Mode=Chaos|GodPool.MissingField=bad|GodPool.EnabledFlag=1"
+    )
+
+    lu.assertTrue(ok)
+    lu.assertTrue(liveModule.read("Enabled"))
+    lu.assertTrue(liveModule.read("EnabledFlag"))
+    lu.assertEquals(liveModule.read("Count"), 3)
 end
 
 function TestConfigHashStorage:testTransientRootsAreExcludedFromHash()

@@ -31,7 +31,8 @@ Properties:
 - `_v` is the hash format version and must be present
 - keys are sorted alphabetically before final serialization
 - only non-default values are encoded
-- unknown keys are ignored on decode
+- unknown or malformed loose segments are ignored on decode when they do not target
+  a known setting
 - missing keys decode to current defaults
 - keys and values are token-escaped before joining with `=` and `|`
 
@@ -153,10 +154,13 @@ outer key/value format.
 
 Framework provides these decode guarantees:
 - exact hash format version check on decode
-- unknown keys are ignored
+- malformed loose segments are ignored
+- unknown module namespaces are ignored
+- unknown keys under known module namespaces are ignored during apply
 - missing keys fall back to defaults
 - invalid module enable tokens fail the import and roll back
-- malformed scalar/table storage tokens fail the import and roll back
+- invalid scalar/table storage tokens for known storage roots fail the import and
+  roll back
 - saved coordinator profiles are audited at `Framework.createPack(...)` and warn on unknown field keys inside known module namespaces
 
 Module authors own compatibility plans for:

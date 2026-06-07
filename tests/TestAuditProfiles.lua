@@ -60,6 +60,23 @@ function TestAuditProfiles:testUnknownKeyInKnownNamespaceWarns()
     lu.assertStrContains(Warnings[1], "Profile 'Broken': unrecognized key 'GodPool.MissingField'")
 end
 
+function TestAuditProfiles:testMalformedLooseSegmentsDoNotWarn()
+    local moduleRegistry = MockModuleRegistry.create({
+        {
+            id = "GodPool",
+            storage = {
+                { type = "bool", alias = "EnabledFlag", default = false },
+            },
+        },
+    })
+
+    FrameworkTestApi.auditSavedProfiles("test-pack", {
+        { Name = "Loose", Hash = "_v=2|LooseSegment|GodPool.EnabledFlag=1", Tooltip = "" },
+    }, moduleRegistry)
+
+    lu.assertEquals(#Warnings, 0)
+end
+
 function TestAuditProfiles:testBuiltInEnabledAliasWarnsBecauseDecoderUsesModuleKey()
     local moduleRegistry = MockModuleRegistry.create({
         {
