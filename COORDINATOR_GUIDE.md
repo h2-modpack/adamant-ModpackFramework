@@ -113,9 +113,9 @@ Each discovered coordinated module must expose:
 These are full Lib live-module methods. The module-authored callbacks registered
 with Lib receive the author surfaces as `drawTab(host, ui)` and
 `drawQuickContent(host, ui)`. `ui.draw` contains `imgui`, `widgets`, `nav`, and
-`control`; `ui.data` provides staged UI data and read-only runtime-owned data;
-`ui.actions` provides post-draw intent; `ui.controls` and `ui.shared` expose
-control and shared-data surfaces.
+`control`; `ui.data` provides staged UI data; `ui.status` provides read-only
+runtime-authored status; `ui.actions` provides post-draw intent; `ui.controls`
+and `ui.shared` expose control and shared-data surfaces.
 
 Lib owns module definition preparation and lifecycle validation before the live
 module is published. Framework trusts Lib-created live modules. Runtime state
@@ -130,10 +130,10 @@ it after a successful restore. The snapshot is persisted in Lib-managed internal
 storage, so a disabled pack can survive a full game restart and still restore the
 prior module mix when re-enabled.
 
-Framework skips modules that are missing:
-- live module registry entry
-- live-module identity `id` or meta `name`
-- live-module storage contract
+Framework discovers only Lib-published live modules for the pack. Lib validates
+module identity and storage before publication, so Framework treats missing live
+modules during a later snapshot as unavailable rather than as partially valid
+discoveries.
 
 ## Window Model
 

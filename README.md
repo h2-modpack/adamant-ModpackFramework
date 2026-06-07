@@ -103,7 +103,7 @@ Discovered modules render through:
 The module-authored callbacks registered with Lib receive
 `drawTab(host, ui)` and `drawQuickContent(host, ui)`. Framework calls the live
 module wrapper methods; Lib supplies the callback host plus `ui.draw`,
-`ui.data`, `ui.actions`, `ui.controls`, and `ui.shared`.
+`ui.data`, `ui.status`, `ui.actions`, `ui.controls`, and `ui.shared`.
 
 Sidebar behavior:
 
