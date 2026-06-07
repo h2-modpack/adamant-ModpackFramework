@@ -18,7 +18,7 @@ local function disposePack(pack)
     end
 end
 
-local function ValidateCreatePackArgs(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
+local function validateCreatePackArgs(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
     assert(type(packId) == "string" and packId ~= "",
         "Framework.createPack: packId must be a non-empty string")
     assert(type(windowTitle) == "string" and windowTitle ~= "",
@@ -46,14 +46,14 @@ local function ValidateCreatePackArgs(packId, windowTitle, config, numProfiles, 
     return opts
 end
 
-local function ValidateRuntimePrerequisites()
+local function validateRuntimePrerequisites()
     assert(rom and type(rom.ImGui) == "table",
         "Framework.createPack: rom.ImGui is not ready; call Framework.createPack after game load")
     assert(rom.game and type(rom.game.SetupRunData) == "function",
         "Framework.createPack: rom.game.SetupRunData is not ready; call Framework.createPack after game load")
 end
 
-local function ValidateCoordinatorArgs(packId, config, rebuildCallback)
+local function validateCoordinatorArgs(packId, config, rebuildCallback)
     assert(type(packId) == "string" and packId ~= "",
         "Framework.registerCoordinator: packId must be a non-empty string")
     assert(config == nil or type(config) == "table",
@@ -65,15 +65,15 @@ local function ValidateCoordinatorArgs(packId, config, rebuildCallback)
 end
 
 local function registerCoordinator(packId, config, rebuildCallback)
-    ValidateCoordinatorArgs(packId, config, rebuildCallback)
+    validateCoordinatorArgs(packId, config, rebuildCallback)
     frameworkRuntime.coordinator.register(packId, config)
     frameworkRuntime.coordinator.registerRebuild(packId, rebuildCallback)
     return true
 end
 
 local function createPackOrThrow(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
-    opts = ValidateCreatePackArgs(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
-    ValidateRuntimePrerequisites()
+    opts = validateCreatePackArgs(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
+    validateRuntimePrerequisites()
 
     assert(frameworkRuntime.coordinator.isRegistered(packId),
         "Framework.createPack: coordinator must register before createPack; see Core/main.lua")

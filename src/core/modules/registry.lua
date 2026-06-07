@@ -15,15 +15,15 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
         return modules.getLiveModule(pluginGuid)
     end
 
-    local function ReadStorage(liveModule)
+    local function readStorage(liveModule)
         return liveModule.getStorage()
     end
 
-    local function ReadMeta(liveModule)
+    local function readMeta(liveModule)
         return liveModule.getMeta()
     end
 
-    local function ReadPersisted(entry, alias, snapshot)
+    local function readPersisted(entry, alias, snapshot)
         local liveModule = ModuleRegistry.snapshot.getLiveModule(entry, snapshot)
         if not liveModule then
             return nil
@@ -31,7 +31,7 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
         return liveModule.read(alias)
     end
 
-    local function WriteStagedAndFlush(entry, alias, value, snapshot)
+    local function writeStagedAndFlush(entry, alias, value, snapshot)
         local liveModule = ModuleRegistry.snapshot.getLiveModule(entry, snapshot)
         if not liveModule then
             return false, "live module is unavailable"
@@ -39,7 +39,7 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
         return liveModule.writeAndFlush(alias, value)
     end
 
-    local function SetEntryEnabled(entry, enabled, snapshot)
+    local function setEntryEnabled(entry, enabled, snapshot)
         local liveModule = ModuleRegistry.snapshot.getLiveModule(entry, snapshot)
         if not liveModule then
             return false, "live module is unavailable"
@@ -53,7 +53,7 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
         return ok, err
     end
 
-    local function RunPackLifecycle(entry, snapshot, actionName, invoke)
+    local function runPackLifecycle(entry, snapshot, actionName, invoke)
         local liveModule = ModuleRegistry.snapshot.getLiveModule(entry, snapshot)
         if not liveModule then
             return false, "live module is unavailable"
@@ -67,7 +67,7 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
         return ok, err, nextReceipt
     end
 
-    local function BuildEntry(found)
+    local function buildEntry(found)
         local meta = found.meta
         local moduleId = found.moduleId
 
@@ -109,10 +109,10 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
                         pluginGuid = pluginGuid,
                         mod = mod,
                         liveModule = liveModule,
-                        storage = ReadStorage(liveModule),
+                        storage = readStorage(liveModule),
                         moduleId = liveModule.getModuleId(),
                         packId = liveModulePackId,
-                        meta = ReadMeta(liveModule),
+                        meta = readMeta(liveModule),
                     })
                 end
             end
@@ -156,7 +156,7 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
             local hasQuickContent = liveModule and type(liveModule.drawQuickContent) == "function"
 
             if not duplicateNamespaces[id] then
-                local discovered = BuildEntry(foundModule)
+                local discovered = buildEntry(foundModule)
                 table.insert(ModuleRegistry.modules, discovered)
                 ModuleRegistry.modulesById[discovered.id] = discovered
                 if hasQuickContent then
@@ -233,7 +233,7 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
     end
 
     function ModuleRegistry.snapshot.isEntryEnabled(entry, snapshot)
-        return ReadPersisted(entry, "Enabled", snapshot) == true
+        return readPersisted(entry, "Enabled", snapshot) == true
     end
 
     function ModuleRegistry.snapshot.affectsRunData(entry, snapshot)
@@ -242,49 +242,49 @@ local function createModuleRegistry(packId, config, frameworkRuntime)
     end
 
     function ModuleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
-        return SetEntryEnabled(entry, enabled, snapshot)
+        return setEntryEnabled(entry, enabled, snapshot)
     end
 
     function ModuleRegistry.snapshot.suspendForPackDisable(entry, snapshot)
-        return RunPackLifecycle(entry, snapshot, "pack suspend", function(liveModule)
+        return runPackLifecycle(entry, snapshot, "pack suspend", function(liveModule)
             return liveModule.suspendForPackDisable()
         end)
     end
 
     function ModuleRegistry.snapshot.ensureSuspendedForPackDisable(entry, snapshot)
-        return RunPackLifecycle(entry, snapshot, "pack suspend", function(liveModule)
+        return runPackLifecycle(entry, snapshot, "pack suspend", function(liveModule)
             return liveModule.ensureSuspendedForPackDisable()
         end)
     end
 
     function ModuleRegistry.snapshot.restoreForPackEnable(entry, snapshot)
-        return RunPackLifecycle(entry, snapshot, "pack restore", function(liveModule)
+        return runPackLifecycle(entry, snapshot, "pack restore", function(liveModule)
             return liveModule.restoreForPackEnable()
         end)
     end
 
     function ModuleRegistry.snapshot.rollbackPackTransition(entry, receipt, snapshot)
-        return RunPackLifecycle(entry, snapshot, "pack rollback", function(liveModule)
+        return runPackLifecycle(entry, snapshot, "pack rollback", function(liveModule)
             return liveModule.rollbackPackTransition(receipt)
         end)
     end
 
     function ModuleRegistry.snapshot.restorePackTransitionState(entry, receipt, snapshot)
-        return RunPackLifecycle(entry, snapshot, "pack state restore", function(liveModule)
+        return runPackLifecycle(entry, snapshot, "pack state restore", function(liveModule)
             return liveModule.restorePackTransitionState(receipt)
         end)
     end
 
     function ModuleRegistry.snapshot.getStorageValue(module, alias, snapshot)
-        return ReadPersisted(module, alias, snapshot)
+        return readPersisted(module, alias, snapshot)
     end
 
     function ModuleRegistry.snapshot.setStorageValue(module, alias, value, snapshot)
-        return WriteStagedAndFlush(module, alias, value, snapshot)
+        return writeStagedAndFlush(module, alias, value, snapshot)
     end
 
     function ModuleRegistry.snapshot.isDebugEnabled(entry, snapshot)
-        return ReadPersisted(entry, "DebugMode", snapshot) == true
+        return readPersisted(entry, "DebugMode", snapshot) == true
     end
 
     function ModuleRegistry.snapshot.setDebugEnabled(entry, value, snapshot)

@@ -21,8 +21,12 @@ Modules participate by exposing a Lib managed module:
 
 ```lua
 local data = import("mods/data.lua")
-local logic = import("mods/logic.lua").bind(data)
-local ui = import("mods/ui.lua").bind(data)
+local logic = import("mods/logic.lua", nil, {
+    data = data,
+})
+local ui = import("mods/ui.lua", nil, {
+    data = data,
+})
 
 local module, err = lib.createModule({
     pluginGuid = PLUGIN_GUID,
@@ -38,7 +42,7 @@ end
 module.data.define(data.buildStorage())
 module.ui.tab(ui.drawTab)
 module.ui.quickContent(ui.drawQuickContent)
-logic.registerHooks(module)
+logic.register(module)
 
 local ok = module.activate()
 if not ok then

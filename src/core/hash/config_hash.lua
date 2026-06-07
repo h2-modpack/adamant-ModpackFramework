@@ -7,11 +7,11 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
     local HASH_VERSION = 2
     local ConfigHash = {}
 
-    local function ReadPersisted(entry, key, snapshot)
+    local function readPersisted(entry, key, snapshot)
         return moduleRegistry.snapshot.getStorageValue(entry, key, snapshot)
     end
 
-    local function StagePersisted(entry, key, value, snapshot)
+    local function stagePersisted(entry, key, value, snapshot)
         local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
         if not liveModule then
             return false, "live module is unavailable"
@@ -19,35 +19,35 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         return liveModule.stage(key, value)
     end
 
-    local function FormatEntryError(entry, action, err)
+    local function formatEntryError(entry, action, err)
         return string.format("%s %s failed: %s",
             tostring(entry.name or entry.id or entry.pluginGuid or "module"),
             action,
             tostring(err))
     end
 
-    local function StagePersistedChecked(entry, key, value, snapshot)
-        local ok, err = StagePersisted(entry, key, value, snapshot)
+    local function stagePersistedChecked(entry, key, value, snapshot)
+        local ok, err = stagePersisted(entry, key, value, snapshot)
         if ok == false then
-            return false, FormatEntryError(entry, "stage " .. tostring(key), err)
+            return false, formatEntryError(entry, "stage " .. tostring(key), err)
         end
         return true, nil
     end
 
-    local function FlushManagedState(snapshot)
+    local function flushManagedState(snapshot)
         for _, entry in ipairs(moduleRegistry.modules) do
             local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
             if liveModule then
                 local ok, err = liveModule.flush()
                 if ok == false then
-                    return false, FormatEntryError(entry, "flush", err)
+                    return false, formatEntryError(entry, "flush", err)
                 end
             end
         end
         return true, nil
     end
 
-    local function ReloadManagedState()
+    local function reloadManagedState()
         local snapshot = moduleRegistry.live.captureSnapshot()
         for _, entry in ipairs(moduleRegistry.modules) do
             local liveModule = moduleRegistry.snapshot.getLiveModule(entry, snapshot)
@@ -57,14 +57,14 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         end
     end
 
-    local function ClonePersistedValue(value)
+    local function clonePersistedValue(value)
         if type(value) == "table" then
             return rom.game.DeepCopyTable(value)
         end
         return value
     end
 
-    local function GetRootStorage(entry)
+    local function getRootStorage(entry)
         local roots = {}
         for _, root in ipairs(hashing.getRoots(entry.storage)) do
             if root.alias ~= "Enabled" then
@@ -74,7 +74,7 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         return roots
     end
 
-    local function CaptureApplySnapshot(snapshot)
+    local function captureApplySnapshot(snapshot)
         local captured = {
             moduleEnabled = {},
             moduleStorage = {},
@@ -83,10 +83,10 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         for _, entry in ipairs(moduleRegistry.modules) do
             captured.moduleEnabled[entry] = moduleRegistry.snapshot.isEntryEnabled(entry, snapshot)
             local roots = {}
-            for _, root in ipairs(GetRootStorage(entry)) do
+            for _, root in ipairs(getRootStorage(entry)) do
                 table.insert(roots, {
                     alias = root.alias,
-                    value = ClonePersistedValue(ReadPersisted(entry, root.alias, snapshot)),
+                    value = clonePersistedValue(readPersisted(entry, root.alias, snapshot)),
                 })
             end
             captured.moduleStorage[entry] = roots
@@ -95,21 +95,21 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         return captured
     end
 
-    local function RestoreApplySnapshot(snapshot, captured)
+    local function restoreApplySnapshot(snapshot, captured)
         local rollbackErrors = {}
 
         for _, entry in ipairs(moduleRegistry.modules) do
             local roots = captured.moduleStorage[entry] or {}
             for _, root in ipairs(roots) do
-                local ok, err = StagePersisted(entry, root.alias, ClonePersistedValue(root.value), snapshot)
+                local ok, err = stagePersisted(entry, root.alias, clonePersistedValue(root.value), snapshot)
                 if ok == false then
                     table.insert(rollbackErrors,
-                        FormatEntryError(entry, "stage " .. tostring(root.alias), err))
+                        formatEntryError(entry, "stage " .. tostring(root.alias), err))
                 end
             end
         end
 
-        local flushOk, flushErr = FlushManagedState(snapshot)
+        local flushOk, flushErr = flushManagedState(snapshot)
         if flushOk == false then
             table.insert(rollbackErrors, flushErr)
         end
@@ -129,11 +129,11 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         return true, nil
     end
 
-    local function FailApplyHash(snapshot, captured, err)
+    local function failApplyHash(snapshot, captured, err)
         logging.warn(packId,
             "ApplyConfigHash failed; restoring previous state: %s",
             tostring(err))
-        local rollbackOk, rollbackErr = RestoreApplySnapshot(snapshot, captured)
+        local rollbackOk, rollbackErr = restoreApplySnapshot(snapshot, captured)
         if not rollbackOk then
             logging.warn(packId,
                 "ApplyConfigHash rollback incomplete: %s",
@@ -144,7 +144,7 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
 
     local BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
-    local function EncodeBase62(n)
+    local function encodeBase62(n)
         if n == 0 then return "0" end
         local result = ""
         while n > 0 do
@@ -155,7 +155,7 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         return result
     end
 
-    local function HashChunk(str, seed, multiplier)
+    local function hashChunk(str, seed, multiplier)
         local h = seed
         for i = 1, #str do
             h = (h * multiplier + string.byte(str, i)) % 1073741824
@@ -163,19 +163,19 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         return h
     end
 
-    local function EncodeBase62Fixed(n, width)
-        local s = EncodeBase62(n)
+    local function encodeBase62Fixed(n, width)
+        local s = encodeBase62(n)
         while #s < width do s = "0" .. s end
         return s
     end
 
-    local function Fingerprint(str)
-        local h1 = HashChunk(str, 5381, 33)
-        local h2 = HashChunk(str, 52711, 37)
-        return EncodeBase62Fixed(h1, 6) .. EncodeBase62Fixed(h2, 6)
+    local function fingerprint(str)
+        local h1 = hashChunk(str, 5381, 33)
+        local h2 = hashChunk(str, 52711, 37)
+        return encodeBase62Fixed(h1, 6) .. encodeBase62Fixed(h2, 6)
     end
 
-    local function EncodeValue(root, value, entryLabel)
+    local function encodeValue(root, value, entryLabel)
         local encoded = hashing.toHash(root, value)
         assert(encoded ~= nil, string.format(
             "GetConfigHash: expected hashable prepared %s '%s'",
@@ -185,7 +185,7 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         return encoded
     end
 
-    local function DecodeValue(root, str, entryLabel)
+    local function decodeValue(root, str, entryLabel)
         if hashing.isHashTokenValid(root, str) == false then
             return nil, string.format(
                 "invalid %s '%s' hash value '%s'",
@@ -204,7 +204,7 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         return decoded, nil
     end
 
-    local function DecodeModuleEnabled(entry, stored)
+    local function decodeModuleEnabled(entry, stored)
         if stored == nil then
             return false, nil
         end
@@ -214,7 +214,7 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         if stored == "0" then
             return false, nil
         end
-        return nil, FormatEntryError(entry, "decode enabled", "invalid module enable value '" .. tostring(stored) .. "'")
+        return nil, formatEntryError(entry, "decode enabled", "invalid module enable value '" .. tostring(stored) .. "'")
     end
 
     function ConfigHash.GetConfigHash()
@@ -228,10 +228,10 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
                 kv[entry.id] = "1"
             end
 
-            for _, root in ipairs(GetRootStorage(entry)) do
-                local current = ReadPersisted(entry, root.alias, snapshot)
+            for _, root in ipairs(getRootStorage(entry)) do
+                local current = readPersisted(entry, root.alias, snapshot)
                 if not hashing.valuesEqual(root, current, root.default) then
-                    local encoded = EncodeValue(root, current, "storage root")
+                    local encoded = encodeValue(root, current, "storage root")
                     if encoded ~= nil then
                         kv[entry.id .. "." .. root.alias] = encoded
                     end
@@ -241,7 +241,7 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
 
         local payload = hashCodec.serialize(kv)
         local canonical = "_v=" .. HASH_VERSION .. (payload ~= "" and "|" .. payload or "")
-        return canonical, Fingerprint(canonical)
+        return canonical, fingerprint(canonical)
     end
 
     function ConfigHash.ApplyConfigHash(hash)
@@ -266,33 +266,33 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
         end
 
         local snapshot = moduleRegistry.live.captureSnapshot()
-        local captured = CaptureApplySnapshot(snapshot)
+        local captured = captureApplySnapshot(snapshot)
         local moduleTargets = {}
         for _, entry in ipairs(moduleRegistry.modules) do
             local stored = kv[entry.id]
-            local enabledTarget, enabledErr = DecodeModuleEnabled(entry, stored)
+            local enabledTarget, enabledErr = decodeModuleEnabled(entry, stored)
             if enabledErr ~= nil then
-                return FailApplyHash(snapshot, captured, enabledErr)
+                return failApplyHash(snapshot, captured, enabledErr)
             end
             moduleTargets[entry] = enabledTarget == true
         end
 
         local okWrite, writeSucceeded, writeErr = xpcall(function()
             for _, entry in ipairs(moduleRegistry.modules) do
-                for _, root in ipairs(GetRootStorage(entry)) do
+                for _, root in ipairs(getRootStorage(entry)) do
                     local stored = kv[entry.id .. "." .. root.alias]
                     if stored ~= nil then
-                        local decoded, decodeErr = DecodeValue(root, stored, "storage root")
+                        local decoded, decodeErr = decodeValue(root, stored, "storage root")
                         if decodeErr ~= nil then
-                            return false, FormatEntryError(entry, "decode " .. tostring(root.alias), decodeErr)
+                            return false, formatEntryError(entry, "decode " .. tostring(root.alias), decodeErr)
                         end
-                        local ok, err = StagePersistedChecked(entry, root.alias,
+                        local ok, err = stagePersistedChecked(entry, root.alias,
                             decoded, snapshot)
                         if ok == false then
                             return false, err
                         end
                     else
-                        local ok, err = StagePersistedChecked(entry, root.alias, root.default, snapshot)
+                        local ok, err = stagePersistedChecked(entry, root.alias, root.default, snapshot)
                         if ok == false then
                             return false, err
                         end
@@ -300,25 +300,25 @@ local function createConfigHash(moduleRegistry, config, packId, hashing)
                 end
             end
 
-            local flushOk, flushErr = FlushManagedState(snapshot)
+            local flushOk, flushErr = flushManagedState(snapshot)
             if flushOk == false then
                 return false, flushErr
             end
             return true, nil
         end, debug.traceback)
         if not okWrite then
-            return FailApplyHash(snapshot, captured, writeSucceeded)
+            return failApplyHash(snapshot, captured, writeSucceeded)
         end
         if writeSucceeded == false then
-            return FailApplyHash(snapshot, captured, writeErr)
+            return failApplyHash(snapshot, captured, writeErr)
         end
 
-        ReloadManagedState()
+        reloadManagedState()
 
         for _, entry in ipairs(moduleRegistry.modules) do
             local ok, err = moduleRegistry.snapshot.setEntryEnabled(entry, moduleTargets[entry], snapshot)
             if ok == false then
-                return FailApplyHash(snapshot, captured, err)
+                return failApplyHash(snapshot, captured, err)
             end
         end
 
