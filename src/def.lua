@@ -62,14 +62,14 @@ local Framework = {}
 ---@field menuBar fun() Menu-bar callback for `rom.gui.add_to_menu_bar(...)`.
 
 ---@param packId string Stable coordinator pack id.
+---@param displayName string Human-facing coordinator pack name.
 ---@param config AdamantModpackFramework.Config? Chalk-managed coordinator config, or nil to clear registration.
 ---@param rebuildCallback? fun(reason: table): boolean Callback invoked after coordinated module structural changes.
 ---@return boolean ok
-function Framework.registerCoordinator(packId, config, rebuildCallback)
+function Framework.registerCoordinator(packId, displayName, config, rebuildCallback)
 end
 
 ---@param packId string Stable coordinator pack id.
----@param windowTitle string Main framework window title.
 ---@param config AdamantModpackFramework.Config Chalk-managed coordinator config.
 ---@param numProfiles integer Number of saved profile slots to normalize and render.
 ---@param defaultProfiles table Coordinator-owned default profile data.
@@ -77,7 +77,7 @@ end
 ---@return boolean ok
 ---@return AdamantModpackFramework.PackRuntime? pack
 ---@return string? err
-function Framework.createPack(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
+function Framework.createPack(packId, config, numProfiles, defaultProfiles, opts)
 end
 
 ---@param packId string Stable coordinator pack id.

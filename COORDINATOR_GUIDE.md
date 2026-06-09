@@ -36,8 +36,8 @@ local function drawPackQuickContent(ctx)
 end
 
 local function init()
-    Framework.registerCoordinator(PACK_ID, config)
-    local ok = Framework.createPack(PACK_ID, "My Modpack", config, #config.Profiles, defaultProfiles, {
+    Framework.registerCoordinator(PACK_ID, "My Modpack", config)
+    local ok = Framework.createPack(PACK_ID, config, #config.Profiles, defaultProfiles, {
         moduleOrder = {
             "ExampleModule",
         },
@@ -62,16 +62,16 @@ modutil.once_loaded.game(function()
 end)
 ```
 
-## `Framework.createPack(packId, windowTitle, config, numProfiles, defaultProfiles, opts?)`
+## `Framework.createPack(packId, config, numProfiles, defaultProfiles, opts?)`
 
-Coordinator mods should call `Framework.createPack(...)`. It logs creation
-failures and skips publishing the pack when construction fails.
+Coordinator mods should call `Framework.createPack(...)`. It uses the display
+name registered by `Framework.registerCoordinator(...)`, logs creation failures,
+and skips publishing the pack when construction fails.
 
 ## Init Arguments
 
 Required:
 - `packId`
-- `windowTitle`
 - `config`
 - `numProfiles`
 - `defaultProfiles`

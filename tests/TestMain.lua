@@ -326,7 +326,7 @@ function TestMain:testInitLeavesStartupMutationSyncToLiveModuleActivation()
     rom.game.SetupRunData = function()
         setupRunDataCalls = setupRunDataCalls + 1
     end
-    public.registerCoordinator("startup-pack", { ModEnabled = true })
+    public.registerCoordinator("startup-pack", "Test Pack", { ModEnabled = true })
 
     local harness = CreateFrameworkHarness({
         constructors = {
@@ -369,7 +369,6 @@ function TestMain:testInitLeavesStartupMutationSyncToLiveModuleActivation()
     })
     harness.createPackOrThrow(
         "startup-pack",
-        "Startup Pack",
         {
             ModEnabled = true,
             DebugMode = false,
@@ -430,7 +429,7 @@ function TestMain:testModuleActivationOwnsStartupSyncBeforeFrameworkInit()
     lu.assertEquals(buildCalls, 1)
     lu.assertEquals(target.Value, "patched")
     lu.assertEquals(setupRunDataCalls, 1)
-    public.registerCoordinator(packId, {
+    public.registerCoordinator(packId, "Test Pack", {
         ModEnabled = true,
     })
 
@@ -484,7 +483,6 @@ function TestMain:testModuleActivationOwnsStartupSyncBeforeFrameworkInit()
     })
     harness.createPackOrThrow(
         packId,
-        "Load Order Pack",
         {
             ModEnabled = true,
             DebugMode = false,
@@ -519,7 +517,7 @@ function TestMain:testRepeatedInitReplacesPackStateAndKeepsStablePackIndex()
     local firstPack
     local secondPack
 
-    public.registerCoordinator(packId, {
+    public.registerCoordinator(packId, "Test Pack", {
         ModEnabled = true,
     })
 
@@ -571,8 +569,8 @@ function TestMain:testRepeatedInitReplacesPackStateAndKeepsStablePackIndex()
             { Name = "", Hash = "", Tooltip = "" },
         },
     }
-    firstPack = harness.createPackOrThrow(packId, "Reinit Pack", config, 1, {})
-    secondPack = harness.createPackOrThrow(packId, "Reinit Pack", config, 1, {})
+    firstPack = harness.createPackOrThrow(packId, config, 1, {})
+    secondPack = harness.createPackOrThrow(packId, config, 1, {})
 
     local packIdCount = 0
     for _, value in ipairs(packRegistry.packList) do
@@ -610,7 +608,7 @@ function TestMain:testRepeatedInitDisposesPreviousOpenUiSuppression()
     local frameworkRuntime = lib.createFrameworkRuntime("adamant-ModpackFramework")
     local hashing = frameworkRuntime.hashing
 
-    public.registerCoordinator(packId, {
+    public.registerCoordinator(packId, "Test Pack", {
         ModEnabled = true,
     })
     local testFrameworkRuntime = {
@@ -713,9 +711,9 @@ function TestMain:testRepeatedInitDisposesPreviousOpenUiSuppression()
             { Name = "", Hash = "", Tooltip = "" },
         },
     }
-    local firstPack = harness.createPackOrThrow(packId, "Reinit Dispose Pack", config, 1, {})
+    local firstPack = harness.createPackOrThrow(packId, config, 1, {})
     firstPack.ui.addMenuBar()
-    local secondPack = harness.createPackOrThrow(packId, "Reinit Dispose Pack", config, 1, {})
+    local secondPack = harness.createPackOrThrow(packId, config, 1, {})
     local releaseCallsAfterReinit = releaseCalls
     local flushCallsAfterReinit = flushCalls
     firstPack.ui.addMenuBar()
@@ -749,7 +747,7 @@ function TestMain:testFailedInitDoesNotRegisterPack()
         previousPackList[i] = value
     end
 
-    public.registerCoordinator(packId, {
+    public.registerCoordinator(packId, "Test Pack", {
         ModEnabled = true,
     })
 
@@ -799,7 +797,7 @@ function TestMain:testFailedInitDoesNotRegisterPack()
         },
     }
     lu.assertErrorMsgContains("ui construction boom", function()
-        harness.createPackOrThrow(packId, "Failed Init Pack", config, 1, {})
+        harness.createPackOrThrow(packId, config, 1, {})
     end)
 
     local packIdCount = 0
@@ -827,7 +825,7 @@ function TestMain:testTryInitReturnsPackOnSuccess()
         previousPackList[i] = value
     end
 
-    public.registerCoordinator(packId, {
+    public.registerCoordinator(packId, "Test Pack", {
         ModEnabled = true,
     })
 
@@ -871,7 +869,7 @@ function TestMain:testTryInitReturnsPackOnSuccess()
         end,
         },
     })
-    ok, pack, err = harness.createPack(packId, "Create Pack", {
+    ok, pack, err = harness.createPack(packId, {
         ModEnabled = true,
         DebugMode = false,
         Profiles = {
@@ -899,7 +897,7 @@ function TestMain:testTryInitReturnsErrorAndDoesNotRegisterPack()
         previousPackList[i] = value
     end
 
-    public.registerCoordinator(packId, {
+    public.registerCoordinator(packId, "Test Pack", {
         ModEnabled = true,
     })
 
@@ -940,7 +938,7 @@ function TestMain:testTryInitReturnsErrorAndDoesNotRegisterPack()
         end,
         },
     })
-    ok, pack, err = harness.createPack(packId, "Create Pack", {
+    ok, pack, err = harness.createPack(packId, {
         ModEnabled = true,
         DebugMode = false,
         Profiles = {
@@ -982,7 +980,7 @@ function TestMain:testMasterToggleRollsBackTouchedRuntimeStateOnFailure()
             { Name = "", Hash = "", Tooltip = "" },
         },
     }
-    public.registerCoordinator("test-pack", config)
+    public.registerCoordinator("test-pack", "Test Pack", config)
     local previousSetupRunData = rom.game.SetupRunData
     local setupRunDataCalls = 0
     rom.game.SetupRunData = function()
@@ -1250,7 +1248,7 @@ function TestMain:testPackDisableSnapshotsModuleEnabledState()
         ModEnabled = true,
         DebugMode = false,
     }
-    public.registerCoordinator("test-pack", config)
+    public.registerCoordinator("test-pack", "Test Pack", config)
 
     local moduleRegistry = MockModuleRegistry.create({
         {
@@ -1324,7 +1322,7 @@ function TestMain:testPackEnableRestoresPersistedPackRestoreMarkers()
         ModEnabled = false,
         DebugMode = false,
     }
-    public.registerCoordinator("test-pack", config)
+    public.registerCoordinator("test-pack", "Test Pack", config)
 
     local moduleRegistry = MockModuleRegistry.create({
         {
@@ -1498,7 +1496,7 @@ function TestMain:testDisabledPackCreationSuspendsEnabledModules()
             { Name = "", Hash = "", Tooltip = "" },
         },
     }
-    public.registerCoordinator("test-pack", config)
+    public.registerCoordinator("test-pack", "Test Pack", config)
 
     local target = { Value = "base" }
     local buildCalls = 0

@@ -118,9 +118,9 @@ Sidebar behavior:
 Coordinator bootstrap calls:
 
 ```lua
-Framework.registerCoordinator(PACK_ID, config)
+Framework.registerCoordinator(PACK_ID, "My Modpack", config)
 
-local ok = Framework.createPack(PACK_ID, "My Modpack", config, #config.Profiles, defaultProfiles, {
+local ok = Framework.createPack(PACK_ID, config, #config.Profiles, defaultProfiles, {
     moduleOrder = {
         "ExampleModule",
     },
@@ -131,8 +131,9 @@ if not ok then
 end
 ```
 
-`Framework.createPack(...)` is the coordinator-safe entrypoint. It logs creation
-failures and skips publishing the pack.
+`Framework.createPack(...)` is the coordinator-safe entrypoint. It uses the
+display name registered by `Framework.registerCoordinator(...)`, logs creation
+failures, and skips publishing the pack.
 
 ## Validation
 

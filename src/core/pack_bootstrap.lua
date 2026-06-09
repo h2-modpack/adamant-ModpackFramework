@@ -18,11 +18,9 @@ local function disposePack(pack)
     end
 end
 
-local function validateCreatePackArgs(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
+local function validateCreatePackArgs(packId, config, numProfiles, defaultProfiles, opts)
     assert(type(packId) == "string" and packId ~= "",
         "Framework.createPack: packId must be a non-empty string")
-    assert(type(windowTitle) == "string" and windowTitle ~= "",
-        "Framework.createPack: windowTitle must be a non-empty string")
     assert(type(config) == "table", "Framework.createPack: config must be a table")
     assert(type(defaultProfiles) == "table",
         "Framework.createPack: defaultProfiles must be a table")
@@ -53,9 +51,16 @@ local function validateRuntimePrerequisites()
         "Framework.createPack: rom.game.SetupRunData is not ready; call Framework.createPack after game load")
 end
 
-local function validateCoordinatorArgs(packId, config, rebuildCallback)
+local function validateCoordinatorArgs(packId, displayName, config, rebuildCallback)
     assert(type(packId) == "string" and packId ~= "",
         "Framework.registerCoordinator: packId must be a non-empty string")
+    if config == nil then
+        assert(displayName == nil,
+            "Framework.registerCoordinator: displayName must be nil when clearing registration")
+    else
+        assert(type(displayName) == "string" and displayName ~= "",
+            "Framework.registerCoordinator: displayName must be a non-empty string")
+    end
     assert(config == nil or type(config) == "table",
         "Framework.registerCoordinator: config must be a table when provided")
     assert(config == nil or type(config.ModEnabled) == "boolean",
@@ -64,19 +69,22 @@ local function validateCoordinatorArgs(packId, config, rebuildCallback)
         "Framework.registerCoordinator: rebuildCallback must be a function when provided")
 end
 
-local function registerCoordinator(packId, config, rebuildCallback)
-    validateCoordinatorArgs(packId, config, rebuildCallback)
-    frameworkRuntime.coordinator.register(packId, config)
+local function registerCoordinator(packId, displayName, config, rebuildCallback)
+    validateCoordinatorArgs(packId, displayName, config, rebuildCallback)
+    frameworkRuntime.coordinator.register(packId, displayName, config)
     frameworkRuntime.coordinator.registerRebuild(packId, rebuildCallback)
     return true
 end
 
-local function createPackOrThrow(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
-    opts = validateCreatePackArgs(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
+local function createPackOrThrow(packId, config, numProfiles, defaultProfiles, opts)
+    opts = validateCreatePackArgs(packId, config, numProfiles, defaultProfiles, opts)
     validateRuntimePrerequisites()
 
     assert(frameworkRuntime.coordinator.isRegistered(packId),
         "Framework.createPack: coordinator must register before createPack; see Core/main.lua")
+    local windowTitle = frameworkRuntime.coordinator.getDisplayName(packId)
+    assert(type(windowTitle) == "string" and windowTitle ~= "",
+        "Framework.createPack: coordinator displayName is missing; register coordinator before createPack")
 
     local existingPack = FrameworkPackRegistry.packs[packId]
     local packIndex = existingPack and existingPack._index or #FrameworkPackRegistry.packList + 1
@@ -127,9 +135,9 @@ local function createPackOrThrow(packId, windowTitle, config, numProfiles, defau
     return pack
 end
 
-local function createPack(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
+local function createPack(packId, config, numProfiles, defaultProfiles, opts)
     local ok, pack = xpcall(function()
-        return createPackOrThrow(packId, windowTitle, config, numProfiles, defaultProfiles, opts)
+        return createPackOrThrow(packId, config, numProfiles, defaultProfiles, opts)
     end, debug.traceback)
 
     if ok then

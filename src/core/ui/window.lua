@@ -299,7 +299,7 @@ local function createUI(moduleRegistry, hud, theme, config, packId, windowTitle,
         if disposed then
             return
         end
-        if ui.MenuItem("Show Mod Menu") then
+        if ui.MenuItem("Show Modpack Menu") then
             if _showModWindow then
                 closeWindow()
             else

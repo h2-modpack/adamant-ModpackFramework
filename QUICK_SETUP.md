@@ -31,7 +31,7 @@ local function drawPackQuickContent(ctx)
     ...
 end
 
-Framework.createPack(PACK_ID, "My Modpack", config, #config.Profiles, defaultProfiles, {
+Framework.createPack(PACK_ID, config, #config.Profiles, defaultProfiles, {
     drawPackQuickContent = drawPackQuickContent,
 })
 ```
