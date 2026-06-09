@@ -264,6 +264,9 @@ local function createUIProfiles()
         ui.Separator()
         ui.Spacing()
 
+        TextColored(ui, colors.info, "Profile Maintenance")
+        ui.Spacing()
+
         if confirmButton("RestoreDefaultProfiles", "Restore Default Profiles") then
             for i = 1, NUM_PROFILES do
                 local d = defaultProfiles[i]
@@ -306,7 +309,13 @@ local function createUIProfiles()
             ui.SetTooltip("Resets all module settings in this modpack to their defaults.")
         end
 
-        ui.SameLine()
+        ui.Spacing()
+        ui.Separator()
+        ui.Spacing()
+
+        TextColored(ui, colors.info, "Diagnostics")
+        ui.Spacing()
+
         if ui.Button("Audit Saved Profiles") then
             local issueCount = auditSavedProfiles(packId, config.Profiles, moduleRegistry)
             if issueCount == 0 then
