@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-09
+
 ### Changed
 
 - Hash/profile storage filtering now follows Lib's explicit `hash` storage axis instead of the old transient/runtime flags.
@@ -83,6 +85,7 @@ Initial public release of the adamant Modpack Framework surface.
 - master pack toggle handling with transactional runtime rollback
 - shared theme, HUD, discovery, and UI factory surfaces
 
-[unreleased]: https://github.com/h2-modpack/adamant-ModpackFramework/compare/1.1.0...HEAD
+[unreleased]: https://github.com/h2-modpack/adamant-ModpackFramework/compare/2.0.0...HEAD
+[2.0.0]: https://github.com/h2-modpack/adamant-ModpackFramework/compare/1.1.0...2.0.0
 [1.1.0]: https://github.com/h2-modpack/adamant-ModpackFramework/compare/1.0.0...1.1.0
 [1.0.0]: https://github.com/h2-modpack/adamant-ModpackFramework/compare/3f77c5cdfcb8803d9c5b8ef486021c3711ee074d...1.0.0
