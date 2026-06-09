@@ -36,6 +36,14 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           lfs: true
+          fetch-depth: 0
+
+      - name: Checkout ModpackTools
+        uses: actions/checkout@v4
+        with:
+          repository: h2-modpack/ModpackTools
+          path: .modpacktools
+          ref: main
 
       - name: Checkout Lib (test dependency)
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -64,15 +72,8 @@ jobs:
           luacheck src/
           lua tests/all.lua
 
-      - name: Rotate unreleased section in changelog
-        uses: baynezy/ChangeLogger.Action@6e3ad430f08e13698bb01027a13ba4349b0143cc
-        with:
-          tag: ${{ inputs.tag }}
-          log-path: ${{ env.changelog }}
-
-      - name: Rotate version in Thunderstore CLI config
-        run: |
-          sed -i 's/versionNumber = ".*"/versionNumber = "${{ inputs.tag }}"/' ${{ env.thunderstore-config }}
+      - name: Prepare release files
+        run: python .modpacktools/github/prepare_package_release.py --tag '${{ inputs.tag }}' --allow-empty
 
       - name: Install Thunderstore CLI
         run: dotnet tool install -g tcli
