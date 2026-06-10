@@ -42,22 +42,41 @@ local function createUI(moduleRegistry, hud, theme, config, packId, windowTitle,
 
     local profiles
 
-    local function snapshotToStaging()
+    local function snapshotToStaging(options)
+        local reloadModules = not (options and options.reloadModules == false)
+        if rawget(_G, "AdamantEnableToggleDebug") == true then
+            print(string.format("[framework-debug] %s: snapshotToStaging begin reloadModules=%s",
+                tostring(packId),
+                tostring(reloadModules)))
+        end
         staging.ModEnabled = config.ModEnabled == true
         local snapshot = snapshotAccess.capture()
 
         for _, entry in ipairs(moduleRegistry.modules) do
             local liveModule = snapshotAccess.getLiveModule(entry, snapshot)
-            if liveModule then
+            if liveModule and reloadModules then
                 liveModule.reloadFromConfig()
             end
 
             staging.modules[entry.id] = moduleRegistry.snapshot.isEntryEnabled(entry, snapshot)
             staging.debug[entry.id] = moduleRegistry.snapshot.isDebugEnabled(entry, snapshot)
+            if rawget(_G, "AdamantEnableToggleDebug") == true then
+                print(string.format("[framework-debug] %s: snapshotToStaging module=%s enabled=%s debug=%s reloaded=%s",
+                    tostring(packId),
+                    tostring(entry.name or entry.id or entry.pluginGuid),
+                    tostring(staging.modules[entry.id]),
+                    tostring(staging.debug[entry.id]),
+                    tostring(liveModule ~= nil and reloadModules)))
+            end
         end
 
         if profiles then
             profiles.snapshot()
+        end
+        if rawget(_G, "AdamantEnableToggleDebug") == true then
+            print(string.format("[framework-debug] %s: snapshotToStaging end modEnabled=%s",
+                tostring(packId),
+                tostring(staging.ModEnabled)))
         end
     end
 
@@ -120,7 +139,7 @@ local function createUI(moduleRegistry, hud, theme, config, packId, windowTitle,
     })
 
     runtime.reconcilePackDisabledState()
-    snapshotToStaging()
+    snapshotToStaging({ reloadModules = false })
 
     local moduleByTabLabel = {}
     local cachedTabList = nil

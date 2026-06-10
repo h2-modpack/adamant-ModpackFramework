@@ -48,7 +48,7 @@ function TestMain:testCreateGuiCallbacksAreSafeBeforeInit()
     lu.assertTrue(menuBarOk)
 end
 
-function TestMain:testCreateUIReloadsModulesBeforeCapturingStartupStaging()
+function TestMain:testCreateUIUsesPreparedSnapshotForStartupStaging()
     local function noop() end
 
     local entry = {
@@ -61,11 +61,11 @@ function TestMain:testCreateUIReloadsModulesBeforeCapturingStartupStaging()
     liveModule = {
         reloaded = false,
         reloadFromConfig = function()
+            reloads = reloads + 1
             liveModule.reloaded = true
         end,
     }
-    local sawReloadBeforeEnabledRead = false
-    local sawReloadBeforeDebugRead = false
+    local reloads = 0
     local moduleRegistry = {
         modules = { entry },
         modulesById = {
@@ -87,11 +87,11 @@ function TestMain:testCreateUIReloadsModulesBeforeCapturingStartupStaging()
                 return snapshot.liveModules[entry]
             end,
             isEntryEnabled = function(_, snapshot)
-                sawReloadBeforeEnabledRead = snapshot.liveModules[entry].reloaded == true
+                lu.assertFalse(snapshot.liveModules[entry].reloaded)
                 return true
             end,
             isDebugEnabled = function(_, snapshot)
-                sawReloadBeforeDebugRead = snapshot.liveModules[entry].reloaded == true
+                lu.assertFalse(snapshot.liveModules[entry].reloaded)
                 return false
             end,
         },
@@ -119,8 +119,7 @@ function TestMain:testCreateUIReloadsModulesBeforeCapturingStartupStaging()
         { Name = "", Hash = "", Tooltip = "" },
     })
 
-    lu.assertTrue(sawReloadBeforeEnabledRead)
-    lu.assertTrue(sawReloadBeforeDebugRead)
+    lu.assertEquals(reloads, 0)
 end
 
 function TestMain:testCreateHudRegistersFrameworkHashOverlay()
