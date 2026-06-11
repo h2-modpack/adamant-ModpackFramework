@@ -53,32 +53,12 @@ local function createUIRuntime()
     end
 
     function Runtime.toggleEntry(entry, enabled, snapshot)
-        if rawget(_G, "AdamantEnableToggleDebug") == true then
-            print(string.format("[framework-debug] %s: toggleEntry begin module=%s target=%s staging_before=%s",
-                tostring(packId),
-                tostring(entry and (entry.name or entry.id or entry.pluginGuid) or "module"),
-                tostring(enabled == true),
-                tostring(entry and staging.modules[entry.id])))
-        end
         local ok, err = moduleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
-        if rawget(_G, "AdamantEnableToggleDebug") == true then
-            print(string.format("[framework-debug] %s: toggleEntry setEntryEnabled result module=%s ok=%s err=%s",
-                tostring(packId),
-                tostring(entry and (entry.name or entry.id or entry.pluginGuid) or "module"),
-                tostring(ok),
-                tostring(err)))
-        end
         if not ok then
             return false, err
         end
         staging.modules[entry.id] = enabled
         Runtime.finishUiChange(entry, snapshot)
-        if rawget(_G, "AdamantEnableToggleDebug") == true then
-            print(string.format("[framework-debug] %s: toggleEntry end module=%s staging_after=%s",
-                tostring(packId),
-                tostring(entry and (entry.name or entry.id or entry.pluginGuid) or "module"),
-                tostring(entry and staging.modules[entry.id])))
-        end
         return true, nil
     end
 
@@ -118,21 +98,7 @@ local function createUIRuntime()
             local entry = moduleRegistry.modulesById[moduleId]
             if entry and staging.modules[moduleId] ~= enabled then
                 local previousEnabled = staging.modules[moduleId] == true
-                if rawget(_G, "AdamantEnableToggleDebug") == true then
-                    print(string.format("[framework-debug] %s: setModulesEnabled begin module=%s target=%s staging_before=%s",
-                        tostring(packId),
-                        tostring(entry.name or entry.id or entry.pluginGuid),
-                        tostring(enabled == true),
-                        tostring(previousEnabled)))
-                end
                 local ok, err = moduleRegistry.snapshot.setEntryEnabled(entry, enabled, snapshot)
-                if rawget(_G, "AdamantEnableToggleDebug") == true then
-                    print(string.format("[framework-debug] %s: setModulesEnabled setEntryEnabled result module=%s ok=%s err=%s",
-                        tostring(packId),
-                        tostring(entry.name or entry.id or entry.pluginGuid),
-                        tostring(ok),
-                        tostring(err)))
-                end
                 if ok then
                     table.insert(touched, {
                         entry = entry,
