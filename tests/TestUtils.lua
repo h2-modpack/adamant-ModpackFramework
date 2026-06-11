@@ -205,8 +205,138 @@ LibOverlays = setmetatable({}, {
     end,
 })
 
+local function formatConfigValue(value)
+    if type(value) == "boolean" then
+        return value and "true" or "false"
+    elseif type(value) == "number" then
+        return tostring(value)
+    end
+    value = tostring(value or "")
+    value = string.gsub(value, "\\", "\\\\")
+    value = string.gsub(value, '"', '\\"')
+    value = string.gsub(value, "\n", "\\n")
+    return '"' .. value .. '"'
+end
+
+local function writeConfigFile(path, values)
+    local file = assert(io.open(path, "w"))
+    file:write("## Settings file was created by plugin adamant-ModpackFramework test harness\n\n")
+    file:write("[config]\n\n")
+    for key, value in pairs(values or {}) do
+        if type(value) == "table" then
+            file:write(tostring(key), "._RowCount = ", tostring(#value), "\n")
+        else
+            file:write(tostring(key), " = ", formatConfigValue(value), "\n")
+        end
+    end
+    for key, value in pairs(values or {}) do
+        if type(value) == "table" then
+            for rowIndex, row in ipairs(value) do
+                file:write("\n[config.", tostring(key), ".", tostring(rowIndex), "]\n")
+                for childKey, childValue in pairs(row) do
+                    file:write(tostring(childKey), " = ", formatConfigValue(childValue), "\n")
+                end
+            end
+        end
+    end
+    file:close()
+end
+
+local function trim(value)
+    return tostring(value or ""):match("^%s*(.-)%s*$")
+end
+
+local function parseConfigValue(rawValue)
+    rawValue = trim(rawValue)
+    if rawValue == "" then
+        return ""
+    end
+    local first = string.sub(rawValue, 1, 1)
+    local last = string.sub(rawValue, -1)
+    if first == '"' and last == '"' and #rawValue >= 2 then
+        local value = string.sub(rawValue, 2, -2)
+        value = string.gsub(value, "\\n", "\n")
+        value = string.gsub(value, '\\"', '"')
+        value = string.gsub(value, "\\\\", "\\")
+        return value
+    end
+    local lower = string.lower(rawValue)
+    if lower == "true" then
+        return true
+    elseif lower == "false" then
+        return false
+    end
+    local numberValue = tonumber(rawValue)
+    if numberValue ~= nil then
+        return numberValue
+    end
+    return rawValue
+end
+
+local function readConfigFile(path)
+    local values = {}
+    local file = io.open(path, "r")
+    if not file then
+        return values
+    end
+    local currentSection = "config"
+    for line in file:lines() do
+        local section = string.match(line, "^%s*%[([^%]]+)%]%s*$")
+        if section then
+            currentSection = trim(section)
+        elseif not string.match(line, "^%s*[#;]") then
+            local key, rawValue = string.match(line, "^%s*([^=]-)%s*=%s*(.-)%s*$")
+            key = key and trim(key) or nil
+            if key and key ~= "" then
+                local tableRoot, rowIndex = string.match(currentSection, "^config%.([^%.]+)%.(%d+)$")
+                if tableRoot then
+                    values[tableRoot] = values[tableRoot] or {}
+                    rowIndex = tonumber(rowIndex)
+                    values[tableRoot][rowIndex] = values[tableRoot][rowIndex] or {}
+                    values[tableRoot][rowIndex][key] = parseConfigValue(rawValue)
+                elseif currentSection == "config" then
+                    local rowCountRoot = string.match(key, "^(.+)%.%_RowCount$")
+                    if rowCountRoot then
+                        values[rowCountRoot] = values[rowCountRoot] or {}
+                    else
+                        values[key] = parseConfigValue(rawValue)
+                    end
+                end
+            end
+        end
+    end
+    file:close()
+    return values
+end
+
+local function installConfigProxy(config, path)
+    if type(config) ~= "table" then
+        return
+    end
+    local snapshot = deepCopy(config)
+    for key in pairs(config) do
+        config[key] = nil
+    end
+    setmetatable(config, {
+        __index = function(_, key)
+            return readConfigFile(path)[key]
+        end,
+        __newindex = function(_, key, value)
+            local current = readConfigFile(path)
+            current[key] = value
+            writeConfigFile(path, current)
+        end,
+    })
+    writeConfigFile(path, snapshot)
+end
+
 function CreateModuleState(config, definition)
-    local state = LibModuleState.create(config, definition)
+    config = config or {}
+    local configPath = os.tmpname()
+    installConfigProxy(config, configPath)
+    local state = LibModuleState.create(definition, {
+        configPath = configPath,
+    })
     return state.persistentState, state.stagedState
 end
 
